@@ -1,0 +1,78 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 16
+VisualStudioVersion = 16.0.28803.452
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "addition", "addition", "{594C730B-AC78-45E6-A7E5-BC30DEC1CFB7}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "woco", "woco\woco.vcxproj", "{271C3640-1916-4736-B07F-DABF0F3914DF}"
+	ProjectSection(ProjectDependencies) = postProject
+		{41A4761D-BA0D-47FF-83CA-F4445F7AEDE0} = {41A4761D-BA0D-47FF-83CA-F4445F7AEDE0}
+	EndProjectSection
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "woco-cuda", "woco-cuda\woco-cuda.vcxproj", "{41A4761D-BA0D-47FF-83CA-F4445F7AEDE0}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "woco-mnist", "woco-mnist\woco-mnist.vcxproj", "{A5C5A5AE-E816-4189-9518-23190FDAC9AE}"
+	ProjectSection(ProjectDependencies) = postProject
+		{271C3640-1916-4736-B07F-DABF0F3914DF} = {271C3640-1916-4736-B07F-DABF0F3914DF}
+	EndProjectSection
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "woco-python", "woco-python\woco-python.vcxproj", "{9932F009-BC53-456F-8C43-1A8579B54178}"
+	ProjectSection(ProjectDependencies) = postProject
+		{271C3640-1916-4736-B07F-DABF0F3914DF} = {271C3640-1916-4736-B07F-DABF0F3914DF}
+	EndProjectSection
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "woco-windows", "woco-windows\woco-windows.vcxproj", "{4D42F1DC-AFF8-4F03-AF3A-8B2528D38D0F}"
+	ProjectSection(ProjectDependencies) = postProject
+		{271C3640-1916-4736-B07F-DABF0F3914DF} = {271C3640-1916-4736-B07F-DABF0F3914DF}
+	EndProjectSection
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "woco-test", "woco-test\woco-test.vcxproj", "{4D238B6C-5E31-478F-A698-EEAE3ABD4DEB}"
+	ProjectSection(ProjectDependencies) = postProject
+		{271C3640-1916-4736-B07F-DABF0F3914DF} = {271C3640-1916-4736-B07F-DABF0F3914DF}
+	EndProjectSection
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|x64 = Debug|x64
+		Release|x64 = Release|x64
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{271C3640-1916-4736-B07F-DABF0F3914DF}.Debug|x64.ActiveCfg = Debug|x64
+		{271C3640-1916-4736-B07F-DABF0F3914DF}.Debug|x64.Build.0 = Debug|x64
+		{271C3640-1916-4736-B07F-DABF0F3914DF}.Release|x64.ActiveCfg = Release|x64
+		{271C3640-1916-4736-B07F-DABF0F3914DF}.Release|x64.Build.0 = Release|x64
+		{41A4761D-BA0D-47FF-83CA-F4445F7AEDE0}.Debug|x64.ActiveCfg = Debug|x64
+		{41A4761D-BA0D-47FF-83CA-F4445F7AEDE0}.Debug|x64.Build.0 = Debug|x64
+		{41A4761D-BA0D-47FF-83CA-F4445F7AEDE0}.Release|x64.ActiveCfg = Release|x64
+		{41A4761D-BA0D-47FF-83CA-F4445F7AEDE0}.Release|x64.Build.0 = Release|x64
+		{A5C5A5AE-E816-4189-9518-23190FDAC9AE}.Debug|x64.ActiveCfg = Debug|x64
+		{A5C5A5AE-E816-4189-9518-23190FDAC9AE}.Debug|x64.Build.0 = Debug|x64
+		{A5C5A5AE-E816-4189-9518-23190FDAC9AE}.Release|x64.ActiveCfg = Release|x64
+		{A5C5A5AE-E816-4189-9518-23190FDAC9AE}.Release|x64.Build.0 = Release|x64
+		{9932F009-BC53-456F-8C43-1A8579B54178}.Debug|x64.ActiveCfg = Debug|x64
+		{9932F009-BC53-456F-8C43-1A8579B54178}.Debug|x64.Build.0 = Debug|x64
+		{9932F009-BC53-456F-8C43-1A8579B54178}.Release|x64.ActiveCfg = Release|x64
+		{9932F009-BC53-456F-8C43-1A8579B54178}.Release|x64.Build.0 = Release|x64
+		{4D42F1DC-AFF8-4F03-AF3A-8B2528D38D0F}.Debug|x64.ActiveCfg = Debug|x64
+		{4D42F1DC-AFF8-4F03-AF3A-8B2528D38D0F}.Debug|x64.Build.0 = Debug|x64
+		{4D42F1DC-AFF8-4F03-AF3A-8B2528D38D0F}.Release|x64.ActiveCfg = Release|x64
+		{4D42F1DC-AFF8-4F03-AF3A-8B2528D38D0F}.Release|x64.Build.0 = Release|x64
+		{4D238B6C-5E31-478F-A698-EEAE3ABD4DEB}.Debug|x64.ActiveCfg = Debug|x64
+		{4D238B6C-5E31-478F-A698-EEAE3ABD4DEB}.Debug|x64.Build.0 = Debug|x64
+		{4D238B6C-5E31-478F-A698-EEAE3ABD4DEB}.Release|x64.ActiveCfg = Release|x64
+		{4D238B6C-5E31-478F-A698-EEAE3ABD4DEB}.Release|x64.Build.0 = Release|x64
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{41A4761D-BA0D-47FF-83CA-F4445F7AEDE0} = {594C730B-AC78-45E6-A7E5-BC30DEC1CFB7}
+		{A5C5A5AE-E816-4189-9518-23190FDAC9AE} = {594C730B-AC78-45E6-A7E5-BC30DEC1CFB7}
+		{9932F009-BC53-456F-8C43-1A8579B54178} = {594C730B-AC78-45E6-A7E5-BC30DEC1CFB7}
+		{4D238B6C-5E31-478F-A698-EEAE3ABD4DEB} = {594C730B-AC78-45E6-A7E5-BC30DEC1CFB7}
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {9BF9770D-70D3-4C2A-B800-4BA6FD0EF3B6}
+	EndGlobalSection
+EndGlobal
