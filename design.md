@@ -1,8 +1,8 @@
 # WOCO
 
-WOCO2的设计
+WOCO的设计
 
-WOCO2不再有层的概念，只有运算的概念。
+WOCO不再有层的概念，只有运算的概念。
 
 例如：Y=M*pool(conv(K, X))+b
 
