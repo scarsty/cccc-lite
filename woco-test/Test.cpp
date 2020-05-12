@@ -61,10 +61,13 @@ double Test::testMatrix()
     auto C = A * B;
     C.message("Matrix C:");
     C.printAsMatrix();
-    C.toCPU();
-    C.message("Matrix C:");
-    C.printAsMatrix();
-    C.toGPU();
+    //C.toCPU();
+    //C.message("Matrix C:");
+    //C.printAsMatrix();
+    //C.toGPU();
+    //C.message("Matrix C:");
+    //C.printAsMatrix();
+    C.resize(9, 9, 1, 1);
     C.message("Matrix C:");
     C.printAsMatrix();
     return t.getElapsedTime();

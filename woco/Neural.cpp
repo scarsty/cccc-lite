@@ -529,7 +529,7 @@ void Neural::trainOneNet(std::vector<Net*>& nets, int net_id, TrainInfo& train_i
 }
 
 //输出训练集和测试集的测试结果
-void Neural::testData(Net* net, int force_output /*= 0*/, int test_max /*= 0*/)
+void Neural::testData(Net* net, int force_output, int test_max)
 {
     realc result;
     Matrix A(DeviceType::CPU);
@@ -552,7 +552,7 @@ void Neural::testData(Net* net, int force_output /*= 0*/, int test_max /*= 0*/)
 }
 
 //附加测试集，一般无用
-void Neural::extraTest(Net* net, const std::string& section, int force_output /*= 0*/, int test_max /*= 0*/)
+void Neural::extraTest(Net* net, const std::string& section, int force_output, int test_max)
 {
     if (!option_.hasSection(section))
     {

@@ -154,10 +154,10 @@ public:
 public:
     //改变矩阵维度，同时矩阵数据尺寸可能会变化，如果尺寸变大会备份数据
     //返回值：-1空矩阵，未重新分配内存，1重新分配内存
-    int resize(int m, int n, bool force = false);
-    int resize(int w, int h, int c, int n, bool force = false);
-    int resize(const Matrix& X, bool force = false);
-    int resize(const Size& dim, bool force = false);
+    int resize(int m, int n, bool reserve_data = true, bool force = false);
+    int resize(int w, int h, int c, int n, bool reserve_data = true, bool force = false);
+    int resize(const Matrix& X, bool reserve_data = true, bool force = false);
+    int resize(const Size& dim, bool reserve_data = true, bool force = false);
     int resizeNumber(int n, bool force = false);
     int resizeAndNumber(const Size& dim, int n, bool force = false);
     int resizeKeepNumber(const Size& dim, bool force = false);    //注意此处参数dim的最后一个值是无用的
