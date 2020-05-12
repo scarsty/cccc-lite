@@ -134,7 +134,6 @@
     <ClCompile Include="..\..\common\convert.cpp" />
     <ClCompile Include="SaveBuffer.cpp" />
     <ClCompile Include="Solver.cpp" />
-    <ClCompile Include="Util.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="blas_types.h" />
@@ -162,7 +161,6 @@
     <ClInclude Include="..\..\common\INIReader.h" />
     <ClInclude Include="..\..\common\convert.h" />
     <ClInclude Include="..\..\common\Timer.h" />
-    <ClInclude Include="Util.h" />
     <ClInclude Include="VectorMath.h" />
     <ClInclude Include="Option.h" />
     <ClInclude Include="..\..\common\Random.h" />
