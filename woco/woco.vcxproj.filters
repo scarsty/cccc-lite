@@ -39,6 +39,9 @@
     <Filter Include="factory">
       <UniqueIdentifier>{71e9b830-9e2b-4b54-ab4d-655125b74cff}</UniqueIdentifier>
     </Filter>
+    <Filter Include="log">
+      <UniqueIdentifier>{10d40fd4-64a0-4ad4-a1d4-7efa8c00de09}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Matrix.cpp">
@@ -46,12 +49,6 @@
     </ClCompile>
     <ClCompile Include="Option.cpp">
       <Filter>option</Filter>
-    </ClCompile>
-    <ClCompile Include="Util.cpp">
-      <Filter>base</Filter>
-    </ClCompile>
-    <ClCompile Include="Log.cpp">
-      <Filter>base</Filter>
     </ClCompile>
     <ClCompile Include="cuda_hack.cpp">
       <Filter>cuda</Filter>
@@ -98,6 +95,9 @@
     <ClCompile Include="CudaControl.cpp">
       <Filter>cuda</Filter>
     </ClCompile>
+    <ClCompile Include="Log.cpp">
+      <Filter>log</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Matrix.h">
@@ -111,12 +111,6 @@
     </ClInclude>
     <ClInclude Include="Option.h">
       <Filter>option</Filter>
-    </ClInclude>
-    <ClInclude Include="Util.h">
-      <Filter>base</Filter>
-    </ClInclude>
-    <ClInclude Include="Log.h">
-      <Filter>base</Filter>
     </ClInclude>
     <ClInclude Include="cuda_hack.h">
       <Filter>cuda</Filter>
@@ -189,6 +183,9 @@
     </ClInclude>
     <ClInclude Include="woco_api.h">
       <Filter>base</Filter>
+    </ClInclude>
+    <ClInclude Include="Log.h">
+      <Filter>log</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
