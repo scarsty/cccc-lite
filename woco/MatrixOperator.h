@@ -47,7 +47,8 @@ private:
 
 private:
     MatrixOpType type_ = MatrixOpType::NONE;
-    std::vector<Matrix> matrix_;
+    std::vector<Matrix> matrix_in_;
+    std::vector<Matrix> matrix_out_;
     std::vector<int> para_int_;
     std::vector<real> para_real_;
     std::vector<Matrix> para_matrix_;
@@ -55,10 +56,12 @@ private:
 
 public:
     MatrixOperator() = default;
-    MatrixOperator(MatrixOpType t, const std::vector<Matrix>& m, const std::vector<int>& i = {}, const std::vector<real>& r = {}, const std::vector<Matrix>& m2 = {}, const std::vector<std::vector<int>> i2 = {})
+    MatrixOperator(MatrixOpType t, const std::vector<Matrix>& m_in, const std::vector<Matrix>& m_out,
+        const std::vector<int>& i = {}, const std::vector<real>& r = {}, const std::vector<Matrix>& m2 = {}, const std::vector<std::vector<int>> i2 = {})
     {
         type_ = t;
-        matrix_ = m;
+        matrix_in_ = m_in;
+        matrix_out_ = m_out;
         para_int_ = i;
         para_real_ = r;
         para_matrix_ = m2;
@@ -75,10 +78,12 @@ public:
     void forward();
     void backward();
 
-    static void print(Queue& op_queue);
-    void print();
+    static void print(const Queue& op_queue);
+    void print() const;
 
     MatrixOpType getType() { return type_; }
+
+    static void simpleQueue(MatrixOperator::Queue& op_queue, const Matrix& X, const Matrix& A);    //仅保留计算图中与X和A有关联的部分
 
     //以下专为处理损失函数
 private:
