@@ -523,7 +523,7 @@ void Matrix::toGPU()
         shared_data_->setCudaAsCurrent();
         shared_data_->resize(data_size_);
         copyDataPointer(DeviceType::CPU, temp, DeviceType::GPU, shared_data_->data_, data_size_);
-        delete temp;
+        delete[] temp;
         *data_ = shared_data_->data_;
     }
 }
