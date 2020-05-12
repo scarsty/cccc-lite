@@ -18,6 +18,10 @@ real* Matrix::DataWarpper::resize(int64_t size, bool reserve_data, bool force)
     }
     real* new_data = nullptr;
     auto device_type = DeviceType::GPU;
+    if (!reserve_data)    //数据不需保留可以先行释放，可以节省显存的使用，否则峰值占用是新旧尺寸之和
+    {
+        free();
+    }
     if (cuda_)
     {
         cuda_->setDevice();
@@ -37,8 +41,8 @@ real* Matrix::DataWarpper::resize(int64_t size, bool reserve_data, bool force)
     if (reserve_data)
     {
         copyDataPointer(device_type, data_, device_type, new_data, std::min(size, occupy_data_size_));
+        free();
     }
-    free();
     occupy_data_size_ = size;
     return data_ = new_data;
 }
@@ -192,25 +196,25 @@ int Matrix::coord2i(const Size& c)
     return r;
 }
 
-int Matrix::resize(int m, int n, bool force)
+int Matrix::resize(int m, int n, bool reserve_data, bool force)
 {
-    return resize(Size{ m, n }, force);
+    return resize(Size{ m, n }, reserve_data, force);
 }
 
-int Matrix::resize(int w, int h, int c, int n, bool force)
+int Matrix::resize(int w, int h, int c, int n, bool reserve_data, bool force)
 {
-    return resize(Size{ w, h, c, n }, force);
+    return resize(Size{ w, h, c, n }, reserve_data, force);
 }
 
-int Matrix::resize(const Matrix& X, bool force)
+int Matrix::resize(const Matrix& X, bool reserve_data, bool force)
 {
-    return resize(X.dim_, force);
+    return resize(X.dim_, reserve_data, force);
 }
 
-int Matrix::resize(const Size& dim, bool force)
+int Matrix::resize(const Size& dim, bool reserve_data, bool force)
 {
     setDim(dim);
-    //如果是从外部共享的数据，不实际分配空间
+    //指针与共享指针不同时，则认为是数据不由自己管理，不分配空间
     if (data() != shared_data_->data_)
     {
         return 2;
@@ -219,7 +223,7 @@ int Matrix::resize(const Size& dim, bool force)
     if (shared_data_->data_ == nullptr || data_size_ > shared_data_->occupy_data_size_ || force)
     {
         //重新申请空间
-        shared_data_->resize(data_size_, true, force);
+        shared_data_->resize(data_size_, reserve_data, force);
     }
     *data_ = shared_data_->data_;
     return 0;
@@ -446,6 +450,7 @@ void Matrix::shareData(const Matrix& A, int w, int h, int c, int n)
     }
 }
 
+//指针来自外部，故此时不宜将指针交由自身管理
 void Matrix::shareData(real* data)
 {
     *data_ = data;
