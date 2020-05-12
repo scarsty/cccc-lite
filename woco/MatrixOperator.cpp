@@ -39,14 +39,14 @@ void MatrixOperator::backward(MatrixOperator::Queue& op_queue, MatrixOperator::Q
         std::map<Matrix*, int> map_size;
         for (auto& op : op_queue)
         {
-            for (auto& m : op.matrix_)
+            for (auto& m : op.matrix_in_)
             {
                 map_size[&m.DMatrix()] = m.getDataSize();
             }
         }
         for (auto& op : loss)
         {
-            for (auto& m : op.matrix_)
+            for (auto& m : op.matrix_in_)
             {
                 map_size[&m.DMatrix()] = m.getDataSize();
             }
@@ -87,29 +87,29 @@ void MatrixOperator::forward()
     switch (type_)
     {
     case MatrixOpType::ADD:
-        Matrix::add(matrix_[0], matrix_[1], matrix_[2], para_real_[0], para_real_[1]);
+        Matrix::add(matrix_in_[0], matrix_in_[1], matrix_out_[0], para_real_[0], para_real_[1]);
         break;
     case MatrixOpType::MUL:
-        Matrix::mul(matrix_[0], matrix_[1], matrix_[2], para_real_[0]);
+        Matrix::mul(matrix_in_[0], matrix_in_[1], matrix_out_[0], para_real_[0]);
         break;
     case MatrixOpType::ELE_MUL:
-        Matrix::elementMul(matrix_[0], matrix_[1], matrix_[2], para_real_[0]);
+        Matrix::elementMul(matrix_in_[0], matrix_in_[1], matrix_out_[0], para_real_[0]);
         break;
     case MatrixOpType::ADD_BIAS:
-        MatrixExtend::addBias(matrix_[0], matrix_[1], matrix_[2], para_real_[0], para_real_[1]);
+        MatrixExtend::addBias(matrix_in_[0], matrix_in_[1], matrix_out_[0], para_real_[0], para_real_[1]);
         break;
     case MatrixOpType::CONCAT:
-        MatrixExtend::concatByChannel(para_matrix_, matrix_[0]);
+        MatrixExtend::concatByChannel(matrix_in_, matrix_out_[0]);
         break;
     case MatrixOpType::ACTIVE:
-        MatrixExtend::activeForward2(matrix_[0], matrix_[1], ActiveFunctionType(para_int_.back()), para_int_, para_real_, para_matrix_);
+        MatrixExtend::activeForward2(matrix_in_[0], matrix_out_[0], ActiveFunctionType(para_int_.back()), para_int_, para_real_, para_matrix_);
         break;
     case MatrixOpType::POOL:
-        MatrixExtend::poolingForward(matrix_[0], matrix_[1], PoolingType(para_int_.back()),
+        MatrixExtend::poolingForward(matrix_in_[0], matrix_out_[0], PoolingType(para_int_.back()),
             para_int2_[0], para_int2_[1], para_int2_[2], para_real_[0]);
         break;
     case MatrixOpType::CONV:
-        MatrixExtend::convolutionForward(matrix_[0], matrix_[1], matrix_[2],
+        MatrixExtend::convolutionForward(matrix_in_[0], matrix_in_[1], matrix_out_[0],
             para_matrix_[1], para_int_[1], para_int2_[0], para_int2_[1], para_real_[0]);
         break;
     }
@@ -121,71 +121,128 @@ void MatrixOperator::backward()
     switch (type_)
     {
     case MatrixOpType::ADD:
-        if (matrix_[0].needReverse()) { Matrix::add(matrix_[0].DMatrix(), matrix_[2].DMatrix(), matrix_[0].DMatrix(), 1, para_real_[0]); }
-        if (matrix_[1].needReverse()) { Matrix::add(matrix_[1].DMatrix(), matrix_[2].DMatrix(), matrix_[1].DMatrix(), 1, para_real_[1]); }
+        if (matrix_in_[0].needReverse()) { Matrix::add(matrix_in_[0].DMatrix(), matrix_out_[0].DMatrix(), matrix_in_[0].DMatrix(), 1, para_real_[0]); }
+        if (matrix_in_[1].needReverse()) { Matrix::add(matrix_in_[1].DMatrix(), matrix_out_[0].DMatrix(), matrix_in_[1].DMatrix(), 1, para_real_[1]); }
         break;
     case MatrixOpType::MUL:
-        if (matrix_[0].needReverse()) { Matrix::mul(matrix_[2].DMatrix(), matrix_[1], matrix_[0].DMatrix(), para_real_[0], 1, MATRIX_NO_TRANS, MATRIX_TRANS); }
-        if (matrix_[1].needReverse()) { Matrix::mul(matrix_[0], matrix_[2].DMatrix(), matrix_[1].DMatrix(), para_real_[0], 1, MATRIX_TRANS, MATRIX_NO_TRANS); }
+        if (matrix_in_[0].needReverse()) { Matrix::mul(matrix_out_[0].DMatrix(), matrix_in_[1], matrix_in_[0].DMatrix(), para_real_[0], 1, MATRIX_NO_TRANS, MATRIX_TRANS); }
+        if (matrix_in_[1].needReverse()) { Matrix::mul(matrix_in_[0], matrix_out_[0].DMatrix(), matrix_in_[1].DMatrix(), para_real_[0], 1, MATRIX_TRANS, MATRIX_NO_TRANS); }
         break;
     case MatrixOpType::ELE_MUL:
-        if (matrix_[0].needReverse()) { Matrix::elementMul(matrix_[2].DMatrix(), matrix_[1], matrix_[0].DMatrix(), para_real_[0], 1); }
-        if (matrix_[1].needReverse()) { Matrix::elementMul(matrix_[2].DMatrix(), matrix_[0], matrix_[1].DMatrix(), para_real_[0], 1); }
+        if (matrix_in_[0].needReverse()) { Matrix::elementMul(matrix_out_[0].DMatrix(), matrix_in_[1], matrix_in_[0].DMatrix(), para_real_[0], 1); }
+        if (matrix_in_[1].needReverse()) { Matrix::elementMul(matrix_out_[0].DMatrix(), matrix_in_[0], matrix_in_[1].DMatrix(), para_real_[0], 1); }
         break;
     case MatrixOpType::ADD_BIAS:
         //Matrix::add(matrix_[0].DMatrix(), matrix_[2].DMatrix(), matrix_[0].DMatrix(), 1, para_real_[0]);
         //Matrix::mulVector(matrix_[2].DMatrix(), para_matrix_[0], matrix_[1].DMatrix(), para_real_[0], 1);
-        MatrixExtend::addBiasBackward(matrix_[0], matrix_[1], matrix_[2], para_real_[0], para_real_[1]);
+        MatrixExtend::addBiasBackward(matrix_in_[0], matrix_in_[1], matrix_out_[0], para_real_[0], para_real_[1]);
         break;
     case MatrixOpType::CONCAT:
-        MatrixExtend::concatByChannelBackward(para_matrix_, matrix_[0]);
+        MatrixExtend::concatByChannelBackward(matrix_in_, matrix_out_[0]);
         break;
     case MatrixOpType::ACTIVE:
-        if (matrix_[1].needReverse())
+        if (matrix_in_[0].needReverse())
         {
-            MatrixExtend::activeBackward2(matrix_[0], matrix_[1], ActiveFunctionType(para_int_.back()), para_int_, para_real_, para_matrix_);
+            MatrixExtend::activeBackward2(matrix_in_[0], matrix_out_[0], ActiveFunctionType(para_int_.back()), para_int_, para_real_, para_matrix_);
         }
         break;
     case MatrixOpType::POOL:
-        if (matrix_[1].needReverse())
+        if (matrix_in_[0].needReverse())
         {
-            MatrixExtend::poolingBackward(matrix_[0], matrix_[1], PoolingType(para_int_.back()),
+            MatrixExtend::poolingBackward(matrix_in_[0], matrix_out_[0], PoolingType(para_int_.back()),
                 para_int2_[0], para_int2_[1], para_int2_[2], para_real_[0], 1);
         }
         break;
     case MatrixOpType::CONV:
-        MatrixExtend::convolutionBackward(matrix_[0], matrix_[1], matrix_[2],
+        MatrixExtend::convolutionBackward(matrix_in_[0], matrix_in_[1], matrix_out_[0],
             para_matrix_[1], para_int_[2], para_int_[3], para_int2_[0], para_int2_[1], para_real_[0], 1);
         break;
     case MatrixOpType::LOSS:
         if (scale_ != 0)
         {
             //此处直接相减，表示欧氏距离平方，若配合前一层的softmax_ce或sigmoid_ce则表示交叉熵
-            Matrix::add(matrix_[0], matrix_[1], matrix_[0].DMatrix(), scale_, -scale_, 1);
+            Matrix::add(matrix_in_[0], matrix_in_[1], matrix_in_[0].DMatrix(), scale_, -scale_, 1);
         }
         break;
     case MatrixOpType::L2:
         if (scale_ != 0)
         {
-            Matrix::add(matrix_[0].DMatrix(), matrix_[0], matrix_[0].DMatrix(), 1, scale_);
+            Matrix::add(matrix_in_[0].DMatrix(), matrix_in_[0], matrix_in_[0].DMatrix(), 1, scale_);
         }
         break;
     }
 }
 
-void MatrixOperator::print(Queue& op_queue)
+void MatrixOperator::print(const MatrixOperator::Queue& op_queue)
 {
     fprintf(stdout, "begin->");
-    for (auto& op : op_queue)
+    for (const auto& op : op_queue)
     {
         op.print();
     }
     fprintf(stdout, "end\n");
 }
 
-void MatrixOperator::print()
+void MatrixOperator::print() const
 {
     fprintf(stdout, "%d->", int(type_));
+}
+
+void MatrixOperator::simpleQueue(MatrixOperator::Queue& op_queue, const Matrix& X, const Matrix& A)
+{
+    std::vector<int> connect_X(op_queue.size(), 0), connect_A(op_queue.size(), 0);    //1-有连接
+
+    std::function<void(const Matrix&, int, std::vector<int>&)> check_connect = [&op_queue, &check_connect](const Matrix& X, int direct, std::vector<int>& connect)
+    {
+        for (int i = 0; i < op_queue.size(); i++)
+        {
+            if (connect[i] != 0)
+            {
+                continue;
+            }
+            auto& op = op_queue[i];
+            std::vector<Matrix>*v1, *v2;
+            if (direct > 0)
+            {
+                v1 = &op.matrix_in_;
+                v2 = &op.matrix_out_;
+            }
+            else
+            {
+                v1 = &op.matrix_out_;
+                v2 = &op.matrix_in_;
+            }
+            for (auto& m : *v1)
+            {
+                if (m.getDataPointer() == X.getDataPointer())
+                {
+                    connect[i]++;
+                    for (auto& m : *v2)
+                    {
+                        check_connect(m, direct, connect);
+                    }
+                    break;
+                }
+            }
+        }
+    };
+
+    check_connect(X, 1, connect_X);
+    check_connect(A, -1, connect_A);
+
+    int i = 0;
+    for (auto it = op_queue.begin(); it != op_queue.end();)
+    {
+        if (connect_X[i] == 0 || connect_A[i] == 0)
+        {
+            it = op_queue.erase(it);
+        }
+        else
+        {
+            ++it;
+        }
+        i++;
+    }
 }
 
 void MatrixOperator::setCalc(int c)
@@ -219,25 +276,25 @@ void scale(const Matrix A, Matrix R, real r)
         Matrix::copyData(A, R);
         R.scale(r);
     }
-    if (MatrixOperator::making_) { MatrixOperator::op_queue_.emplace_back(MatrixOperator(MatrixOpType::MUL, { A, R }, {}, { r })); }
+    if (MatrixOperator::making_) { MatrixOperator::op_queue_.emplace_back(MatrixOperator(MatrixOpType::MUL, { A }, { R }, {}, { r })); }
 }
 
 void mul(const Matrix& A, const Matrix& B, Matrix& R, real a)
 {
     if (MatrixOperator::calc_) { Matrix::mul(A, B, R, a); }
-    if (MatrixOperator::making_) { MatrixOperator::op_queue_.emplace_back(MatrixOperator(MatrixOpType::MUL, { A, B, R }, {}, { a })); }
+    if (MatrixOperator::making_) { MatrixOperator::op_queue_.emplace_back(MatrixOperator(MatrixOpType::MUL, { A, B }, { R }, {}, { a })); }
 }
 
 void elementMul(const Matrix& A, const Matrix& B, Matrix& R, real a)
 {
     if (MatrixOperator::calc_) { Matrix::elementMul(A, B, R, a); }
-    if (MatrixOperator::making_) { MatrixOperator::op_queue_.emplace_back(MatrixOperator(MatrixOpType::ELE_MUL, { A, B, R }, {}, { a })); }
+    if (MatrixOperator::making_) { MatrixOperator::op_queue_.emplace_back(MatrixOperator(MatrixOpType::ELE_MUL, { A, B }, { R }, {}, { a })); }
 }
 
 void add(const Matrix& A, const Matrix& B, Matrix& R, realc a, realc b)
 {
     if (MatrixOperator::calc_) { Matrix::add(A, B, R, a, b); }
-    if (MatrixOperator::making_) { MatrixOperator::op_queue_.emplace_back(MatrixOperator(MatrixOpType::ADD, { A, B, R }, {}, { a, b })); }
+    if (MatrixOperator::making_) { MatrixOperator::op_queue_.emplace_back(MatrixOperator(MatrixOpType::ADD, { A, B }, { R }, {}, { a, b })); }
 }
 
 void addBias(const Matrix& A, const Matrix& bias, Matrix& R, realc a, realc b)
@@ -247,7 +304,7 @@ void addBias(const Matrix& A, const Matrix& bias, Matrix& R, realc a, realc b)
     {
         //Matrix as_1(A.getNumber(), 1);
         //as_1.initData(1);
-        MatrixOperator::op_queue_.emplace_back(MatrixOperator(MatrixOpType::ADD_BIAS, { A, bias, R }, {}, { a, b }));
+        MatrixOperator::op_queue_.emplace_back(MatrixOperator(MatrixOpType::ADD_BIAS, { A, bias }, { R }, {}, { a, b }));
     }
 }
 
@@ -256,14 +313,14 @@ void concat(const std::vector<Matrix>& A_vector, Matrix& R)
     if (MatrixOperator::calc_) { MatrixExtend::concatByChannel(A_vector, R); }
     if (MatrixOperator::making_)
     {
-        MatrixOperator::op_queue_.emplace_back(MatrixOperator(MatrixOpType::MUL, { R }, {}, {}, A_vector));
+        MatrixOperator::op_queue_.emplace_back(MatrixOperator(MatrixOpType::MUL, A_vector, { R }));
     }
 }
 
 void active(const Matrix& A, Matrix& R, ActiveFunctionType af)
 {
     if (MatrixOperator::calc_) { MatrixExtend::activeForward(A, R, af); }
-    if (MatrixOperator::making_) { MatrixOperator::op_queue_.emplace_back(MatrixOperator(MatrixOpType::ACTIVE, { A, R }, { af }, {})); }
+    if (MatrixOperator::making_) { MatrixOperator::op_queue_.emplace_back(MatrixOperator(MatrixOpType::ACTIVE, { A }, { R }, { af }, {})); }
 }
 
 void active(const Matrix& A, Matrix& R, ActiveFunctionType af, std::vector<int>& int_vector, std::vector<real>& real_vector, std::vector<Matrix>& matrix_vector)
@@ -273,7 +330,7 @@ void active(const Matrix& A, Matrix& R, ActiveFunctionType af, std::vector<int>&
     {
         auto v = int_vector;
         v.push_back(af);
-        MatrixOperator::op_queue_.emplace_back(MatrixOperator(MatrixOpType::ACTIVE, { A, R }, v, real_vector, matrix_vector));
+        MatrixOperator::op_queue_.emplace_back(MatrixOperator(MatrixOpType::ACTIVE, { A }, { R }, v, real_vector, matrix_vector));
     }
 }
 
@@ -283,7 +340,7 @@ void pool(const Matrix& A, Matrix& R, PoolingType pooling_type, const std::vecto
     if (MatrixOperator::making_)
     {
         std::vector<int> v = { int(window.size()), int(pooling_type) };
-        MatrixOperator::op_queue_.emplace_back(MatrixOperator(MatrixOpType::POOL, { A, R }, v, { a }, {}, { window, stride, padding }));
+        MatrixOperator::op_queue_.emplace_back(MatrixOperator(MatrixOpType::POOL, { A }, { R }, v, { a }, {}, { window, stride, padding }));
     }
 }
 
@@ -299,7 +356,7 @@ void conv(const Matrix& A, const Matrix& W, Matrix& R, const std::vector<int>& s
     if (MatrixOperator::making_)
     {
         std::vector<int> v = { int(stride.size()), -1, -1, -1 };
-        MatrixOperator::op_queue_.emplace_back(MatrixOperator(MatrixOpType::CONV, { A, W, R }, v, { a }, std::vector<Matrix>{ 2 }, { stride, padding }));
+        MatrixOperator::op_queue_.emplace_back(MatrixOperator(MatrixOpType::CONV, { A, W }, { R }, v, { a }, std::vector<Matrix>{ 2 }, { stride, padding }));
     }
 }
 
@@ -473,7 +530,7 @@ MatrixOperator::Queue operator*(double v, const MatrixOperator::Queue& A)
 
 MatrixOperator::Queue crossEntropy(const Matrix& A, const Matrix& Y)
 {
-    MatrixOperator op(MatrixOpType::LOSS, { A, Y });
+    MatrixOperator op(MatrixOpType::LOSS, { A, Y }, {});
     if (MatrixOperator::calc_)
     {
         Matrix R(A.getDim());
@@ -485,7 +542,7 @@ MatrixOperator::Queue crossEntropy(const Matrix& A, const Matrix& Y)
 
 MatrixOperator::Queue L2(const Matrix& A)
 {
-    MatrixOperator op(MatrixOpType::L2, { A });
+    MatrixOperator op(MatrixOpType::L2, { A }, {});
     if (MatrixOperator::calc_)
     {
         op.value_ = Matrix::dot(A, A);
@@ -498,7 +555,7 @@ MatrixOperator::Queue L2(const std::vector<Matrix>& v)
     MatrixOperator::Queue q;
     for (auto& m : v)
     {
-        q.emplace_back(MatrixOperator(MatrixOpType::L2, { m }));
+        q.emplace_back(MatrixOperator(MatrixOpType::L2, { m }, {}));
     }
     return q;
 }
