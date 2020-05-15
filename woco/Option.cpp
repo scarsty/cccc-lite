@@ -114,29 +114,6 @@ void Option::initEnums()
             { "softmax_fast_ce", ACTIVE_FUNCTION_SOFTMAX_FAST_CE },
         });
 
-    registerEnum<LayerConnectionType>(
-        {
-            { "none", LAYER_CONNECTION_NONE },
-            { "null", LAYER_CONNECTION_NONE },
-            { "full_connect", LAYER_CONNECTION_FULLCONNECT },
-            { "full", LAYER_CONNECTION_FULLCONNECT },
-            { "fc", LAYER_CONNECTION_FULLCONNECT },
-            { "convolution", LAYER_CONNECTION_CONVOLUTION },
-            { "conv", LAYER_CONNECTION_CONVOLUTION },
-            { "pooling", LAYER_CONNECTION_POOLING },
-            { "pool", LAYER_CONNECTION_POOLING },
-            { "direct", LAYER_CONNECTION_DIRECT },
-            { "correlation", LAYER_CONNECTION_CORRELATION },
-            { "corr", LAYER_CONNECTION_CORRELATION },
-            { "conv2", LAYER_CONNECTION_CORRELATION },
-            { "combine", LAYER_CONNECTION_COMBINE },
-            { "extract", LAYER_CONNECTION_EXTRACT },
-            { "roteigen", LAYER_CONNECTION_ROTATE_EIGEN },
-            { "norm2", LAYER_CONNECTION_NORM2 },
-            { "transpose", LAYER_CONNECTION_TRANSPOSE },
-            { "nac", LAYER_CONNECTION_NAC },
-        });
-
     registerEnum<CostFunctionType>(
         {
             { "rmse", COST_FUNCTION_RMSE },
@@ -177,33 +154,6 @@ void Option::initEnums()
             { "per_active", BATCH_NORMALIZATION_PER_ACTIVATION },
             { "spatial", BATCH_NORMALIZATION_SPATIAL },
             { "auto", BATCH_NORMALIZATION_AUTO },
-        });
-
-    registerEnum<RecurrentType>(
-        {
-            { "relu", RECURRENT_RELU },
-            { "tanh", RECURRENT_TANH },
-            { "lstm", RECURRENT_LSTM },
-            { "gru", RECURRENT_GRU },
-        });
-
-    registerEnum<RecurrentDirectionType>(
-        {
-            { "uni", RECURRENT_DIRECTION_UNI },
-            { "bi", RECURRENT_DIRECTION_BI },
-        });
-
-    registerEnum<RecurrentInputType>(
-        {
-            { "linear", RECURRENT_INPUT_LINEAR },
-            { "skip", RECURRENT_INPUT_SKIP },
-        });
-
-    registerEnum<RecurrentAlgoType>(
-        {
-            { "standard", RECURRENT_ALGO_STANDARD },
-            { "static", RECURRENT_ALGO_PERSIST_STATIC },
-            { "dynamic", RECURRENT_ALGO_PERSIST_DYNAMIC },
         });
 
     registerEnum<SolverType>(
