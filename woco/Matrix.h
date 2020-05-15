@@ -146,7 +146,7 @@ public:
     real& getData(int w, int h, int c, int n) const { return data()[whcn2i(w, h, c, n)]; }
 
     real* getDataPointer() const { return data(); }
-    real* h getDataPointer(int i) const { return &data()[i]; }
+    real* getDataPointer(int i) const { return &data()[i]; }
     real* getDataPointer(int m, int n) const { return &data()[mn2i(m, n)]; }
     real* getDataPointer(int w, int h, int c, int n) const { return &data()[whcn2i(w, h, c, n)]; }
     //real& operator[](int i) const { return data_[i]; }
