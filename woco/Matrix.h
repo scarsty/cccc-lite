@@ -146,7 +146,7 @@ public:
     real& getData(int w, int h, int c, int n) const { return data()[whcn2i(w, h, c, n)]; }
 
     real* getDataPointer() const { return data(); }
-    real* getDataPointer(int i) const { return &data()[i]; }
+    real* h getDataPointer(int i) const { return &data()[i]; }
     real* getDataPointer(int m, int n) const { return &data()[mn2i(m, n)]; }
     real* getDataPointer(int w, int h, int c, int n) const { return &data()[whcn2i(w, h, c, n)]; }
     //real& operator[](int i) const { return data_[i]; }
@@ -158,18 +158,9 @@ public:
     int resize(int w, int h, int c, int n, bool reserve_data = true, bool force = false);
     int resize(const Matrix& X, bool reserve_data = true, bool force = false);
     int resize(const Size& dim, bool reserve_data = true, bool force = false);
-    int resizeNumber(int n, bool force = false);
-    int resizeAndNumber(const Size& dim, int n, bool force = false);
-    int resizeKeepNumber(const Size& dim, bool force = false);    //注意此处参数dim的最后一个值是无用的
-
-    //重设数据位置类型，慎用！！
-    //void resetDataType();
-
-    //重设数据指针，这个函数可能不安全，慎用！！
-    //void resetDataPointer(real* d) { data() = d; }
-
-    //使用这个函数，主要是为了析构时同时删除数据指针，最好你清楚你在干啥！
-    //void setInsideData(MatrixDataType id) { matrix_data_type_ = id; }
+    int resizeNumber(int n, bool reserve_data = true, bool force = false);
+    int resizeAndNumber(const Size& dim, int n, bool reserve_data = true, bool force = false);
+    int resizeKeepNumber(const Size& dim, bool reserve_data = true, bool force = false);    //注意此处参数dim的最后一个值是无用的
 
     void print(FILE* fout = stdout) const;
     void printAsVector(FILE* fout = stdout) const;

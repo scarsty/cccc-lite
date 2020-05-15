@@ -229,24 +229,24 @@ int Matrix::resize(const Size& dim, bool reserve_data, bool force)
     return 0;
 }
 
-int Matrix::resizeNumber(int n, bool force)
+int Matrix::resizeNumber(int n, bool reserve_data, bool force)
 {
     dim_.back() = n;
-    return resize(dim_, force);
+    return resize(dim_, reserve_data, force);
 }
 
-int Matrix::resizeAndNumber(const Size& dim, int n, bool force)
+int Matrix::resizeAndNumber(const Size& dim, int n, bool reserve_data, bool force)
 {
     auto dim1 = dim;
     dim1.back() = n;
-    return resize(dim1);
+    return resize(dim1, reserve_data, force);
 }
 
-int Matrix::resizeKeepNumber(const Size& dim, bool force /*= false*/)
+int Matrix::resizeKeepNumber(const Size& dim, bool reserve_data, bool force)
 {
     auto dim1 = dim;
     dim1.back() = number_;
-    return resize(dim1, force);
+    return resize(dim1, reserve_data, force);
 }
 
 //输出矩阵内容
