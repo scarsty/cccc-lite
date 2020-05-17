@@ -304,6 +304,7 @@ void addBias(const Matrix& A, const Matrix& bias, Matrix& R, realc a, realc b)
     {
         //Matrix as_1(A.getNumber(), 1);
         //as_1.initData(1);
+        //需要注意cudnn自带的只支持到5维，若需更多维可以在这里修改写入op_queue的矩阵的维度
         MatrixOperator::op_queue_.emplace_back(MatrixOperator(MatrixOpType::ADD_BIAS, { A, bias }, { R }, {}, { a, b }));
     }
 }
