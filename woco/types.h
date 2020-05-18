@@ -55,7 +55,7 @@ using realc = double;
 #define MYCUDNN_DATA_REAL CUDNN_DATA_DOUBLE
 #define MYCUDNN_DATA_REAL_C CUDNN_DATA_DOUBLE
 #elif REAL_PRECISION == 2
-using real = woco_half;
+using real = Half;
 using realc = float;
 #define REAL_MAX 65504
 #define MYCUDNN_DATA_REAL CUDNN_DATA_HALF
