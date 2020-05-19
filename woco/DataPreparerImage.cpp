@@ -45,8 +45,10 @@ void DataPreparerImage::transOne(Matrix& X1, Matrix& Y1)
     if (transpose_ != 0)
     {
         //transpose 0, 1
-        int t = floor(rand_.rand() * 2) - 1;
-        X1.transpose(t);
+        if (floor(rand_.rand() * 2) - 1 != 0)
+        {
+            X1.transpose();
+        }
     }
 
     //噪点
