@@ -198,7 +198,7 @@ public:
 
 public:
     void flip(int flip_flag);
-    void transpose(int transpose_flag);
+    void transpose();
 
 private:
     //这两个函数主要用于内部操作数据，这个写法是避免数据已经在cpu时再复制一次

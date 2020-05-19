@@ -597,28 +597,38 @@ void Matrix::flip(int flip_flag)
     }
 }
 
-void Matrix::transpose(int transpose_flag)
+void Matrix::transpose()
 {
     if (inGPU())
     {
         return;
     }
-    if (transpose_flag == 0 || width_ != height_)
+    auto temp = clone(DeviceType::CPU);
+    if (row_ != channel_)
     {
-        return;
-    }
-    Matrix temp(width_, height_, DeviceType::CPU);
-    for (int c = 0; c < channel_; c++)
-    {
-        for (int n = 0; n < number_; n++)
+        resize(height_, width_, channel_, number_);
+        for (int c = 0; c < channel_; c++)
         {
-            Matrix::copyDataPointer(*this, getDataPointer(0, 0, c, n), temp, temp.getDataPointer());
-            for (int i = 0; i < width_; i++)
+            for (int n = 0; n < number_; n++)
             {
-                for (int j = 0; j < height_; j++)
+                for (int i = 0; i < width_; i++)
                 {
-                    getData(i, j, c, n) = temp.getData(j, i);
+                    for (int j = 0; j < height_; j++)
+                    {
+                        getData(i, j, c, n) = temp.getData(j, i, c, n);
+                    }
                 }
+            }
+        }
+    }
+    else
+    {
+        resize(number_, row_);
+        for (int c = 0; c < channel_; c++)
+        {
+            for (int n = 0; n < number_; n++)
+            {
+                getData(c, n) = temp.getData(n, c);
             }
         }
     }
