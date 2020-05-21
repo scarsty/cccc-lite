@@ -89,9 +89,6 @@
     <ClCompile Include="Factory.cpp">
       <Filter>factory</Filter>
     </ClCompile>
-    <ClCompile Include="NetLua.cpp">
-      <Filter>net</Filter>
-    </ClCompile>
     <ClCompile Include="CudaControl.cpp">
       <Filter>cuda</Filter>
     </ClCompile>
@@ -174,9 +171,6 @@
     </ClInclude>
     <ClInclude Include="Factory.h">
       <Filter>factory</Filter>
-    </ClInclude>
-    <ClInclude Include="NetLua.h">
-      <Filter>net</Filter>
     </ClInclude>
     <ClInclude Include="CudaControl.h">
       <Filter>cuda</Filter>
