@@ -1,7 +1,7 @@
 #include "Factory.h"
 #include "DataPreparerImage.h"
 #include "DynamicLibrary.h"
-#include "NetLua.h"
+#include "Net.h"
 
 namespace woco
 {
@@ -21,10 +21,10 @@ Net* Factory::createNet(Option& op)
     {
         //之前使用vector，但是resize时为复制构造，而实际应每次都默认构造
         static int i = 0;
-        static std::map<int, NetLua> nets;
-        std::string script = op.getString("Net", "structure");
-        //Log::LOG("Net script is:\n%s\n\n", script.c_str());
-        nets[i].setScript(script);
+        static std::map<int, Net> nets;
+        //std::string script = op.getString("Net", "structure");
+        ////Log::LOG("Net script is:\n%s\n\n", script.c_str());
+        //nets[i].setScript(script);
         net = &nets[i];
         i++;
     }

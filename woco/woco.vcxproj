@@ -67,7 +67,7 @@
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalLibraryDirectories>../lib/x64;$(OutDir);$(CUDA_PATH)/lib/x64;$(VCPKG_LIB_PATH)\x64-windows\lib</AdditionalLibraryDirectories>
-      <AdditionalDependencies>woco-cuda.lib;cudart.lib;cublas.lib;cudnn.lib;openblas.lib;nvml.lib;lua.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>woco-cuda.lib;cudart.lib;cublas.lib;cudnn.lib;openblas.lib;nvml.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <ForceSymbolReferences>%(ForceSymbolReferences)</ForceSymbolReferences>
       <Profile>true</Profile>
     </Link>
@@ -102,7 +102,7 @@
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalLibraryDirectories>../lib/x64;$(OutDir);$(CUDA_PATH)/lib/x64;$(VCPKG_LIB_PATH)\x64-windows\lib</AdditionalLibraryDirectories>
-      <AdditionalDependencies>woco-cuda.lib;cudart.lib;cublas.lib;cudnn.lib;openblas.lib;nvml.lib;lua.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>woco-cuda.lib;cudart.lib;cublas.lib;cudnn.lib;openblas.lib;nvml.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <ForceSymbolReferences>%(ForceSymbolReferences)</ForceSymbolReferences>
       <ModuleDefinitionFile>
       </ModuleDefinitionFile>
@@ -128,7 +128,6 @@
     <ClCompile Include="Log.cpp" />
     <ClCompile Include="Matrix.cpp" />
     <ClCompile Include="Net.cpp" />
-    <ClCompile Include="NetLua.cpp" />
     <ClCompile Include="Neural.cpp" />
     <ClCompile Include="Option.cpp" />
     <ClCompile Include="..\..\common\convert.cpp" />
@@ -151,7 +150,6 @@
     <ClInclude Include="Log.h" />
     <ClInclude Include="cuda_half_hack.h" />
     <ClInclude Include="Net.h" />
-    <ClInclude Include="NetLua.h" />
     <ClInclude Include="Neural.h" />
     <ClInclude Include="SaveBuffer.h" />
     <ClInclude Include="Solver.h" />
