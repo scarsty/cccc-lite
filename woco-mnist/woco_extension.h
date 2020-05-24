@@ -1,5 +1,5 @@
 #pragma once
-#include "woco_api.h"
+#include "dll_export.h"
 
 #ifdef __cplusplus
 extern "C"

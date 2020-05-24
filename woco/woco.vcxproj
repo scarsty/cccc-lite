@@ -153,7 +153,7 @@
     <ClInclude Include="Neural.h" />
     <ClInclude Include="SaveBuffer.h" />
     <ClInclude Include="Solver.h" />
-    <ClInclude Include="woco_api.h" />
+    <ClInclude Include="dll_export.h" />
     <ClInclude Include="Matrix.h" />
     <ClInclude Include="CudaControl.h" />
     <ClInclude Include="..\..\common\INIReader.h" />

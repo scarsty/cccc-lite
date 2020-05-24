@@ -6,7 +6,7 @@
 #include "cuda_runtime.h"
 #include "cudnn.h"
 
-#include "woco_api.h"
+#include "dll_export.h"
 
 #if defined(__arm__) || defined(__aarch64__)
 #else
@@ -18,7 +18,7 @@
 #include "cuda_hack.h"
 #endif
 
-#include "woco_cuda.h"
+#include "cuda_functions.h"
 
 #define VAR_NAME(a) #a
 

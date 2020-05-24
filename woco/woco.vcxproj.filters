@@ -175,11 +175,11 @@
     <ClInclude Include="CudaControl.h">
       <Filter>cuda</Filter>
     </ClInclude>
-    <ClInclude Include="woco_api.h">
-      <Filter>base</Filter>
-    </ClInclude>
     <ClInclude Include="Log.h">
       <Filter>log</Filter>
+    </ClInclude>
+    <ClInclude Include="dll_export.h">
+      <Filter>base</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
