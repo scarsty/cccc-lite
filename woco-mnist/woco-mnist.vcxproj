@@ -16,7 +16,7 @@
     <ClCompile Include="DataPreparerMnist.cpp" />
     <ClCompile Include="MnistReader.cpp" />
     <ClCompile Include="NetMnist.cpp" />
-    <ClCompile Include="woco_extension.cpp" />
+    <ClCompile Include="extension.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\common\convert.h" />

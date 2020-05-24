@@ -4,7 +4,7 @@
 #define __CUDA_INTERNAL_COMPILATION__
 #include "math_functions.h"
 #undef __CUDA_INTERNAL_COMPILATION__
-#include "woco_cuda.h"
+#include "cuda_functions.h"
 #include <stdio.h>
 
 #if REAL_PRECISION == 2

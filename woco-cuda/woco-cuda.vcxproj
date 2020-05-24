@@ -11,10 +11,10 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
-    <CudaCompile Include="woco_cuda.cu" />
+    <CudaCompile Include="cuda_functions.cu" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="woco_cuda.h" />
+    <ClInclude Include="cuda_functions.h" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="CMakeLists.txt" />

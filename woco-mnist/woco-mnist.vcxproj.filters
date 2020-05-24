@@ -46,7 +46,7 @@
     <ClCompile Include="MnistReader.cpp">
       <Filter>sources</Filter>
     </ClCompile>
-    <ClCompile Include="woco_extension.cpp">
+    <ClCompile Include="extension.cpp">
       <Filter>sources</Filter>
     </ClCompile>
   </ItemGroup>
