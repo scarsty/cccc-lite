@@ -16,6 +16,6 @@ if(GCC_VERSION VERSION_GREATER 7)
 endif()
 
 SET(LIBRARY_OUTPUT_PATH ${PROJECT_BINARY_DIR}/../lib)
-cuda_add_library(woco-cuda SHARED woco_cuda.cu)
+cuda_add_library(woco-cuda SHARED cuda_functions.cu)
 
 install(TARGETS woco-cuda LIBRARY DESTINATION lib)
