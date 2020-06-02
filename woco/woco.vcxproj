@@ -62,6 +62,7 @@
       <OpenMPSupport>false</OpenMPSupport>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <AdditionalOptions>/source-charset:utf-8 %(AdditionalOptions)</AdditionalOptions>
+      <LanguageStandard>stdcpplatest</LanguageStandard>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>

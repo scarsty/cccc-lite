@@ -53,16 +53,14 @@ public:
     template <typename... Args>
     void addWeight(const Args&... args)
     {
-        auto res = { (addWeight(args), 0)... };
-        (void)res;
+        (addWeight(args), ...);
     }
 
     void addLoss(const MatrixOperator::Queue& loss) { loss_ = loss_ + loss; }
     template <typename... Args>
     void addLoss(const Args&... args)
     {
-        auto res = { (addLoss(args), 0)... };
-        (void)res;
+        (addLoss(args), ...);
     }
 
 public:
