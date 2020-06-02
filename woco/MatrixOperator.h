@@ -34,7 +34,7 @@ private:
 
     //只有最底层的函数才有必要友元，可据此判断是否位于最底层！
 
-    friend DLL_EXPORT void scale(const Matrix A, Matrix R, real r);
+    friend DLL_EXPORT void scale(const Matrix& A, Matrix& R, real r);
     friend DLL_EXPORT void mul(const Matrix& A, const Matrix& B, Matrix& R, real a);
     friend DLL_EXPORT void elementMul(const Matrix& A, const Matrix& B, Matrix& R, real a);
     friend DLL_EXPORT void add(const Matrix& A, const Matrix& B, Matrix& R, realc a, realc b);
@@ -110,7 +110,7 @@ public:
 };
 
 //基础运算开始
-DLL_EXPORT void scale(const Matrix A, Matrix R, real r);
+DLL_EXPORT void scale(const Matrix& A, Matrix& R, real r);
 DLL_EXPORT void mul(const Matrix& A, const Matrix& B, Matrix& R, real a = 1);
 DLL_EXPORT void elementMul(const Matrix& A, const Matrix& B, Matrix& R, real a = 1);
 DLL_EXPORT void add(const Matrix& A, const Matrix& B, Matrix& R, realc a = 1, realc b = 1);
@@ -123,7 +123,7 @@ DLL_EXPORT void conv(const Matrix& A, const Matrix& W, Matrix& R, const std::vec
 //基础运算结束
 
 //带返回的运算
-DLL_EXPORT Matrix scale(const Matrix A, real r);
+DLL_EXPORT Matrix scale(const Matrix& A, real r);
 DLL_EXPORT Matrix mul(const Matrix& A, const Matrix& B, real a = 1);
 DLL_EXPORT Matrix elementMul(const Matrix& A, const Matrix& B, real a = 1);
 DLL_EXPORT Matrix add(const Matrix& A, const Matrix& B, realc a = 1, realc b = 1);
