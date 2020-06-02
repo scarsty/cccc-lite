@@ -7,7 +7,7 @@ find_package(PythonLibs)
 
 set(CMAKE_VERBOSE_MAKEFILE on)
 set(CMAKE_CXX_COMPILER $ENV{CXX})
-set(CMAKE_CXX_FLAGS "-O3 -std=c++14 -pthread -fopenmp")
+set(CMAKE_CXX_FLAGS "-O3 -std=c++17 -pthread -fopenmp")
 
 include_directories(../include /usr/local/cuda/include ../woco ../../common ../woco-cuda ${PYTHON_INCLUDE_PATH})
 
