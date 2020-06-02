@@ -5,7 +5,7 @@
 #include "Matrix.h"
 #include "MatrixOperator.h"
 #include "Net.h"
-#include "NetLua.h"
+#include "NetCifa.h"
 #include "Timer.h"
 #include <iostream>
 #include <numeric>
@@ -76,7 +76,7 @@ double Test::testMatrix()
 double Test::testNet()
 {
     Timer t;
-    NetLua net;
+    NetCifa net;
     //MatrixOperator::beginMaking(1);
     INIReaderNormal ini;
     ini.loadFile("mnist.ini");

@@ -95,6 +95,12 @@
     <ClCompile Include="Log.cpp">
       <Filter>log</Filter>
     </ClCompile>
+    <ClCompile Include="NetCifa.cpp">
+      <Filter>net</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\cifa\cifa\Cifa.cpp">
+      <Filter>net</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Matrix.h">
@@ -180,6 +186,12 @@
     </ClInclude>
     <ClInclude Include="dll_export.h">
       <Filter>base</Filter>
+    </ClInclude>
+    <ClInclude Include="NetCifa.h">
+      <Filter>net</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\cifa\cifa\Cifa.h">
+      <Filter>net</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
