@@ -269,7 +269,7 @@ void getDefaultStridePadding(MatrixOpType type, const std::vector<int>& dim, std
     }
 }
 
-void scale(const Matrix A, Matrix R, real r)
+void scale(const Matrix& A, Matrix& R, real r)
 {
     if (MatrixOperator::calc_)
     {
@@ -361,7 +361,7 @@ void conv(const Matrix& A, const Matrix& W, Matrix& R, const std::vector<int>& s
     }
 }
 
-Matrix scale(const Matrix A, real r)
+Matrix scale(const Matrix& A, real r)
 {
     Matrix R(A.getDim());
     scale(A, R, r);
