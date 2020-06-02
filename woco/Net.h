@@ -48,8 +48,22 @@ public:
     void setX(const Matrix& X) { X_ = X; }
     void setY(const Matrix& Y) { Y_ = Y; }
     void setA(const Matrix& A) { A_ = A; }
+
     void addWeight(const Matrix& w) { weights_.push_back(w); }
+    template <typename... Args>
+    void addWeight(const Args&... args)
+    {
+        auto res = { (addWeight(args), 0)... };
+        (void)res;
+    }
+
     void addLoss(const MatrixOperator::Queue& loss) { loss_ = loss_ + loss; }
+    template <typename... Args>
+    void addLoss(const Args&... args)
+    {
+        auto res = { (addLoss(args), 0)... };
+        (void)res;
+    }
 
 public:
     void active(bool learn);

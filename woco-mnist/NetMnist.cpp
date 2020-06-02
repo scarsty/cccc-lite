@@ -3,7 +3,7 @@
 namespace woco
 {
 
-void NetMnist::structure()
+void NetMnist::structureExample()
 {
     //以下构造网络的结构，相当于执行一次前向的计算，必须指明X_，Y_的尺寸，和如何计算A_
     //因可能每个网络所在的设备不同，需将它们以赋值的形式，丢弃之前数据
@@ -50,6 +50,35 @@ void NetMnist::structure()
     //{
     //    MatrixExtend::fill(m, RANDOM_FILL_XAVIER, 10, 10);
     //}
+}
+
+void NetMnist::structure()
+{
+    //copied from ini
+    auto batch = 100;
+    auto X = Matrix(28, 28, 1, batch);
+    auto W1 = Matrix(5, 5, 1, 50);
+    auto b1 = Matrix(1, 1, 50, 1);
+    auto W2 = Matrix(5, 5, 50, 50);
+    auto b2 = Matrix(1, 1, 50, 1);
+    auto A1 = relu(maxpool(conv(X, W1) + b1, { 2, 2 }));
+    auto A2 = relu(maxpool(conv(A1, W2) + b2, { 2, 2 }));
+    auto W3 = Matrix(256, A2.getRow());
+    auto b3 = Matrix(256, 1);
+    auto W4 = Matrix(10, 256);
+    auto b4 = Matrix(10, 1);
+    auto A = softmax_ce(W4 * relu(W3 * A2 + b3) + b4);
+    auto Y = Matrix(1, 1, 10, batch);
+    //print_message(A);
+    //print(A2.getRow());
+    setXYA(X, Y, A);
+    addWeight(W1, b1, W2, b2, W3, b3, W4, b4);
+    addLoss(crossEntropy(A, Y) + 1e-4 * (L2(W1) + L2(W2) + L2(W3) + L2(W4)));
+
+    for (auto& m : weights_)
+    {
+        MatrixExtend::fill(m, RANDOM_FILL_XAVIER, m.getChannel(), m.getNumber());
+    }
 }
 
 }    // namespace woco
