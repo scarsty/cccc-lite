@@ -33,9 +33,6 @@ private:
     static Matrix& toMatrix(cifa::Cifa& c, const cifa::Object& o);
     static MatrixOperator::Queue& toLoss(cifa::Cifa& c, const cifa::Object& o);
 
-    //static void pushMatrix(cifa::Cifa& c,Matrix& m);
-    //static void pushLoss(cifa::Cifa& c,MatrixOperator::Queue& loss);
-
     static bool isMatrix(cifa::Cifa& c, const cifa::Object& o);
     static bool isLoss(cifa::Cifa& c, const cifa::Object& o);
 

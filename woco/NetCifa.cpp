@@ -43,32 +43,22 @@ std::vector<int> NetCifa::getVector(cifa::ObjectVector& v, int index)
     return r;
 }
 
-Matrix& NetCifa::toMatrix(cifa::Cifa& c,const  cifa::Object& o)
+Matrix& NetCifa::toMatrix(cifa::Cifa& c, const cifa::Object& o)
 {
     return getThis(c).map_matrix_[o];
 }
 
-MatrixOperator::Queue& NetCifa::toLoss(cifa::Cifa& c,const  cifa::Object& o)
+MatrixOperator::Queue& NetCifa::toLoss(cifa::Cifa& c, const cifa::Object& o)
 {
     return getThis(c).map_loss_[o];
 }
-
-//void NetCifa::pushMatrix(cifa::Cifa& c, Matrix& m)
-//{
-//    //registerMatrix(c, m).c_str());
-//}
-//
-//void NetCifa::pushLoss(cifa::Cifa& c, MatrixOperator::Queue& loss)
-//{
-//    //(L, registerLoss(L, loss).c_str());
-//}
 
 bool NetCifa::isMatrix(cifa::Cifa& c, const cifa::Object& o)
 {
     return o.type == "Matrix";
 }
 
-bool NetCifa::isLoss(cifa::Cifa& c,const cifa::Object& o)
+bool NetCifa::isLoss(cifa::Cifa& c, const cifa::Object& o)
 {
     return o.type == "Loss";
 }
@@ -103,27 +93,26 @@ int NetCifa::registerFunctions()
             std::vector<int> dim;
             for (int i = 0; i < v.size(); i++)
             {
-                dim.push_back(v[i]);
+                dim.push_back(v[i].value);
             }
             Matrix m(dim);
-            registerMatrix(c, m);
-            return 1;
+            return registerMatrix(c, m);
         });
     cifa_.register_function("print_message", [](cifa::Cifa& c, cifa::ObjectVector& v) -> cifa::Object
         {
             fprintf(stdout, "%g\n", v[0].value);
             toMatrix(c, v[0]).message();
-            return 0;
+            return cifa::Object();
         });
     cifa_.register_function("setXYA", [](cifa::Cifa& c, cifa::ObjectVector& v) -> cifa::Object
         {
             getThis(c).setXYA(toMatrix(c, v[0]), toMatrix(c, v[1]), toMatrix(c, v[2]));
-            return 0;
+            return cifa::Object();
         });
     cifa_.register_function("clearWeight", [](cifa::Cifa& c, cifa::ObjectVector& v) -> cifa::Object
         {
             getThis(c).weights_.clear();
-            return 0;
+            return cifa::Object();
         });
     cifa_.register_function("addWeight", [](cifa::Cifa& c, cifa::ObjectVector& v) -> cifa::Object
         {
@@ -131,7 +120,7 @@ int NetCifa::registerFunctions()
             {
                 getThis(c).weights_.push_back(toMatrix(c, o));
             }
-            return 0;
+            return cifa::Object();
         });
 
     cifa_.user_add = [](cifa::Cifa& c, const cifa::Object& l, const cifa::Object& r) -> cifa::Object
@@ -139,8 +128,12 @@ int NetCifa::registerFunctions()
         if (isMatrix(c, l) && isMatrix(c, r))
         {
             Matrix m = toMatrix(c, l) + toMatrix(c, r);
-            registerMatrix(c, m);
-            return 1;
+            return registerMatrix(c, m);
+        }
+        if (isLoss(c, l) && isLoss(c, r))
+        {
+            MatrixOperator::Queue q = toLoss(c, l) + toLoss(c, r);
+            return registerLoss(c, q);
         }
     };
     cifa_.user_mul = [](cifa::Cifa& c, const cifa::Object& l, const cifa::Object& r) -> cifa::Object
@@ -148,8 +141,20 @@ int NetCifa::registerFunctions()
         if (isMatrix(c, l) && isMatrix(c, r))
         {
             Matrix m = toMatrix(c, l) * toMatrix(c, r);
-            registerMatrix(c, m);
-            return 1;
+            return registerMatrix(c, m);
+        }
+        if (isLoss(c, l) || isLoss(c, r))
+        {
+            MatrixOperator::Queue q;
+            if (isLoss(c, l))
+            {
+                q = r.value * toLoss(c, l);
+            }
+            else
+            {
+                q = l.value * toLoss(c, r);
+            }
+            return registerLoss(c, q);
         }
     };
     cifa_.register_function("conv", [](cifa::Cifa& c, cifa::ObjectVector& v) -> cifa::Object
@@ -157,8 +162,7 @@ int NetCifa::registerFunctions()
             auto stride = getVector(v, 2);
             auto padding = getVector(v, 3);
             Matrix m = conv(toMatrix(c, v[0]), toMatrix(c, v[1]), stride, padding);
-            registerMatrix(c, m);
-            return 1;
+            return registerMatrix(c, m);
         });
     cifa_.register_function("maxpool", [](cifa::Cifa& c, cifa::ObjectVector& v) -> cifa::Object
         {
@@ -166,8 +170,7 @@ int NetCifa::registerFunctions()
             auto stride = getVector(v, 2);
             auto padding = getVector(v, 3);
             Matrix m = maxpool(toMatrix(c, v[0]), window, stride, padding);
-            registerMatrix(c, m);
-            return 1;
+            return registerMatrix(c, m);
         });
     cifa_.register_function("getRow", [](cifa::Cifa& c, cifa::ObjectVector& v) -> cifa::Object
         {
@@ -178,8 +181,7 @@ int NetCifa::registerFunctions()
 #define REGISTER(func) \
     cifa_.register_function(#func, [](cifa::Cifa& c, cifa::ObjectVector& v) -> cifa::Object { \
         Matrix m = func(toMatrix(c, v[0])); \
-        registerMatrix(c, m); \
-        return 1; \
+        return registerMatrix(c, m); \
     })
 
     REGISTER(relu);
@@ -187,27 +189,24 @@ int NetCifa::registerFunctions()
     REGISTER(softmax);
     REGISTER(softmax_ce);
 
-    //    cifa_.register_function("addLoss", [](cifa::Cifa& c,cifa::ObjectVector& v) -> cifa::Object
-    //        {
-    //            int n = (c);
-    //            for (int i = 0; i < n; i++)
-    //            {
-    //                getThis(c)->loss_ = getThis(c)->loss_ + toLoss(c, i + 1);
-    //            }
-    //            return 0;
-    //        });
-    //    cifa_.register_function("crossEntropy", [](cifa::Cifa& c,cifa::ObjectVector& v) -> cifa::Object
-    //        {
-    //            auto q = crossEntropy(toMatrix(L, 1), toMatrix(L, 2));
-    //            pushLoss(c, q);
-    //            return 1;
-    //        });
-    //    cifa_.register_function("L2", [](cifa::Cifa& c,cifa::ObjectVector& v) -> cifa::Object
-    //        {
-    //            auto q = L2(toMatrix(c, v[0]));
-    //            pushLoss(c, q);
-    //            return 1;
-    //        });
+    cifa_.register_function("addLoss", [](cifa::Cifa& c, cifa::ObjectVector& v) -> cifa::Object
+        {
+            for (auto& o : v)
+            {
+                getThis(c).loss_ = getThis(c).loss_ + toLoss(c, o);
+            }
+            return cifa::Object();
+        });
+    cifa_.register_function("crossEntropy", [](cifa::Cifa& c, cifa::ObjectVector& v) -> cifa::Object
+        {
+            auto q = crossEntropy(toMatrix(c, v[0]), toMatrix(c, v[1]));
+            return registerLoss(c, q);
+        });
+    cifa_.register_function("L2", [](cifa::Cifa& c, cifa::ObjectVector& v) -> cifa::Object
+        {
+            auto q = L2(toMatrix(c, v[0]));
+            return registerLoss(c, q);
+        });
 
     return 0;
 }

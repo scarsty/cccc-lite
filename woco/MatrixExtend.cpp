@@ -1362,6 +1362,10 @@ void MatrixExtend::sparse(Matrix& rou_hat, Matrix& R, real rou, real beta)
 
 void MatrixExtend::fill(Matrix& m, RandomFillType random_type, int in, int out)
 {
+    if (m.getDataSize() <= 0)
+    {
+        return;
+    }
     Random<real> random_generator;
     random_generator.set_seed();
     real a = 0, b = 0;
