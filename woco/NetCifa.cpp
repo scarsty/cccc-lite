@@ -135,6 +135,7 @@ int NetCifa::registerFunctions()
             MatrixOperator::Queue q = toLoss(c, l) + toLoss(c, r);
             return registerLoss(c, q);
         }
+        return cifa::Object(l.value + r.value);
     };
     cifa_.user_mul = [](cifa::Cifa& c, const cifa::Object& l, const cifa::Object& r) -> cifa::Object
     {
@@ -156,6 +157,7 @@ int NetCifa::registerFunctions()
             }
             return registerLoss(c, q);
         }
+        return cifa::Object(l.value * r.value);
     };
     cifa_.register_function("conv", [](cifa::Cifa& c, cifa::ObjectVector& v) -> cifa::Object
         {
