@@ -5,13 +5,14 @@ file(GLOB SRC_LIST
     ./*.cpp
     ./*.c
     ../../common/*.cpp
-    ../../common/*.c)
+    ../../common/*.c
+    ../../cifa/cifa/Cifa.cpp)
 
 set(CMAKE_VERBOSE_MAKEFILE on)
 set(CMAKE_CXX_COMPILER $ENV{CXX})
 set(CMAKE_CXX_FLAGS "-O3 -std=c++17 -pthread -fopenmp -DNDEBUG")
 
-include_directories(/usr/local/cuda/include /usr/local/cuda/include/crt ../../common ../woco-cuda ../include .)
+include_directories(/usr/local/cuda/include /usr/local/cuda/include/crt ../../common ../woco-cuda ../include . ../../cifa/cifa)
 link_directories(/usr/local/cuda/lib64 /usr/local/cuda/lib64/stubs)
 
 set(LINK_LIBRARIES woco-cuda cudnn cudart curand cublas openblas lua5.3)

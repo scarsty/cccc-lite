@@ -20,13 +20,20 @@ Net* Factory::createNet(Option& op)
     if (net == nullptr)
     {
         //之前使用vector，但是resize时为复制构造，而实际应每次都默认构造
-        static int i = 0;
+        static int total = 0;
         static std::map<int, NetCifa> nets;
         std::string script = op.getString("Net", "structure");
-        Log::LOG("Net script is:\n%s\n\n", script.c_str());
-        nets[i].setScript(script);
-        net = &nets[i];
-        i++;
+        auto lines = convert::splitString(script, "\n");
+        int i = 1;
+        for (auto& l : lines)
+        {
+            Log::LOG("%3d\t%s\n", i++, l.c_str());
+        }
+        Log::LOG("\n");
+        //Log::LOG("Net script is:\n%s\n\n", script.c_str());
+        nets[total].setScript(script);
+        net = &nets[total];
+        total++;
     }
     return net;
 }
@@ -51,16 +58,16 @@ DataPreparer* Factory::createDP(Option& op, const std::string& section, const st
         }
         if (mode == "image")
         {
-            static int i = 0;
+            static int total = 0;
             static std::map<int, DataPreparerImage> m;
-            dp = &m[i++];
+            dp = &m[total++];
             Log::LOG("Create default image data preparer\n");
         }
         else
         {
-            static int i = 0;
+            static int total = 0;
             static std::map<int, DataPreparer> m;
-            dp = &m[i++];
+            dp = &m[total++];
             Log::LOG("Create default data preparer\n");
         }
     }
