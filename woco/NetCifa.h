@@ -24,17 +24,9 @@ private:
     std::map<cifa::Object, MatrixOperator::Queue, CompareObject> map_loss_;
     std::string script_;
 
-    static NetCifa& getThis(cifa::Cifa& c);
-
-    static cifa::Object registerMatrix(cifa::Cifa& c, Matrix& m);
-    static cifa::Object registerLoss(cifa::Cifa& c, MatrixOperator::Queue& loss);
+    cifa::Object registerMatrix(Matrix& m);
+    cifa::Object registerLoss(MatrixOperator::Queue& loss);
     static std::vector<int> getVector(cifa::ObjectVector& v, int index);
-
-    static Matrix& toMatrix(cifa::Cifa& c, const cifa::Object& o);
-    static MatrixOperator::Queue& toLoss(cifa::Cifa& c, const cifa::Object& o);
-
-    static bool isMatrix(cifa::Cifa& c, const cifa::Object& o);
-    static bool isLoss(cifa::Cifa& c, const cifa::Object& o);
 
 public:
     NetCifa();
