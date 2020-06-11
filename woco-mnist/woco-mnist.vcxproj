@@ -24,7 +24,6 @@
     <ClInclude Include="DataPreparerMnist.h" />
     <ClInclude Include="MnistReader.h" />
     <ClInclude Include="NetMnist.h" />
-    <ClInclude Include="woco_extension.h" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="CMakeLists.txt" />

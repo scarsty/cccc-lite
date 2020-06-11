@@ -53,3 +53,4 @@ woco-predict/x64/
 woco-python/x64/
 woco-test/x64/
 *.vsp
+*.pb.*

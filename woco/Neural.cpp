@@ -290,7 +290,7 @@ void Neural::train(std::vector<Net*>& nets, DataPreparer* data_preparer, int epo
     std::vector<std::thread> net_threads;
     for (int i = 0; i < nets_.size(); i++)
     {
-        net_threads.emplace_back(std::thread{ [this, &nets, i, &train_info, epochs]()
+        net_threads.emplace_back(std::thread{ [this, &nets, i, &train_info, &epochs]()
             { trainOneNet(nets, i, train_info, epoch_count_, epochs); } });
     }
 

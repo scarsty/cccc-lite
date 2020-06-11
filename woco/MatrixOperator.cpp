@@ -186,6 +186,18 @@ void MatrixOperator::print(const MatrixOperator::Queue& op_queue)
 void MatrixOperator::print() const
 {
     fprintf(stdout, "%d->", int(type_));
+#ifdef _DEBUG
+    fprintf(stdout, "\n");
+    for (const auto& m : matrix_in_)
+    {
+        m.message();
+    }
+    for (const auto& m : matrix_out_)
+    {
+        m.message();
+    }
+    fprintf(stdout, "\n");
+#endif
 }
 
 void MatrixOperator::simpleQueue(MatrixOperator::Queue& op_queue, const Matrix& X, const Matrix& A)
