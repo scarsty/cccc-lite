@@ -1,6 +1,7 @@
 #pragma once
 #include "MatrixOperator.h"
 #include "Option.h"
+//#include "SaveBuffer.h"
 #include "Solver.h"
 
 namespace woco
@@ -68,11 +69,13 @@ public:
 
     Matrix& getCombinedWeight() { return combined_weight_; }
     Matrix& getWorkspaceWeight() { return workspace_weight_; }
-    void saveWeight(SaveBuffer& buffer);
+    //void saveWeight(SaveBuffer& buffer);
     int saveWeight(const std::string& filename);
-    void loadWeight(SaveBuffer& buffer);
+    //void loadWeight(SaveBuffer& buffer);
     int loadWeight(const std::string& str, int load_mode = 0);
     void calNorm(realc& l1, realc& l2);
+
+    virtual void save(const std::string& filename) {}
 
 private:
     int resetBatchSize(int n);

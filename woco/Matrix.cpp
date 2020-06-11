@@ -296,25 +296,29 @@ void Matrix::printAsMatrix(FILE* fout) const
     fprintf(fout, "\n");
 }
 
-int Matrix::save(SaveBuffer& buffer) const
+//int Matrix::save(SaveBuffer& buffer) const
+//{
+//    auto temp = dataMirrorCPU();
+//    buffer.save(temp->data_, sizeof(real) * data_size_);
+//    return data_size_;
+//}
+//
+//int Matrix::load(SaveBuffer& buffer)
+//{
+//    auto temp = dataMirrorCPU(false);
+//    buffer.load(temp->data_, sizeof(real) * data_size_);
+//    copyDataPointer(DeviceType::CPU, temp->data_, getDeviceType(), getDataPointer(), data_size_);
+//    return data_size_;
+//}
+
+int64_t Matrix::save(void* buffer, int64_t size_in_byte) const
 {
-    auto temp = dataMirrorCPU();
-    buffer.save(temp->data_, sizeof(real) * data_size_);
-    return data_size_;
+    return copyDataPointer(getDeviceType(), getDataPointer(), DeviceType::CPU, (real*)buffer, std::min(data_size_, int64_t(size_in_byte / sizeof(real))));
 }
 
-int Matrix::load(SaveBuffer& buffer)
+int64_t Matrix::load(const void* buffer, int64_t size_in_byte)
 {
-    auto temp = dataMirrorCPU(false);
-    buffer.load(temp->data_, sizeof(real) * data_size_);
-    copyDataPointer(DeviceType::CPU, temp->data_, getDeviceType(), getDataPointer(), data_size_);
-    return data_size_;
-}
-
-int Matrix::load(const real* buffer, int64_t size)
-{
-    copyDataPointer(DeviceType::CPU, buffer, getDeviceType(), getDataPointer(), std::min(data_size_, size));
-    return std::min(data_size_, size);
+    return copyDataPointer(DeviceType::CPU, (real*)buffer, getDeviceType(), getDataPointer(), std::min(data_size_, int64_t(size_in_byte / sizeof(real))));
 }
 
 //int Matrix::save(const std::string filename)
@@ -358,20 +362,20 @@ void Matrix::copyDataOutToHost(real* dst, int64_t size)
 }
 
 //警告：乱用模式会受惩罚！
-void Matrix::copyDataPointer(const Matrix& A, const real* A_pointer, Matrix& R, real* R_pointer, int64_t size)
+int64_t Matrix::copyDataPointer(const Matrix& A, const real* A_pointer, Matrix& R, real* R_pointer, int64_t size)
 {
     if (size < 0)
     {
         size = std::min(A.getDataSize(), R.getDataSize());
     }
-    copyDataPointer(A.getDeviceType(), A_pointer, R.getDeviceType(), R_pointer, size);
+    return copyDataPointer(A.getDeviceType(), A_pointer, R.getDeviceType(), R_pointer, size);
 }
 
-void Matrix::copyDataPointer(DeviceType dt_src, const real* src, DeviceType dt_dst, real* dst, int64_t size)
+int64_t Matrix::copyDataPointer(DeviceType dt_src, const real* src, DeviceType dt_dst, real* dst, int64_t size)
 {
     if (src == nullptr || dst == nullptr || src == dst)
     {
-        return;
+        return 0;
     }
     int64_t size_in_byte = size * sizeof(real);
     cudaError state = cudaSuccess;
@@ -395,6 +399,7 @@ void Matrix::copyDataPointer(DeviceType dt_src, const real* src, DeviceType dt_d
     {
         fprintf(stderr, "Error: cudaMemcpy failed with error code is %d, size in byte is %ld (%g)!\n", state, size_in_byte, 1.0 * size_in_byte);
     }
+    return size_in_byte;
 }
 
 //复制数据，只处理较少的
