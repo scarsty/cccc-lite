@@ -54,3 +54,4 @@ woco-python/x64/
 woco-test/x64/
 *.vsp
 *.pb.*
+*.onnx
