@@ -1,15 +1,15 @@
-#include "woco_extension.h"
 #include "DataPreparerMnist.h"
 #include "NetMnist.h"
+#include "dll_export.h"
 
-void* dp_ext()
+extern "C" DLL_EXPORT void* dp_ext()
 {
     static int i = 0;
     static std::map<int, woco::DataPreparerMnist> m;
     return &m[i++];
 }
 
-void* net_ext()
+extern "C" DLL_EXPORT void* net_ext()
 {
     static int i = 0;
     static std::map<int, woco::NetMnist> n;

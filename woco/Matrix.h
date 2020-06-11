@@ -168,6 +168,7 @@ public:
 
     int save(SaveBuffer& buffer) const;
     int load(SaveBuffer& buffer);
+    int load(const real* buffer, int64_t size);
 
 private:
     void copyDataInFromHost(real* src, int64_t size);
@@ -228,7 +229,7 @@ public:
     static realc dot(const Matrix& A, const Matrix& B);
     static realc dotCol(const Matrix& A, int cA, const Matrix& B, int cB);
     static realc dotPart(int size, const Matrix& A, real* a, int cA, real* b, int cB);
-    realc dotSelf();
+    realc dotSelf() const;
     static void sign(Matrix& A, Matrix& R, real v = 1, real section = 1e-4);
 
 public:
@@ -273,7 +274,7 @@ public:
 
 public:
     static bool checkMatrixDevice(const std::vector<const Matrix*>& v);    //此处用对象会有效率问题
-    void message(const std::string& info = "");
+    void message(const std::string& info = "") const;
 };
 
 }    // namespace woco

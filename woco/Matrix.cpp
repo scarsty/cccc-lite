@@ -98,14 +98,14 @@ Matrix::Matrix(int m, int n, DeviceType device_type) : Matrix(Size{ m, n }, devi
 {
 }
 
-Matrix::Matrix(const Size& dim, real* data, DeviceType device_type) : Matrix(Size{ 0, 0, 0, 0 }, device_type)
+Matrix::Matrix(const Size& dim, real* data, DeviceType device_type) : Matrix(Size{ 0, 0 }, device_type)
 {
     data_ = std::make_shared<real*>(data);
     resize(dim);
 }
 
 //空矩阵，后期再调整
-Matrix::Matrix(DeviceType device_type) : Matrix(Size{ 0, 0, 0, 0 }, device_type)
+Matrix::Matrix(DeviceType device_type) : Matrix(Size{ 0, 0 }, device_type)
 {
 }
 
@@ -309,6 +309,12 @@ int Matrix::load(SaveBuffer& buffer)
     buffer.load(temp->data_, sizeof(real) * data_size_);
     copyDataPointer(DeviceType::CPU, temp->data_, getDeviceType(), getDataPointer(), data_size_);
     return data_size_;
+}
+
+int Matrix::load(const real* buffer, int64_t size)
+{
+    copyDataPointer(DeviceType::CPU, buffer, getDeviceType(), getDataPointer(), std::min(data_size_, size));
+    return std::min(data_size_, size);
 }
 
 //int Matrix::save(const std::string filename)
@@ -952,7 +958,7 @@ realc Matrix::dotPart(int size, const Matrix& A, real* a, int cA, real* b, int c
 }
 
 //点乘，即所有元素平方和
-realc Matrix::dotSelf()
+realc Matrix::dotSelf() const
 {
     if (inGPU())
     {
@@ -1162,13 +1168,16 @@ bool Matrix::checkMatrixDevice(const std::vector<const Matrix*>& v)
     }
 }
 
-void Matrix::message(const std::string& info)
+void Matrix::message(const std::string& info) const
 {
-    int w, h, c, n, t;
-    cudnnDataType_t tt;
-    cudnnGetTensor4dDescriptor(getCudnnTensorDesc(), &tt, &n, &c, &h, &w, &t, &t, &t, &t);
-    fprintf(stdout, "%s GPU = %d, dim = (%d, %d, %d, %d), size in byte = %ld (%ld*%ld)\n",
-        info.c_str(), int(inGPU()), w, h, c, n, getDataSizeInByte(), getDataSize(), sizeof(real));
+    //int w, h, c, n, t;
+    //cudnnDataType_t tt;
+    fprintf(stdout, "%s GPU = %d, dim = (", info.c_str(), int(inGPU()));
+    for (auto& i : dim_)
+    {
+        fprintf(stdout, "%d, ", i);
+    }
+    fprintf(stdout, "\b\b), add = %p\n", getDataPointer());
     fprintf(stdout, "norm^2 = %g\n", dotSelf());
 }
 

@@ -26,9 +26,6 @@
     <ClInclude Include="..\..\common\convert.h">
       <Filter>headers</Filter>
     </ClInclude>
-    <ClInclude Include="woco_extension.h">
-      <Filter>headers</Filter>
-    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="DataPreparerMnist.cpp">
