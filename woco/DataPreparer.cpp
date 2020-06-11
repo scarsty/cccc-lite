@@ -149,9 +149,9 @@ void DataPreparer::prepareData(int epoch, const std::string& info, Matrix& X_ori
         auto fln2 = "check_point_" + std::to_string(epoch) + "_d.txt";
         auto save_matrix = [](const std::string& out, const Matrix& X)
         {
-            SaveBuffer pf;
-            X.save(pf);
-            pf.writeToFile(out);
+            //SaveBuffer pf;
+            //X.save(pf);
+            //pf.writeToFile(out);
         };
         save_matrix(fln, X_cpu);
         save_matrix(fln1, Y_cpu);

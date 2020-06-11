@@ -1,6 +1,6 @@
 #pragma once
 #include "CudaControl.h"
-#include "SaveBuffer.h"
+//#include "SaveBuffer.h"
 #include "blas_types.h"
 #include "cblas_real.h"
 #include "types.h"
@@ -166,17 +166,18 @@ public:
     void printAsVector(FILE* fout = stdout) const;
     void printAsMatrix(FILE* fout = stdout) const;
 
-    int save(SaveBuffer& buffer) const;
-    int load(SaveBuffer& buffer);
-    int load(const real* buffer, int64_t size);
+    //int save(SaveBuffer& buffer) const;
+    //int load(SaveBuffer& buffer);
+    int64_t save(void* buffer, int64_t size_in_byte) const;
+    int64_t load(const void* buffer, int64_t size_in_byte);
 
 private:
     void copyDataInFromHost(real* src, int64_t size);
     void copyDataOutToHost(real* dst, int64_t size);
 
 public:
-    static void copyDataPointer(const Matrix& A, const real* A_pointer, Matrix& R, real* R_pointer, int64_t size = -1);
-    static void copyDataPointer(DeviceType dt_src, const real* src, DeviceType dt_dst, real* dst, int64_t size);
+    static int64_t copyDataPointer(const Matrix& A, const real* A_pointer, Matrix& R, real* R_pointer, int64_t size = -1);
+    static int64_t copyDataPointer(DeviceType dt_src, const real* src, DeviceType dt_dst, real* dst, int64_t size);
 
 public:
     static void copyData(const Matrix& A, Matrix& R, int64_t size = -1);

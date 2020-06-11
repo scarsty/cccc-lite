@@ -79,13 +79,13 @@ void Net::active(bool learn)
     }
 }
 
-void Net::saveWeight(SaveBuffer& buffer)
-{
-    for (auto& m : weights_)
-    {
-        m.save(buffer);
-    }
-}
+//void Net::saveWeight(SaveBuffer& buffer)
+//{
+//    for (auto& m : weights_)
+//    {
+//        //m.save(buffer.getPointer());
+//    }
+//}
 
 //保存键结值，需配合ini中的网络结构
 //返回值：0正常，其他值不正常
@@ -98,8 +98,8 @@ int Net::saveWeight(const std::string& filename)
     }
     Log::LOG("Save net to %s... ", filename.c_str());
 
-    SaveBuffer buffer;
-    saveWeight(buffer);
+    //SaveBuffer buffer;
+    //saveWeight(buffer);
 
     //if (!option_.getString("", "save_sign").empty())
     //{
@@ -107,25 +107,25 @@ int Net::saveWeight(const std::string& filename)
     //    buffer.save((void*)suffix.data(), suffix.size());
     //}
 
-    if (buffer.writeToFile(filename) > 0)
-    {
-        Log::LOG("done\n");
-        return 0;
-    }
-    else
-    {
-        Log::LOG("failed!\n");
-        return -1;
-    }
+    //if (buffer.writeToFile(filename) > 0)
+    //{
+    //    Log::LOG("done\n");
+    //    return 0;
+    //}
+    //else
+    //{
+    //    Log::LOG("failed!\n");
+    //    return -1;
+    //}
 }
 
-void Net::loadWeight(SaveBuffer& buffer)
-{
-    for (auto& m : weights_)
-    {
-        m.load(buffer);
-    }
-}
+//void Net::loadWeight(SaveBuffer& buffer)
+//{
+//    for (auto& m : weights_)
+//    {
+//        //m.load(buffer);
+//    }
+//}
 
 //载入键结值，需配合ini中的网络结构
 //load_mode: 0为从文件读，1为从字串读
@@ -152,51 +152,52 @@ int Net::loadWeight(const std::string& str, int load_mode)
         Log::LOG("Loading net from memory... ");
     }
 
-    SaveBuffer buffer;
-    if (File::fileExist(str))
-    {
-        buffer.loadFromFile(str);
-    }
-    else if (load_mode)
-    {
-        buffer.loadFromString(str);
-    }
+    //SaveBuffer buffer;
+    //if (File::fileExist(str))
+    //{
+    //    buffer.loadFromFile(str);
+    //}
+    //else if (load_mode)
+    //{
+    //    buffer.loadFromString(str);
+    //}
 
-    if (buffer.size() <= 0)
-    {
-        Log::LOG("failed!\n");
-        return -2;
-    }
+    //if (buffer.size() <= 0)
+    //{
+    //    Log::LOG("failed!\n");
+    //    return -2;
+    //}
 
-    loadWeight(buffer);
+    //loadWeight(buffer);
+    //std::string str;
     Log::LOG("done\n");
 
     int ret = 0;
     std::string sign_substr = "save_sign\n";
-    auto weght_end_pos = buffer.getString().find(sign_substr, buffer.size() - 100);    //存档签名不能超过100个字节
+    auto weght_end_pos = str.find(sign_substr, str.size() - 100);    //存档签名不能超过100个字节
     if (weght_end_pos != std::string::npos)
     {
         auto sign_begin_pos = weght_end_pos + sign_substr.size();
         std::string sign;
-        auto sign_end_pos = buffer.getString().find("\n", sign_begin_pos);
+        auto sign_end_pos = str.find("\n", sign_begin_pos);
         if (sign_end_pos != std::string::npos)
         {
-            sign = buffer.getString().substr(sign_begin_pos, sign_end_pos - sign_begin_pos);
+            sign = str.substr(sign_begin_pos, sign_end_pos - sign_begin_pos);
         }
         Log::LOG("Save sign: %s\n", sign.c_str());
     }
     else
     {
         Log::LOG("Warning: no save sign!\n");
-        weght_end_pos = buffer.size();
+        weght_end_pos = str.size();
         ret = 1;
     }
-    if (weght_end_pos > buffer.getPointer())
+    if (weght_end_pos > str.size())
     {
         Log::LOG("Warning: size of weight is longer than net!\n");
         ret = 1;
     }
-    else if (weght_end_pos < buffer.getPointer())
+    else if (weght_end_pos < str.size())
     {
         Log::LOG("Warning: size of weight is shorter than net!\n");
         ret = 1;

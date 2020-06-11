@@ -428,7 +428,7 @@ Matrix pool(const Matrix& A, PoolingType pooling_type, const std::vector<int>& w
     getDefaultStridePadding(MatrixOpType::POOL, window, stride, padding);
     for (int i = 0; i < dim.size() - 2; i++)
     {
-        dim[i] = ceil(1.0 * (dim[i] + 2 * padding[i] - window[i]) / stride[i] + 1);
+        dim[i] = (dim[i] + 2 * padding[i] - window[i]) / stride[i] + 1;
     }
     Matrix R(dim);
     pool(A, R, pooling_type, window, stride, padding, a);
@@ -441,7 +441,7 @@ Matrix conv(const Matrix& A, const Matrix& W, std::vector<int> stride, std::vect
     getDefaultStridePadding(MatrixOpType::CONV, W.getDim(), stride, padding);
     for (int i = 0; i < dim.size() - 2; i++)
     {
-        dim[i] = ceil(1.0 * (dim[i] + 2 * padding[i] - W.getDim()[i]) / stride[i] + 1);
+        dim[i] = (dim[i] + 2 * padding[i] - W.getDim()[i]) / stride[i] + 1;
     }
     dim[dim.size() - 2] = W.getDim().back();
     Matrix R(dim);

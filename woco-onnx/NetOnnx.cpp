@@ -93,16 +93,28 @@ void NetOnnx::structure()
         int out_size = node.output_size();
         std::cout << type << ": " << in_size << " " << output_size << ";\n";
 
-        type = convert::toLowerCase(type);
-
         auto m_in = [&](int i) -> Matrix& { return map_matrix[node.input()[i]]; };
         auto m_out = [&](int i) -> Matrix& { return map_matrix[node.output()[i]]; };
 
-        if (type == "conv")
+        if (type == "Conv")
         {
-            m_out(0) = conv(m_in(0), m_in(1));
+            std::vector<int> stride, padding;
+            for (auto attr : node.attribute())
+            {
+                if (attr.name() == "auto_pad")
+                {
+                    if (attr.s() == "SAME_UPPER")
+                    {
+                        for (int i = 0; i < m_in(1).getDim().size() - 2; i++)
+                        {
+                            padding.push_back((m_in(1).getDim()[i] - 1) / 2);
+                        }
+                    }
+                }
+            }
+            m_out(0) = conv(m_in(0), m_in(1), { 1, 1 }, padding);
         }
-        else if (type == "add")
+        else if (type == "Add")
         {
             auto dim = m_in(1).getDim();
             if (dim.size() != m_in(0).getDim().size())
@@ -112,19 +124,43 @@ void NetOnnx::structure()
             m_in(1).resize(dim);
             m_out(0) = add(m_in(0), m_in(1));
         }
-        else if (type == "maxpool")
+        else if (type == "MaxPool")
         {
-            m_out(0) = maxpool(m_in(0), { 2, 2 });
+            std::vector<int> window, stride, padding;
+            for (auto attr : node.attribute())
+            {
+                if (attr.name() == "kernel_shape")
+                {
+                    for (int i = 0; i < m_in(0).getDim().size() - 2; i++)
+                    {
+                        window.push_back(attr.ints()[i]);
+                    }
+                }
+                if (attr.name() == "strides")
+                {
+                    for (int i = 0; i < m_in(0).getDim().size() - 2; i++)
+                    {
+                        stride.push_back(attr.ints()[i]);
+                    }
+                }
+            }
+            m_out(0) = maxpool(m_in(0), window, stride, padding);
         }
-        else if (type == "matmul")
+        else if (type == "MatMul")
         {
+            auto m = m_in(1).clone(DeviceType::CPU);
+            auto dim = m.getDim();
+            std::reverse(dim.begin(), dim.end());
+            m.resize(dim);
+            m.transpose();
+            Matrix::copyData(m, m_in(1));
             m_out(0) = mul(m_in(1), m_in(0));
         }
-        else if (type == "relu")
+        else if (type == "Relu")
         {
             m_out(0) = relu(m_in(0));
         }
-        else if (type == "reshape")
+        else if (type == "Reshape")
         {
             m_out(0) = m_in(0);
             std::vector<int> dim;
@@ -150,8 +186,6 @@ void NetOnnx::structure()
             setA(m_out(0));
         }
     }
-
-    std::cout << "fasdkifhjasoigfhuivgaidr\n\n";
 }
 
 }    // namespace woco

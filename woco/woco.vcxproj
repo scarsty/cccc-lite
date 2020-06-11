@@ -135,7 +135,6 @@
     <ClCompile Include="Neural.cpp" />
     <ClCompile Include="Option.cpp" />
     <ClCompile Include="..\..\common\convert.cpp" />
-    <ClCompile Include="SaveBuffer.cpp" />
     <ClCompile Include="Solver.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -157,7 +156,6 @@
     <ClInclude Include="Net.h" />
     <ClInclude Include="NetCifa.h" />
     <ClInclude Include="Neural.h" />
-    <ClInclude Include="SaveBuffer.h" />
     <ClInclude Include="Solver.h" />
     <ClInclude Include="dll_export.h" />
     <ClInclude Include="Matrix.h" />
