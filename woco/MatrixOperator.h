@@ -115,6 +115,8 @@ public:
     }
 };
 
+DLL_EXPORT void getDefaultStridePadding(MatrixOpType type, const std::vector<int>& dim, std::vector<int>& stride, std::vector<int>& padding);
+
 //基础运算开始
 DLL_EXPORT void scale(const Matrix& A, Matrix& R, real r);
 DLL_EXPORT void mul(const Matrix& A, const Matrix& B, Matrix& R, real a = 1);

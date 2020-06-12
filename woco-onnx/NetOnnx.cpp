@@ -1,31 +1,28 @@
 #include "NetOnnx.h"
 #include "onnx.proto3.pb.h"
-#include <fstream>
 
 namespace woco
 {
 
 void NetOnnx::structure()
 {
-    NetCifa::structure();
-    return;
+    //NetCifa::structure();
+    //return;
 
     onnx::ModelProto model;
     //std::ifstream file("mnist-8.onnx", std::ios_base::binary);
-    model.ParseFromString(convert::readStringFromFile("mnist-8.onnx"));
+    model.ParseFromString(convert::readStringFromFile("test.onnx"));
     //file.close();
 
-    auto batch = 100;
+    auto batch = 1;
 
     std::map<std::string, Matrix> map_matrix, map_weight;
     auto graph = model.graph();
 
-    //输入
-    for (int i = 0; i < graph.input_size(); ++i)
+    auto get_matrix = [&](const onnx::ValueInfoProto& vip) -> Matrix&
     {
-        auto& input = graph.input(i);
-        auto& name = input.name();
-        auto& type = input.type();
+        auto& name = vip.name();
+        auto& type = vip.type();
         auto& shape = type.tensor_type().shape();
         std::vector<int> dim;
         for (int i = 0; i < shape.dim_size(); i++)
@@ -33,17 +30,19 @@ void NetOnnx::structure()
             dim.push_back(shape.dim(i).dim_value());
         }
         std::reverse(dim.begin(), dim.end());
-
-        Matrix m(dim);
-        if (name.find("Input") != std::string::npos)
+        if (dim.size() == 3)
         {
-            dim.back() = batch;
-            m.resize(dim);
-            setX(m);
+            dim.push_back(1);
         }
+        Matrix m(dim);
         map_matrix[name] = m;
-    }
+        return map_matrix[name];
+    };
 
+    for (int i = 0; i < graph.input_size(); ++i)
+    {
+        get_matrix(graph.input(i));
+    }
     //载入权重
     for (int i = 0; i < graph.initializer_size(); ++i)
     {
@@ -70,6 +69,25 @@ void NetOnnx::structure()
         }
     }
 
+    for (auto& p : map_matrix)
+    {
+        if (map_weight.count(p.first) == 0)
+        {
+            auto& m = map_matrix[p.first];
+            auto dim = m.getDim();
+            dim.back() = batch;
+            m.resize(dim);
+            setX(m);
+        }
+    }
+    for (int i = 0; i < graph.value_info_size(); ++i)
+    {
+        get_matrix(graph.value_info(i));
+    }
+    for (int i = 0; i < graph.output_size(); ++i)
+    {
+        A_ = get_matrix(graph.output(i));
+    }
     //计算图结构
     for (int i = 0; i < graph.node_size(); i++)
     {
@@ -85,6 +103,20 @@ void NetOnnx::structure()
             std::vector<int> stride, padding;
             for (auto attr : node.attribute())
             {
+                if (attr.name() == "strides")
+                {
+                    for (int i = 0; i < m_in(0).getDim().size() - 2; i++)
+                    {
+                        stride.push_back(attr.ints()[i]);
+                    }
+                }
+                if (attr.name() == "pads")
+                {
+                    for (int i = 0; i < m_in(0).getDim().size() - 2; i++)
+                    {
+                        padding.push_back(attr.ints()[i]);
+                    }
+                }
                 if (attr.name() == "auto_pad")
                 {
                     if (attr.s() == "SAME_UPPER")
@@ -96,17 +128,12 @@ void NetOnnx::structure()
                     }
                 }
             }
-            m_out(0) = conv(m_in(0), m_in(1), { 1, 1 }, padding);
+            getDefaultStridePadding(MatrixOpType::CONV, m_in(1).getDim(), stride, padding);
+            conv(m_in(0), m_in(1), m_out(0), stride, padding);
         }
         else if (type == "Add")
         {
-            auto dim = m_in(1).getDim();
-            if (dim.size() != m_in(0).getDim().size())
-            {
-                dim.push_back(1);
-            }
-            m_in(1).resize(dim);
-            m_out(0) = m_in(0) + m_in(1);
+            add(m_in(0), m_in(1), m_out(0));
         }
         else if (type == "MaxPool")
         {
@@ -128,19 +155,23 @@ void NetOnnx::structure()
                     }
                 }
             }
-            m_out(0) = maxpool(m_in(0), window, stride, padding);
+            getDefaultStridePadding(MatrixOpType::POOL, window, stride, padding);
+            pool(m_in(0), m_out(0), POOLING_MAX, window, stride, padding);
         }
         else if (type == "MatMul")
         {
-            m_out(0) = mul(m_in(1), m_in(0));
+            mul(m_in(1), m_in(0), m_out(0));
         }
         else if (type == "Relu")
         {
-            m_out(0) = relu(m_in(0));
+            woco::active(m_in(0), m_out(0), ACTIVE_FUNCTION_RELU);
+        }
+        else if (type == "Softmax")
+        {
+            woco::active(m_in(0), m_out(0), ACTIVE_FUNCTION_SOFTMAX);
         }
         else if (type == "Reshape")
         {
-            m_out(0) = m_in(0);
             std::vector<int> dim;
             for (int i = 0; i < m_in(1).getDataSize(); i++)
             {
@@ -151,11 +182,7 @@ void NetOnnx::structure()
             {
                 dim.back() = batch;
             }
-            m_out(0).resize(dim);
-        }
-        if (i == graph.node_size() - 1)
-        {
-            setA(softmax_ce(m_out(0)));
+            reshape(m_in(0), m_out(0), dim);
         }
     }
     Y_.resize(A_);
@@ -164,7 +191,6 @@ void NetOnnx::structure()
 
 void NetOnnx::save(const std::string& filename)
 {
-    onnx::ModelProto model;
     auto graph = new onnx::GraphProto();
 
     auto matrix_string = [](const Matrix& m)
@@ -228,6 +254,7 @@ void NetOnnx::save(const std::string& filename)
 
     for (auto& m : weights_)
     {
+        register_matrix(m, graph->add_input());
         init_matrix(m, graph->add_initializer());
     }
     int index = 0;
@@ -337,7 +364,7 @@ void NetOnnx::save(const std::string& filename)
         case MatrixOpType::RESHAPE:
             node->set_op_type("Reshape");
             {
-                auto dim = op.getPataInt();
+                auto dim = op.getMatrixOut()[0].getDim();
                 std::reverse(dim.begin(), dim.end());
                 Matrix m({ int(dim.size()) }, DeviceType::CPU);
                 for (int i = 0; i < dim.size(); i++)
@@ -351,11 +378,13 @@ void NetOnnx::save(const std::string& filename)
         }
     }
 
+    onnx::ModelProto model;
     model.set_allocated_graph(graph);
 
-   auto aa= model.add_attribute();
-    aa->set_name("");
-    model.
+    model.set_ir_version(3);
+    model.set_producer_name("woco");
+    model.set_producer_version("0");
+    model.set_model_version(1);
     std::string str;
 
     //graph.
