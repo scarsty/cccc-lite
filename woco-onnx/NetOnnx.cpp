@@ -11,7 +11,7 @@ void NetOnnx::structure()
 
     onnx::ModelProto model;
     //std::ifstream file("mnist-8.onnx", std::ios_base::binary);
-    model.ParseFromString(convert::readStringFromFile("test.onnx"));
+    model.ParseFromString(convert::readStringFromFile("mnist-8.onnx"));
     //file.close();
 
     auto batch = 1;
@@ -164,11 +164,11 @@ void NetOnnx::structure()
         }
         else if (type == "Relu")
         {
-            woco::active(m_in(0), m_out(0), ACTIVE_FUNCTION_RELU);
+            active(m_in(0), m_out(0), ACTIVE_FUNCTION_RELU);
         }
         else if (type == "Softmax")
         {
-            woco::active(m_in(0), m_out(0), ACTIVE_FUNCTION_SOFTMAX);
+            active(m_in(0), m_out(0), ACTIVE_FUNCTION_SOFTMAX);
         }
         else if (type == "Reshape")
         {
@@ -180,7 +180,7 @@ void NetOnnx::structure()
             std::reverse(dim.begin(), dim.end());
             if (map_weight.count(node.input()[0]) == 0)    //不是权重，则应该是数据
             {
-                dim.back() = batch;
+                //dim.back() = batch;
             }
             reshape(m_in(0), m_out(0), dim);
         }
@@ -384,10 +384,12 @@ void NetOnnx::save(const std::string& filename)
     model.set_ir_version(3);
     model.set_producer_name("woco");
     model.set_producer_version("0");
+    model.set_domain("sb500");
     model.set_model_version(1);
-    std::string str;
+    auto opset = model.add_opset_import();
+    opset->set_version(9);
 
-    //graph.
+    std::string str;
     model.SerializePartialToString(&str);
     convert::writeStringToFile(str, "test.onnx");
     std::cout << str << std::endl;

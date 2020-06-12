@@ -409,7 +409,7 @@ void Neural::trainOneNet(std::vector<Net*>& nets, int net_id, TrainInfo& train_i
             //同步未完成
             WAIT_UNTIL(train_info.parameters_collected == 0);
 
-            net->active(true);
+            net->cal(true);
             //发出网络训练结束信号
             train_info.trained++;
 

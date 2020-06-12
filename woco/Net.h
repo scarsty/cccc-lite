@@ -66,7 +66,7 @@ public:
     }
 
 public:
-    void active(bool learn);
+    void cal(bool learn);
 
     Matrix& getCombinedWeight() { return combined_weight_; }
     Matrix& getWorkspaceWeight() { return workspace_weight_; }
