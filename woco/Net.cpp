@@ -68,7 +68,7 @@ void Net::setXYA(const Matrix& X, const Matrix& Y, const Matrix& A)
 
 //learn为真时，会反向更新网络
 //active只处理一个gpu中的minibatch，需预先设置好网络的X_，Y_，A_
-void Net::active(bool learn)
+void Net::cal(bool learn)
 {
     //setDeviceSelf();
     setActivePhase(learn ? ACTIVE_PHASE_TRAIN : ACTIVE_PHASE_TEST);
@@ -315,7 +315,7 @@ int Net::test(const std::string& info, Matrix& X, Matrix& Y, Matrix& A, int outp
         X_.shareData(X_gpu, 0, i);
         Y_.shareData(Y_gpu, 0, i);
         A_.shareData(A_gpu, 0, i);
-        active(false);
+        cal(false);
         for (int gen_time = 0; gen_time < attack_times; gen_time++)
         {
             attack(X_, Y_);
