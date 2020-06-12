@@ -1,4 +1,5 @@
 #include "NetCifa.h"
+#include "Log.h"
 
 namespace woco
 {
@@ -44,7 +45,7 @@ void NetCifa::structure()
     //auto s = sizeof(*t);
     weights_.clear();
     loss_.clear();
-    runScript(script_);
+    runScript(message_);
     map_matrix_.clear();
     map_loss_.clear();
 
@@ -56,7 +57,15 @@ void NetCifa::structure()
 
 int NetCifa::runScript(const std::string& script)
 {
-    auto o = cifa_.run_script(script_);
+    auto lines = convert::splitString(script, "\n");
+    int i = 1;
+    for (auto& l : lines)
+    {
+        Log::LOG("%3d\t%s\n", i++, l.c_str());
+    }
+    Log::LOG("\n");
+
+    auto o = cifa_.run_script(script);
     return o.value;
 }
 

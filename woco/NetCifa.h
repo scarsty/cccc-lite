@@ -22,7 +22,6 @@ private:
 
     std::map<cifa::Object, Matrix, CompareObject> map_matrix_;
     std::map<cifa::Object, MatrixOperator::Queue, CompareObject> map_loss_;
-    std::string script_;
 
     cifa::Object registerMatrix(Matrix& m);
     cifa::Object registerLoss(MatrixOperator::Queue& loss);
@@ -31,7 +30,6 @@ private:
 public:
     NetCifa();
     virtual void structure() override;
-    void setScript(const std::string& script) { script_ = script; }
 
     int runScript(const std::string& script);
     int registerFunctions();
