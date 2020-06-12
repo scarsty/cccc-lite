@@ -159,4 +159,10 @@ void NetOnnx::structure()
     addLoss(crossEntropy(A_, Y_));
 }
 
+void NetOnnx::save(const std::string& filename)
+{
+    onnx::ModelProto model;
+    onnx::GraphProto graph;
+}
+
 }    // namespace woco

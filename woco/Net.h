@@ -28,6 +28,8 @@ protected:
 
     std::vector<Solver> solvers_;    //应等于weight的size
 
+    std::string message_;
+
 public:
     void setDevice(int dev) { device_id_ = CudaControl::setDevice(dev); }
     int getDevice() { return device_id_; }
@@ -73,6 +75,8 @@ public:
     void calNorm(realc& l1, realc& l2);
 
     virtual void save(const std::string& filename) {}
+
+    void setMessage(const std::string& m) { message_ = m; }
 
 private:
     int resetBatchSize(int n);

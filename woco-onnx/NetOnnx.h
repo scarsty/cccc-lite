@@ -1,13 +1,14 @@
 #pragma once
-#include "Net.h"
+#include "NetCifa.h"
 
 namespace woco
 {
 
-class NetOnnx : public Net
+class NetOnnx : public NetCifa
 {
-public:    
+public:
     virtual void structure() override;
+    virtual void save(const std::string& filename) override;
 };
 
 }    // namespace woco

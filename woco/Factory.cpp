@@ -12,26 +12,21 @@ Net* Factory::createNet(Option& op)
 #ifdef _DEBUG
     lib_key = "libraryd";
 #endif
+
+    std::string script = op.getString("Net", "structure");
     Net* net = nullptr;
     if (!op.getString("Net", lib_key).empty())
     {
         net = (Net*)getCreator(op.getString("Net", lib_key), op.getString("Net", "function", "net_ext"));
+        net->setMessage(script);
     }
     if (net == nullptr)
     {
         //之前使用vector，但是resize时为复制构造，而实际应每次都默认构造
         static int total = 0;
         static std::map<int, NetCifa> nets;
-        std::string script = op.getString("Net", "structure");
-        auto lines = convert::splitString(script, "\n");
-        int i = 1;
-        for (auto& l : lines)
-        {
-            Log::LOG("%3d\t%s\n", i++, l.c_str());
-        }
-        Log::LOG("\n");
         //Log::LOG("Net script is:\n%s\n\n", script.c_str());
-        nets[total].setScript(script);
+        nets[total].setMessage(script);
         net = &nets[total];
         total++;
     }
