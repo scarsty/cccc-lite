@@ -168,8 +168,8 @@ public:
 
     //int save(SaveBuffer& buffer) const;
     //int load(SaveBuffer& buffer);
-    int64_t save(void* buffer, int64_t size_in_byte) const;
-    int64_t load(const void* buffer, int64_t size_in_byte);
+    int64_t save(void* buffer, int64_t size) const;
+    int64_t load(const void* buffer, int64_t size);
 
 private:
     void copyDataInFromHost(real* src, int64_t size);
