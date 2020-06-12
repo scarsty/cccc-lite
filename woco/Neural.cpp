@@ -253,6 +253,7 @@ void Neural::run(int train_epochs /*= -1*/)
 #endif
 
     auto time_sec = timer_total_.getElapsedTime();
+    net->save("");
     Log::LOG("Run neural net end. Total time is %s\n", Timer::autoFormatTime(time_sec).c_str());
     Log::LOG("%s\n", Timer::getNowAsString().c_str());
 

@@ -124,7 +124,7 @@
       <ConformanceMode>true</ConformanceMode>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
-      <AdditionalIncludeDirectories>../include;../include/cuda;../../common;../woco;../woco-cuda;$(CUDA_PATH)/include;$(USR_LOCAL)\include;$(VCPKG_LIB_PATH)\x64-windows\include</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>../include;../include/cuda;../woco;../woco-cuda;$(CUDA_PATH)/include;$(VCPKG_LIB_PATH)\x64-windows\include;../../common;../../cifa/cifa</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpplatest</LanguageStandard>
     </ClCompile>
     <Link>

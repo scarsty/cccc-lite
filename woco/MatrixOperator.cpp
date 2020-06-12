@@ -373,6 +373,13 @@ void conv(const Matrix& A, const Matrix& W, Matrix& R, const std::vector<int>& s
     }
 }
 
+void reshape(const Matrix& A, Matrix& R, std::vector<int>& dim)
+{
+    R = A;
+    R.resize(dim);
+    if (MatrixOperator::making_) { MatrixOperator::op_queue_.emplace_back(MatrixOperator(MatrixOpType::RESHAPE, { A }, { R }, dim)); }
+}
+
 Matrix scale(const Matrix& A, real r)
 {
     Matrix R(A.getDim());
@@ -472,6 +479,13 @@ Matrix softmax(const Matrix& A)
 Matrix softmax_ce(const Matrix& A)
 {
     return active(A, ACTIVE_FUNCTION_SOFTMAX_CE);
+}
+
+Matrix reshape(const Matrix& A, std::vector<int>& dim)
+{
+    auto R = A;
+    reshape(A, R, dim);
+    return R;
 }
 
 Matrix operator+(const Matrix& A, const Matrix& B)
