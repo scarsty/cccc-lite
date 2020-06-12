@@ -141,24 +141,6 @@ void DataPreparer::prepareData(int epoch, const std::string& info, Matrix& X_ori
     //可能包含对训练数据的变换
     Log::LOG("Transfer data for epoch %d\n", ep1);
     transData(X_origin, Y_origin, X_cpu, Y_cpu, train_queue_cpu);
-
-    if (option_.getInt(section_, "save_checkpoint_data", 0))
-    {
-        auto fln = "check_point_" + std::to_string(epoch) + "_X.bin";
-        auto fln1 = "check_point_" + std::to_string(epoch) + "_Y.bin";
-        auto fln2 = "check_point_" + std::to_string(epoch) + "_d.txt";
-        auto save_matrix = [](const std::string& out, const Matrix& X)
-        {
-            //SaveBuffer pf;
-            //X.save(pf);
-            //pf.writeToFile(out);
-        };
-        save_matrix(fln, X_cpu);
-        save_matrix(fln1, Y_cpu);
-        FILE* pf = fopen(fln2.c_str(), "w+");
-        fprintf(pf, "%d %d %d %d\n", X_cpu.getWidth(), X_cpu.getHeight(), X_cpu.getChannel(), X_cpu.getNumber());
-        fclose(pf);
-    }
 }
 
 void DataPreparer::initData(Matrix& X, Matrix& Y)

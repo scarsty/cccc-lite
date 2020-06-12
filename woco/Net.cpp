@@ -79,15 +79,7 @@ void Net::active(bool learn)
     }
 }
 
-//void Net::saveWeight(SaveBuffer& buffer)
-//{
-//    for (auto& m : weights_)
-//    {
-//        //m.save(buffer.getPointer());
-//    }
-//}
-
-//保存键结值，需配合ini中的网络结构
+//保存权重，需配合ini中的网络结构
 //返回值：0正常，其他值不正常
 int Net::saveWeight(const std::string& filename)
 {
@@ -98,36 +90,37 @@ int Net::saveWeight(const std::string& filename)
     }
     Log::LOG("Save net to %s... ", filename.c_str());
 
-    //SaveBuffer buffer;
-    //saveWeight(buffer);
+    int sum = 0;
+    for (auto& m : weights_)
+    {
+        sum += m.getDataSize();
+    }
+    std::string buffer(sum, '\0');
+    auto p = (real*)buffer.data();
+    for (auto& m : weights_)
+    {
+        p += m.save(p, m.getDataSize());
+    }
 
-    //if (!option_.getString("", "save_sign").empty())
+    //if (!Option::getString("", "save_sign").empty())
     //{
     //    std::string suffix = "save_sign\n" + option_->getString("", "save_sign") + " " + Timer::getNowAsString() + "\n";
-    //    buffer.save((void*)suffix.data(), suffix.size());
+    //    str += suffix;
     //}
 
-    //if (buffer.writeToFile(filename) > 0)
-    //{
-    //    Log::LOG("done\n");
-    //    return 0;
-    //}
-    //else
-    //{
-    //    Log::LOG("failed!\n");
-    //    return -1;
-    //}
+    if (convert::writeStringToFile(buffer, filename) > 0)
+    {
+        Log::LOG("done\n");
+        return 0;
+    }
+    else
+    {
+        Log::LOG("failed!\n");
+        return -1;
+    }
 }
 
-//void Net::loadWeight(SaveBuffer& buffer)
-//{
-//    for (auto& m : weights_)
-//    {
-//        //m.load(buffer);
-//    }
-//}
-
-//载入键结值，需配合ini中的网络结构
+//载入权重，需配合ini中的网络结构
 //load_mode: 0为从文件读，1为从字串读
 //返回值：
 //0    读入长度恰好为网络尺寸
@@ -152,24 +145,29 @@ int Net::loadWeight(const std::string& str, int load_mode)
         Log::LOG("Loading net from memory... ");
     }
 
-    //SaveBuffer buffer;
-    //if (File::fileExist(str))
-    //{
-    //    buffer.loadFromFile(str);
-    //}
-    //else if (load_mode)
-    //{
-    //    buffer.loadFromString(str);
-    //}
+    std::string buffer;
+    if (File::fileExist(str))
+    {
+        buffer = convert::readStringFromFile(str);
+    }
+    else if (load_mode)
+    {
+        buffer = str;
+    }
 
-    //if (buffer.size() <= 0)
-    //{
-    //    Log::LOG("failed!\n");
-    //    return -2;
-    //}
+    if (buffer.size() <= 0)
+    {
+        Log::LOG("failed!\n");
+        return -2;
+    }
 
-    //loadWeight(buffer);
-    //std::string str;
+    auto p = (real*)buffer.data();
+    int sum = 0;
+    for (auto& m : weights_)
+    {
+        sum += m.load(p + sum, (buffer.size() - sum) / sizeof(real));
+    }
+
     Log::LOG("done\n");
 
     int ret = 0;
@@ -404,7 +402,22 @@ int Net::test(const std::string& info, Matrix& X, Matrix& Y, Matrix& A, int outp
         }
         else
         {
-            MatrixExtend::activeForward(A_cpu, A_max, ACTIVE_FUNCTION_FINDMAX);
+            A_max.initData(0);
+            for (int i_group = 0; i_group < A_cpu.getCol(); i_group++)
+            {
+                real max_v = -9999;
+                int max_loc = 0;
+                for (int i = 0; i < A_cpu.getRow(); i++)
+                {
+                    real v = A_cpu.getData(i, i_group);
+                    if (v > max_v)
+                    {
+                        max_v = v;
+                        max_loc = i;
+                    }
+                }
+                A_max.getData(max_loc, i_group) = 1;
+            }
         }
 
         for (int i = 0; i < (std::min)(group_size, output_group); i++)

@@ -310,7 +310,7 @@ void MatrixExtend::activeForward(const Matrix& A, Matrix& R, ActiveFunctionType 
             VectorMath::log_v(R.data(), R.data(), R.data_size_, a, r);
         }
         break;
-    case ACTIVE_FUNCTION_FINDMAX:
+    case ACTIVE_FUNCTION_ABSMAX:
         //计算时尽量不要使用，只用在验证时
         if (R.data_size_ <= 0)
         {
@@ -449,7 +449,7 @@ void MatrixExtend::activeBackward(Matrix& A, const Matrix& R, ActiveFunctionType
             }
         }
         break;
-    case ACTIVE_FUNCTION_FINDMAX:
+    case ACTIVE_FUNCTION_ABSMAX:
         //似乎应该是返回一个常数矩阵，若考虑效率应当留空此处在外部处理
         //dX.initData(1);
         fprintf(stderr, "Unsupported backward of FINDMAX!\n");

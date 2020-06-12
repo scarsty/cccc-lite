@@ -311,14 +311,14 @@ void Matrix::printAsMatrix(FILE* fout) const
 //    return data_size_;
 //}
 
-int64_t Matrix::save(void* buffer, int64_t size_in_byte) const
+int64_t Matrix::save(void* buffer, int64_t size) const
 {
-    return copyDataPointer(getDeviceType(), getDataPointer(), DeviceType::CPU, (real*)buffer, std::min(data_size_, int64_t(size_in_byte / sizeof(real))));
+    return copyDataPointer(getDeviceType(), getDataPointer(), DeviceType::CPU, (real*)buffer, std::min(data_size_, size));
 }
 
-int64_t Matrix::load(const void* buffer, int64_t size_in_byte)
+int64_t Matrix::load(const void* buffer, int64_t size)
 {
-    return copyDataPointer(DeviceType::CPU, (real*)buffer, getDeviceType(), getDataPointer(), std::min(data_size_, int64_t(size_in_byte / sizeof(real))));
+    return copyDataPointer(DeviceType::CPU, (real*)buffer, getDeviceType(), getDataPointer(), std::min(data_size_, size));
 }
 
 //int Matrix::save(const std::string filename)
@@ -665,7 +665,7 @@ std::shared_ptr<Matrix::DataWarpper> Matrix::dataMirrorCPU(bool reserve_data) co
 }
 
 //将前面几列复制到整个矩阵
-void Matrix::repeat(int c /*=1*/)
+void Matrix::repeat(int c)
 {
     if (inGPU())
     {
