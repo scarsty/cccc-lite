@@ -154,6 +154,11 @@ int NetCifa::registerFunctions()
         });
     cifa_.register_function("getRow", [&](cifa::ObjectVector& v)
         { return cifa::Object(map_matrix_[v[0]].getRow()); });
+    cifa_.register_function("reshape", [&](cifa::ObjectVector& v)
+        {
+            auto dim = getVector(v, 1);
+            return registerMatrix(reshape(map_matrix_[v[0]], dim));
+        });
 
 #define REGISTER(func) \
     cifa_.register_function(#func, [&](cifa::ObjectVector& v) { return registerMatrix(func(map_matrix_[v[0]])); })

@@ -18,6 +18,7 @@ enum class MatrixOpType
     ACTIVE,
     POOL,
     CONV,
+    RESHAPE,
     LOSS,
     L2,
 };
@@ -44,6 +45,7 @@ private:
     friend DLL_EXPORT void active(const Matrix& A, Matrix& R, ActiveFunctionType af, std::vector<int>& int_vector, std::vector<real>& real_vector, std::vector<Matrix>& matrix_vector);
     friend DLL_EXPORT void pool(const Matrix& A, Matrix& R, PoolingType pooling_type, const std::vector<int>& window, const std::vector<int>& stride, const std::vector<int>& padding, realc a);
     friend DLL_EXPORT void conv(const Matrix& A, const Matrix& W, Matrix& R, const std::vector<int>& stride, const std::vector<int>& padding, realc a);
+    friend DLL_EXPORT void reshape(const Matrix& A, Matrix& R, std::vector<int>& dim);
 
 private:
     MatrixOpType type_ = MatrixOpType::NONE;
@@ -82,6 +84,10 @@ public:
     void print() const;
 
     MatrixOpType getType() { return type_; }
+    const std::vector<Matrix>& getMatrixIn() { return matrix_in_; }
+    const std::vector<Matrix>& getMatrixOut() { return matrix_out_; }
+    const std::vector<int>& getPataInt() { return para_int_; }
+    const std::vector<std::vector<int>>& getPataInt2() { return para_int2_; }
 
     static void simpleQueue(MatrixOperator::Queue& op_queue, const Matrix& X, const Matrix& A);    //仅保留计算图中与X和A有关联的部分
 
@@ -120,6 +126,7 @@ DLL_EXPORT void active(const Matrix& A, Matrix& R, ActiveFunctionType af);
 DLL_EXPORT void active(const Matrix& A, Matrix& R, ActiveFunctionType af, std::vector<int>& int_vector, std::vector<real>& real_vector, std::vector<Matrix>& matrix_vector);
 DLL_EXPORT void pool(const Matrix& A, Matrix& R, PoolingType pooling_type, const std::vector<int>& window, const std::vector<int>& stride, const std::vector<int>& padding, realc a = 1);
 DLL_EXPORT void conv(const Matrix& A, const Matrix& W, Matrix& R, const std::vector<int>& stride, const std::vector<int>& padding, realc a = 1);
+DLL_EXPORT void reshape(const Matrix& A, Matrix& R, std::vector<int>& dim);
 //基础运算结束
 
 //带返回的运算
@@ -137,6 +144,7 @@ DLL_EXPORT Matrix relu(const Matrix& A);
 DLL_EXPORT Matrix sigmoid(const Matrix& A);
 DLL_EXPORT Matrix softmax(const Matrix& A);
 DLL_EXPORT Matrix softmax_ce(const Matrix& A);
+DLL_EXPORT Matrix reshape(const Matrix& A, std::vector<int>& dim);
 
 //运算符重载：+-*数乘
 DLL_EXPORT Matrix operator+(const Matrix& A, const Matrix& B);

@@ -7,10 +7,13 @@ namespace woco
 
 void NetOnnx::structure()
 {
+    NetCifa::structure();
+    return;
+
     onnx::ModelProto model;
-    std::ifstream file("mnist-8.onnx", std::ios_base::binary);
-    model.ParseFromIstream(&file);
-    file.close();
+    //std::ifstream file("mnist-8.onnx", std::ios_base::binary);
+    model.ParseFromString(convert::readStringFromFile("mnist-8.onnx"));
+    //file.close();
 
     auto batch = 100;
 
@@ -162,7 +165,203 @@ void NetOnnx::structure()
 void NetOnnx::save(const std::string& filename)
 {
     onnx::ModelProto model;
-    onnx::GraphProto graph;
+    auto graph = new onnx::GraphProto();
+
+    auto matrix_string = [](const Matrix& m)
+    {
+        std::string s;
+        for (auto i : m.getDim())
+        {
+            s += "_" + std::to_string(i);
+        }
+        return "Matrix_" + std::to_string(int64_t(m.getDataPointer())) + s;
+    };
+
+    auto register_matrix = [&matrix_string](const Matrix& m, onnx::ValueInfoProto* vip, int data_type = 1)
+    {
+        vip->set_name(matrix_string(m));
+        auto type = new onnx::TypeProto();
+        auto tensor_type = new onnx::TypeProto_Tensor();
+        auto shape = new onnx::TensorShapeProto();
+        auto dim = m.getDim();
+        std::reverse(dim.begin(), dim.end());
+        for (auto i : dim)
+        {
+            auto a = shape->add_dim();
+            a->set_dim_value(i);
+        }
+        tensor_type->set_elem_type(data_type);
+        tensor_type->set_allocated_shape(shape);
+        type->set_allocated_tensor_type(tensor_type);
+        vip->set_allocated_type(type);
+    };
+    auto init_matrix = [&matrix_string](const Matrix& m, onnx::TensorProto* tp, int data_type = 1)
+    {
+        tp->set_name(matrix_string(m));
+        tp->set_data_type(data_type);
+
+        auto dim = m.getDim();
+        std::reverse(dim.begin(), dim.end());
+        for (auto i : dim)
+        {
+            tp->add_dims(i);
+        }
+        auto m1 = m.clone(DeviceType::CPU);
+        if (data_type == 1 || data_type == 6)
+        {
+            for (int i = 0; i < m1.getDataSize(); i++)
+            {
+                tp->add_float_data(m1.getData(i));
+            }
+        }
+        else if (data_type == 2 || data_type == 7)
+        {
+            for (int i = 0; i < m1.getDataSize(); i++)
+            {
+                tp->add_int64_data(m1.getData(i));
+            }
+        }
+    };
+
+    register_matrix(X_, graph->add_input());
+    register_matrix(A_, graph->add_output());
+
+    for (auto& m : weights_)
+    {
+        init_matrix(m, graph->add_initializer());
+    }
+    int index = 0;
+    for (auto& op : op_queue_)
+    {
+        auto node = graph->add_node();
+        node->set_name("Op_" + std::to_string(index++));
+
+        if (op.getType() == MatrixOpType::MUL)
+        {
+            *node->add_input() = matrix_string(op.getMatrixIn()[1]);
+            *node->add_input() = matrix_string(op.getMatrixIn()[0]);
+        }
+        else
+        {
+            for (const auto& m : op.getMatrixIn())
+            {
+                *node->add_input() = matrix_string(m);
+            }
+        }
+        for (const auto& m : op.getMatrixOut())
+        {
+            *node->add_output() = matrix_string(m);
+            register_matrix(m, graph->add_value_info());
+        }
+
+        switch (op.getType())
+        {
+        case MatrixOpType::ADD:
+            node->set_op_type("Add");
+            break;
+        case MatrixOpType::MUL:
+            node->set_op_type("MatMul");
+            break;
+        case MatrixOpType::ADD_BIAS:
+            node->set_op_type("Add");
+            break;
+        case MatrixOpType::ACTIVE:
+            switch (ActiveFunctionType(op.getPataInt().back()))
+            {
+            case ACTIVE_FUNCTION_SIGMOID:
+            case ACTIVE_FUNCTION_SIGMOID_CE:
+                node->set_op_type("Sigmoid");
+                break;
+            case ACTIVE_FUNCTION_RELU:
+                node->set_op_type("Relu");
+                break;
+            case ACTIVE_FUNCTION_TANH:
+                node->set_op_type("Tanh");
+                break;
+            case ACTIVE_FUNCTION_SOFTMAX:
+            case ACTIVE_FUNCTION_SOFTMAX_CE:
+                node->set_op_type("Softmax");
+                break;
+            }
+            break;
+        case MatrixOpType::POOL:
+            node->set_op_type("MaxPool");
+            {
+                auto a = node->add_attribute();
+                a->set_name("auto_pad");
+                a->set_s("NOTSET");
+                auto a0 = node->add_attribute();
+                a0->set_name("kernel_shape");
+                for (auto i : op.getPataInt2()[0])
+                {
+                    a0->add_ints(i);
+                }
+                auto a1 = node->add_attribute();
+                a1->set_name("strides");
+                for (auto i : op.getPataInt2()[1])
+                {
+                    a1->add_ints(i);
+                }
+            }
+            break;
+        case MatrixOpType::CONV:
+            node->set_op_type("Conv");
+            {
+                auto a = node->add_attribute();
+                a->set_name("auto_pad");
+                a->set_s("NOTSET");
+                auto a0 = node->add_attribute();
+                a0->set_name("kernel_shape");
+                auto dim = op.getMatrixIn()[1].getDim();
+                dim.pop_back();
+                dim.pop_back();
+                for (auto i : dim)
+                {
+                    a0->add_ints(i);
+                }
+                auto a1 = node->add_attribute();
+                a1->set_name("strides");
+                for (auto i : op.getPataInt2()[0])
+                {
+                    a1->add_ints(i);
+                }
+                auto a2 = node->add_attribute();
+                a2->set_name("pads");
+                for (auto i : op.getPataInt2()[1])
+                {
+                    a2->add_ints(i);
+                    a2->add_ints(i);
+                }
+            }
+            break;
+        case MatrixOpType::RESHAPE:
+            node->set_op_type("Reshape");
+            {
+                auto dim = op.getPataInt();
+                std::reverse(dim.begin(), dim.end());
+                Matrix m({ int(dim.size()) }, DeviceType::CPU);
+                for (int i = 0; i < dim.size(); i++)
+                {
+                    m.getData(i) = dim[i];
+                }
+                init_matrix(m, graph->add_initializer(), 7);
+                *node->add_input() = matrix_string(m);
+                register_matrix(m, graph->add_input(), 7);
+            }
+        }
+    }
+
+    model.set_allocated_graph(graph);
+
+   auto aa= model.add_attribute();
+    aa->set_name("");
+    model.
+    std::string str;
+
+    //graph.
+    model.SerializePartialToString(&str);
+    convert::writeStringToFile(str, "test.onnx");
+    std::cout << str << std::endl;
 }
 
 }    // namespace woco
