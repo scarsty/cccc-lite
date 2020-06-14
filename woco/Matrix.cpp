@@ -136,7 +136,10 @@ Matrix& Matrix::DMatrix() const
     {
         mallocDData();
     }
-    (*d_this_)->setDim(dim_);
+    else
+    {
+        (*d_this_)->setDim(dim_);
+    }
     return **d_this_;
 }
 
