@@ -25,7 +25,6 @@ EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "woco-windows", "woco-windows\woco-windows.vcxproj", "{4D42F1DC-AFF8-4F03-AF3A-8B2528D38D0F}"
 	ProjectSection(ProjectDependencies) = postProject
 		{271C3640-1916-4736-B07F-DABF0F3914DF} = {271C3640-1916-4736-B07F-DABF0F3914DF}
-		{ACA57EB1-1544-48A2-B8A6-0AA42D395383} = {ACA57EB1-1544-48A2-B8A6-0AA42D395383}
 	EndProjectSection
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "woco-test", "woco-test\woco-test.vcxproj", "{4D238B6C-5E31-478F-A698-EEAE3ABD4DEB}"
