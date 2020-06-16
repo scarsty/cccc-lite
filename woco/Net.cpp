@@ -95,7 +95,7 @@ int Net::saveWeight(const std::string& filename)
     {
         sum += m.getDataSize();
     }
-    std::string buffer(sum, '\0');
+    std::string buffer(sum * sizeof(real), '\0');
     auto p = (real*)buffer.data();
     for (auto& m : weights_)
     {

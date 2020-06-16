@@ -224,3 +224,18 @@ int cuda_half2float(half* p1, float* p2, unsigned int size)
     return getError("cuda_half2float");
 }
 #endif
+
+CUDA_FUNCTION22(cuda_sin,
+    {
+        p2[i] = sin(a1 * p1[i] + a2);
+    });
+
+CUDA_FUNCTION22(cuda_cos,
+    {
+        p2[i] = cos(a1 * p1[i] + a2);
+    });
+
+CUDA_FUNCTION22(cuda_zigzag,
+    {
+        p2[i] = a2 * abs(p1[i] - a1 * 2 * floor(p1[i] / (a1 * 2)) - a1);
+    });

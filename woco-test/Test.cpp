@@ -40,8 +40,9 @@ double Test::testAll()
 {
     std::vector<double> total =
     {
-        testMatrix(),
+        //testMatrix(),
         //testNet(),
+        testActive(),
     };
     double t = std::accumulate(total.begin(), total.end(), 0);
     return t;
@@ -54,12 +55,14 @@ double Test::testMatrix()
     Matrix A(5, 3);
     Matrix B(3, 4);
     A.initRandom();
+    A.addNumber(-0.5);
     B.initRandom();
+    B.addNumber(-0.5);
     A.printAsMatrix();
     B.printAsMatrix();
-    Matrix f;
     auto C = A * B;
-    C.message("Matrix C:");
+    //C.message("Matrix C:");
+    C = C * 15;
     C.printAsMatrix();
     //C.toCPU();
     //C.message("Matrix C:");
@@ -67,9 +70,11 @@ double Test::testMatrix()
     //C.toGPU();
     //C.message("Matrix C:");
     //C.printAsMatrix();
-    C.resize(9, 9, 1, 1);
-    C.message("Matrix C:");
-    C.printAsMatrix();
+    //C.resize(9, 9, 1, 1);
+    //C.message("Matrix C:");
+    //C.printAsMatrix();
+    auto R = active(C, ACTIVE_FUNCTION_ZIGZAG);
+    R.printAsMatrix();
     return t.getElapsedTime();
 }
 
@@ -82,8 +87,35 @@ double Test::testNet()
     ini.loadFile("mnist.ini");
     std::string script = ini.getString("net", "structure");
     printf("%s\n", script.c_str());
-    net.setScript(script);
+    net.setMessage(script);
     net.makeStructure();
+    return t.getElapsedTime();
+}
+
+double Test::testActive()
+{
+    Timer t;
+    const int w = 1;
+    int c = 5;
+    int n = 5;
+    Matrix X(w, w, c, n), A(w, w, c, n);
+    //Matrix dX(w, w, c, n), dA(w, w, c, n);
+    //Matrix as1(w, w, c, n), as2(w, w, c, n), as3(w, w, c, n), as4(w, w, c, n);
+
+    X.initRandom();
+    X.addNumber(-0.5);
+    X.scale(4);
+    //X.initData(1);
+    real v = 0.5;
+    //as1.initData(0);
+    MatrixExtend::activeForward(X, A, ACTIVE_FUNCTION_ZIGZAG);
+    X.printAsMatrix();
+    A.printAsMatrix();
+    Matrix::copyData(A, A.DMatrix());
+    A.DMatrix().addNumber(1, -1);
+    MatrixExtend::activeBackward(X, A, ACTIVE_FUNCTION_ZIGZAG);
+    A.DMatrix().printAsMatrix();
+    X.DMatrix().printAsMatrix();
     return t.getElapsedTime();
 }
 
