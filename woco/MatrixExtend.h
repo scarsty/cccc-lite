@@ -71,6 +71,10 @@ public:
     static void sparse(Matrix& rou_hat, Matrix& R, real rou, real beta);
 
     static void fill(Matrix& m, RandomFillType random_type, int in, int out);
+
+    static void sin(const Matrix& A, Matrix& R, real a = 1);
+    static void cos(const Matrix& A, Matrix& R, real a = 1);
+    static void zigzag(const Matrix& A, Matrix& R);
 };
 
 }    // namespace woco

@@ -348,6 +348,12 @@ void MatrixExtend::activeForward(const Matrix& A, Matrix& R, ActiveFunctionType 
     //        A.scaleCol(1.0 / X.sumAbsCol(i), i);
     //    }
     //    break;
+    case ACTIVE_FUNCTION_SIN:
+        MatrixExtend::sin(A, R, M_PI / 2);
+        break;
+    case ACTIVE_FUNCTION_ZIGZAG:
+        MatrixExtend::cos(A, R, M_PI/2);
+        break;
     default:
         fprintf(stderr, "Parameters not enough!\n");
         break;
@@ -462,6 +468,15 @@ void MatrixExtend::activeBackward(Matrix& A, const Matrix& R, ActiveFunctionType
     //        dX.scaleCol(1.0 / X.sumAbsCol(i), i);
     //    }
     //    break;
+    case ACTIVE_FUNCTION_SIN:
+        MatrixExtend::cos(A, A.DMatrix(), M_PI / 2);
+        MatrixExtend::elementMul(A.DMatrix(), R.DMatrix(), A.DMatrix());
+        break;
+    case ACTIVE_FUNCTION_ZIGZAG:
+        MatrixExtend::sin(A, A.DMatrix(), -M_PI / 2);
+        //MatrixExtend::sign(A.DMatrix(), A.DMatrix());
+        MatrixExtend::elementMul(A.DMatrix(), R.DMatrix(), A.DMatrix());
+        break;
     default:
         fprintf(stderr, "Parameters not enough!\n");
         break;
@@ -1398,6 +1413,54 @@ void MatrixExtend::fill(Matrix& m, RandomFillType random_type, int in, int out)
     std::vector<real> temp(m.getDataSize());
     random_generator.rand_data(temp.data(), temp.size());
     m.initData(temp.data(), temp.size());
+}
+
+void MatrixExtend::sin(const Matrix& A, Matrix& R, real a)
+{
+    assert(checkMatrixDevice({ &A, &R }));
+    if (A.inGPU())
+    {
+        cuda_sin(A.data(), R.data(), A.getDataSize(), a, 0);
+    }
+    else
+    {
+        for (int i = 0; i < R.data_size_; i++)
+        {
+            R.getData(i) = ::sin(a * A.getData(i));
+        }
+    }
+}
+
+void MatrixExtend::cos(const Matrix& A, Matrix& R, real a)
+{
+    assert(checkMatrixDevice({ &A, &R }));
+    if (A.inGPU())
+    {
+        cuda_cos(A.data(), R.data(), A.getDataSize(), a, 0);
+    }
+    else
+    {
+        for (int i = 0; i < R.data_size_; i++)
+        {
+            R.getData(i) = ::cos(a * A.getData(i));
+        }
+    }
+}
+
+void MatrixExtend::zigzag(const Matrix& A, Matrix& R)
+{
+    assert(checkMatrixDevice({ &A, &R }));
+    if (A.inGPU())
+    {
+        cuda_zigzag(A.data(), R.data(), A.getDataSize(), 1, 1);
+    }
+    else
+    {
+        for (int i = 0; i < R.data_size_; i++)
+        {
+            R.getData(i) = abs(A.getData(i) - 2 * floor(A.getData(i) / 2) - 1);
+        }
+    }
 }
 
 }    // namespace woco

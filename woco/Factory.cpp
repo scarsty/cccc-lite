@@ -18,7 +18,6 @@ Net* Factory::createNet(Option& op)
     if (!op.getString("Net", lib_key).empty())
     {
         net = (Net*)getCreator(op.getString("Net", lib_key), op.getString("Net", "function", "net_ext"));
-        net->setMessage(script);
     }
     if (net == nullptr)
     {
@@ -26,9 +25,12 @@ Net* Factory::createNet(Option& op)
         static int total = 0;
         static std::map<int, NetCifa> nets;
         //Log::LOG("Net script is:\n%s\n\n", script.c_str());
-        nets[total].setMessage(script);
         net = &nets[total];
         total++;
+    }
+    if (net)
+    {
+        net->setMessage(script);
     }
     return net;
 }

@@ -37,6 +37,8 @@
 #include "cuda_half_hack.h"
 #endif
 
+#define M_PI 3.14159265358979323846
+
 namespace woco
 {
 
@@ -90,6 +92,8 @@ enum ActiveFunctionType
     ACTIVE_FUNCTION_SIGMOID_CE,    //CE为交叉熵，表示反向时误差原样回传，用于多出口网络，下同
     ACTIVE_FUNCTION_SOFTMAX_CE,
     ACTIVE_FUNCTION_SOFTMAX_FAST_CE,
+    ACTIVE_FUNCTION_SIN,
+    ACTIVE_FUNCTION_ZIGZAG,
 };
 
 enum ActivePhaseType

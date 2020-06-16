@@ -231,7 +231,7 @@ public:
     static realc dotCol(const Matrix& A, int cA, const Matrix& B, int cB);
     static realc dotPart(int size, const Matrix& A, real* a, int cA, real* b, int cB);
     realc dotSelf() const;
-    static void sign(Matrix& A, Matrix& R, real v = 1, real section = 1e-4);
+    static void sign(Matrix& A, Matrix& R, real v = 1, real section = 0);
 
 public:
     //PYTHON only ----------------------------------------------------------------------------------------------------

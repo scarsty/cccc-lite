@@ -49,6 +49,11 @@ CUDA_FUNCTION42H(cuda_ada_delta_update);
 CUDA_FUNCTION44H(cuda_adam_update);
 CUDA_FUNCTION32H(cuda_rms_prop_update);
 
+CUDA_FUNCTION22H(cuda_sin);
+CUDA_FUNCTION22H(cuda_cos);
+
+CUDA_FUNCTION22H(cuda_zigzag);
+
 #undef CUDA_FUNCTION22H
 #undef CUDA_FUNCTION32H
 #undef CUDA_FUNCTION33H

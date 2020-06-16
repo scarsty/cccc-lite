@@ -159,6 +159,10 @@ int NetCifa::registerFunctions()
             auto dim = getVector(v, 1);
             return registerMatrix(reshape(map_matrix_[v[0]], dim));
         });
+    cifa_.register_function("active", [&](cifa::ObjectVector& v)
+        {            
+            return registerMatrix(active(map_matrix_[v[0]], ActiveFunctionType(int(v[1]))));
+        });
 
 #define REGISTER(func) \
     cifa_.register_function(#func, [&](cifa::ObjectVector& v) { return registerMatrix(func(map_matrix_[v[0]])); })
