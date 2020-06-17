@@ -403,7 +403,7 @@ int64_t Matrix::copyDataPointer(DeviceType dt_src, const real* src, DeviceType d
     {
         fprintf(stderr, "Error: cudaMemcpy failed with error code is %d, size in byte is %ld (%g)!\n", state, size_in_byte, 1.0 * size_in_byte);
     }
-    return size_in_byte;
+    return size;
 }
 
 //复制数据，只处理较少的

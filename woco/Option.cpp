@@ -14,6 +14,12 @@ Option::Option(const std::string& filename) : Option()
     loadIniFile(filename);
 }
 
+woco::Option& Option::getInstance()
+{
+    static Option option;
+    return option;
+}
+
 void Option::loadIniFile(const std::string& filename)
 {
     std::string content = convert::readStringFromFile(filename);

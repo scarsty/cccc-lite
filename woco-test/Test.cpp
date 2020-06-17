@@ -6,6 +6,7 @@
 #include "MatrixOperator.h"
 #include "Net.h"
 #include "NetCifa.h"
+#include "Option.h"
 #include "Timer.h"
 #include <iostream>
 #include <numeric>
@@ -104,7 +105,7 @@ double Test::testActive()
 
     X.initRandom();
     X.addNumber(-0.5);
-    X.scale(4);
+    X.scale(10);
     //X.initData(1);
     real v = 0.5;
     //as1.initData(0);

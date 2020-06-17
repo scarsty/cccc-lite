@@ -1,6 +1,7 @@
 #include "Application.h"
 #include "File.h"
 #include "Neural.h"
+#include "Option.h"
 #include "convert.h"
 
 namespace woco
@@ -23,6 +24,7 @@ void Application::run()
     start();
     Neural neural;
     auto filenames = convert::splitString(ini_file_);
+    auto& option = Option::getInstance();
     for (auto filename : filenames)
     {
         if (!File::fileExist(filename))
@@ -30,14 +32,14 @@ void Application::run()
             fprintf(stderr, "%s doesn't exist!\n", filename.c_str());
             return;
         }
-        neural.getOption().loadIniFile(filename);
+        option.loadIniFile(filename);
     }
-    auto load_filenames = convert::splitString(neural.getOption().getString("", "load_ini"), ",");
+    auto load_filenames = convert::splitString(option.getString("", "load_ini"), ",");
     for (auto filename : load_filenames)
     {
         if (filename != "")
         {
-            neural.getOption().loadIniFile(filename);
+            option.loadIniFile(filename);
         }
     }
 
@@ -45,7 +47,7 @@ void Application::run()
     convert::replaceAllSubStringRef(ini_string_, "[", "\n[");
     convert::replaceAllSubStringRef(ini_string_, "]", "]\n");
     convert::replaceAllSubStringRef(ini_string_, ";", "\n");
-    neural.getOption().loadIniString(ini_string_);
+    option.loadIniString(ini_string_);
 
     if (neural.init() != 0)
     {

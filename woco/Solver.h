@@ -1,6 +1,5 @@
 #pragma once
 #include "Matrix.h"
-#include "Option.h"
 
 namespace woco
 {
@@ -14,7 +13,7 @@ public:
 protected:
     //求解器相关
     SolverType solver_type_ = SOLVER_SGD;
-    Matrix W_, DW_;
+    Matrix W_, DW_, W0_;
     int time_step_ = 0;
     real momentum_ = 0.9;    //上次的dWeight保留，即动量
     //int batch_ = 50;
@@ -34,6 +33,8 @@ protected:
     std::vector<int> int_vector_;
     std::vector<Matrix> W_vector_;
 
+    ActiveFunctionType active_ = ACTIVE_FUNCTION_NONE;
+
 public:
     SolverType getSolverType() { return solver_type_; }
     real getMomentum() { return momentum_; }
@@ -45,7 +46,7 @@ public:
     void resetTimeStep() { time_step_ = 0; }
 
 public:
-    void init(Option* op, std::string section, int row, int batch, Matrix& W);
+    //void init(Option* op, std::string section, int row, int batch, Matrix& W);
     void setWeight(const Matrix& W);
     real adjustLearnRate(int epoch);
     void updateWeightPre();

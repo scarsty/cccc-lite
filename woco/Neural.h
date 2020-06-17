@@ -21,16 +21,10 @@ public:
     Neural();
 
 protected:
-    Option option_;
     Timer timer_total_;
     int MP_count_ = 1;
 
 public:
-    Option& getOption() { return option_; }
-    void setOption(Option& op)
-    {
-        option_ = op;
-    }
 
 protected:
     //epoch和iter的统计

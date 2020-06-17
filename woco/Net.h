@@ -1,6 +1,6 @@
 #pragma once
 #include "MatrixOperator.h"
-#include "Option.h"
+//#include "Option.h"
 #include "Solver.h"
 
 namespace woco

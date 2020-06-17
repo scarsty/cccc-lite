@@ -2,22 +2,23 @@
 #include "DataPreparerImage.h"
 #include "DynamicLibrary.h"
 #include "NetCifa.h"
+#include "Option.h"
 
 namespace woco
 {
 
-Net* Factory::createNet(Option& op)
+Net* Factory::createNet()
 {
     std::string lib_key = "library";
 #ifdef _DEBUG
     lib_key = "libraryd";
 #endif
 
-    std::string script = op.getString("Net", "structure");
+    std::string script = Option::getInstance().getString("Net", "structure");
     Net* net = nullptr;
-    if (!op.getString("Net", lib_key).empty())
+    if (!Option::getInstance().getString("Net", lib_key).empty())
     {
-        net = (Net*)getCreator(op.getString("Net", lib_key), op.getString("Net", "function", "net_ext"));
+        net = (Net*)getCreator(Option::getInstance().getString("Net", lib_key), Option::getInstance().getString("Net", "function", "net_ext"));
     }
     if (net == nullptr)
     {
@@ -35,21 +36,21 @@ Net* Factory::createNet(Option& op)
     return net;
 }
 
-DataPreparer* Factory::createDP(Option& op, const std::string& section, const std::vector<int>& dimx, const std::vector<int>& dimy)
+DataPreparer* Factory::createDP(const std::string& section, const std::vector<int>& dimx, const std::vector<int>& dimy)
 {
     std::string lib_key = "library";
 #ifdef _DEBUG
     lib_key = "libraryd";
 #endif
-    auto dp = (DataPreparer*)getCreator(op.getString(section, lib_key), op.getString(section, "function", "dp_ext"));
+    auto dp = (DataPreparer*)getCreator(Option::getInstance().getString(section, lib_key), Option::getInstance().getString(section, "function", "dp_ext"));
     if (dp)
     {
-        dp->create_by_dll_ = op.getString(section, lib_key);
+        dp->create_by_dll_ = Option::getInstance().getString(section, lib_key);
     }
     else
     {
-        auto mode = op.getString(section, "mode", "image");
-        if (op.hasSection(section))
+        auto mode = Option::getInstance().getString(section, "mode", "image");
+        if (Option::getInstance().hasSection(section))
         {
             mode = "";
         }
@@ -68,7 +69,6 @@ DataPreparer* Factory::createDP(Option& op, const std::string& section, const st
             Log::LOG("Create default data preparer\n");
         }
     }
-    dp->option_ = op;
     dp->section_ = section;
     dp->dimx_ = dimx;
     dp->dimy_ = dimy;
