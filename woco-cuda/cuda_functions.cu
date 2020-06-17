@@ -237,5 +237,5 @@ CUDA_FUNCTION22(cuda_cos,
 
 CUDA_FUNCTION22(cuda_zigzag,
     {
-        p2[i] = a2 * abs(p1[i] - a1 * 2 * floor(p1[i] / (a1 * 2)) - a1);
+        p2[i] = a1 * (p1[i] + a2 - 2 * floor((p1[i] + a2 - 1) / 2) - 2);
     });

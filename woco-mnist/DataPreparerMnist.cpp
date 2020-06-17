@@ -1,6 +1,7 @@
 #include "DataPreparerMnist.h"
 #include "ConsoleControl.h"
 #include "MnistReader.h"
+#include "Option.h"
 
 #define _USE_MATH_DEFINES
 #include <cmath>
@@ -27,7 +28,7 @@ void DataPreparerMnist::fillData(Matrix& X, Matrix& Y)
     {
         //使用MNIST库，通常用来测试网络
         MnistReader mnist;
-        std::string path = option_.getString(section_, "path", "mnist");
+        std::string path = Option::getInstance().getString(section_, "path", "mnist");
         mnist.load(X, Y, path, type_);
         //data.save(mnist_path+"/train.bin");
         if (remove59_)

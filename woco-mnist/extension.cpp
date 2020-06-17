@@ -1,6 +1,7 @@
 #include "DataPreparerMnist.h"
 #include "NetMnist.h"
 #include "dll_export.h"
+#include <map>
 
 extern "C" DLL_EXPORT void* dp_ext()
 {

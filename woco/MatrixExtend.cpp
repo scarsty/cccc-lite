@@ -352,7 +352,7 @@ void MatrixExtend::activeForward(const Matrix& A, Matrix& R, ActiveFunctionType 
         MatrixExtend::sin(A, R, M_PI / 2);
         break;
     case ACTIVE_FUNCTION_ZIGZAG:
-        MatrixExtend::cos(A, R, M_PI/2);
+        MatrixExtend::zigzag(A, R);
         break;
     default:
         fprintf(stderr, "Parameters not enough!\n");
@@ -1452,13 +1452,14 @@ void MatrixExtend::zigzag(const Matrix& A, Matrix& R)
     assert(checkMatrixDevice({ &A, &R }));
     if (A.inGPU())
     {
-        cuda_zigzag(A.data(), R.data(), A.getDataSize(), 1, 1);
+        cuda_zigzag(A.data(), R.data(), A.getDataSize(), 1, 0);
     }
     else
     {
         for (int i = 0; i < R.data_size_; i++)
         {
-            R.getData(i) = abs(A.getData(i) - 2 * floor(A.getData(i) / 2) - 1);
+            auto& x = A.getData(i);
+            R.getData(i) = x - 2 * floor((x - 1) / 2) - 2;
         }
     }
 }

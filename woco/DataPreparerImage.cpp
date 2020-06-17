@@ -1,5 +1,6 @@
 #include "DataPreparerImage.h"
 #include "File.h"
+#include "Option.h"
 #include "Timer.h"
 #include "convert.h"
 #include <atomic>

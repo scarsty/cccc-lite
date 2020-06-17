@@ -1,4 +1,5 @@
 #include "NetOnnx.h"
+#include "convert.h"
 #include "onnx.proto3.pb.h"
 
 namespace woco

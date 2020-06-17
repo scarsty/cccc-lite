@@ -3,6 +3,7 @@
 #include "Factory.h"
 #include "File.h"
 #include "Log.h"
+#include "Option.h"
 #include "Random.h"
 #include "convert.h"
 #include <algorithm>
@@ -53,16 +54,16 @@ int Neural::loadIni(const std::string& ini)
     {
         if (File::fileExist(ini))
         {
-            option_.loadIniFile(ini);
+            Option::getInstance().loadIniFile(ini);
         }
         else
         {
-            option_.loadIniString(ini);
+            Option::getInstance().loadIniString(ini);
         }
     }
-    //option_.print();
-    //batch_ = (std::max)(1, option_.getInt("", "batch", 100));
-    //work_mode_ = option_.getEnum("", "work_mode", WORK_MODE_NORMAL);
+    //Option::getInstance().print();
+    //batch_ = (std::max)(1, Option::getInstance().getInt("", "batch", 100));
+    //work_mode_ = Option::getInstance().getEnum("", "work_mode", WORK_MODE_NORMAL);
 
     return 0;
 }
@@ -71,7 +72,7 @@ int Neural::testGPUDevice()
 {
     //gpu测试
     int device_count = 0;
-    if (option_.getInt("", "use_cuda", 1))
+    if (Option::getInstance().getInt("", "use_cuda", 1))
     {
         device_count = CudaControl::checkDevices();
         if (device_count > 0)
@@ -87,14 +88,14 @@ int Neural::testGPUDevice()
         }
     }
 
-    if (option_.getInt("", "use_cuda") != 0 && CudaControl::getGlobalCudaType() != DeviceType::GPU)
+    if (Option::getInstance().getInt("", "use_cuda") != 0 && CudaControl::getGlobalCudaType() != DeviceType::GPU)
     {
         Log::LOG("CUDA state is not right, refuse to run!\n");
         Log::LOG("Re-init the net again, or consider CPU mode (slow).\n");
         return 1;
     }
 
-    MP_count_ = (std::min)(device_count, option_.getInt("", "mp", 1));
+    MP_count_ = (std::min)(device_count, Option::getInstance().getInt("", "mp", 1));
     if (MP_count_ <= 0)
     {
         MP_count_ = 1;
@@ -106,7 +107,7 @@ int Neural::initNets()
 {
     nets_.resize(MP_count_);
     //这里读取ini中指定的device顺序，其中第一个设备为主网络，该值一般来说应由用户指定
-    auto mp_device = option_.getVector<int>("", "mp_device");
+    auto mp_device = Option::getInstance().getVector<int>("", "mp_device");
     //如果用户指定的不正确，则以best_device的顺序决定
     auto check_repeat = [](std::vector<int> v)
     {
@@ -133,7 +134,7 @@ int Neural::initNets()
     for (int i = 0; i < MP_count_; i++)
     {
         CudaControl::select(mp_device[i]);    //需在创建网络之前
-        auto& net = nets_[i] = Factory::createNet(option_);
+        auto& net = nets_[i] = Factory::createNet();
         //net->setDevice(mp_device[i]);
         int dev_id = net->getDevice();
         if (dev_id >= 0)
@@ -190,16 +191,16 @@ void Neural::initDataPreparer()
     auto dim0 = nets_[0]->X().getDim();
     auto dim1 = nets_[0]->Y().getDim();
     //DataPreparerFactory::destroy(data_preparer_);
-    dp_train_ = Factory::createDP(option_, "data_train", dim0, dim1);
+    dp_train_ = Factory::createDP("data_train", dim0, dim1);
     std::string test_section = "data_test";
-    if (!option_.hasSection(test_section))
+    if (!Option::getInstance().hasSection(test_section))
     {
-        option_.setOption("", "test_test", "0");
-        option_.setOption("", "test_test_origin", "0");
+        Option::getInstance().setOption("", "test_test", "0");
+        Option::getInstance().setOption("", "test_test_origin", "0");
         return;
-        //option_.setOption(test_section, "test", "1");
+        //Option::getInstance().setOption(test_section, "test", "1");
     }
-    dp_test_ = Factory::createDP(option_, test_section, dim0, dim1);
+    dp_test_ = Factory::createDP(test_section, dim0, dim1);
 }
 
 //初始化训练集，必须在DataPreparer之后
@@ -224,26 +225,26 @@ void Neural::run(int train_epochs /*= -1*/)
 {
     auto net = nets_[0];
     //初测
-    testData(net, option_.getInt("", "force_output"), option_.getInt("", "test_max"));
+    testData(net, Option::getInstance().getInt("", "force_output"), Option::getInstance().getInt("", "test_max"));
 
     if (train_epochs < 0)
     {
-        train_epochs = option_.getInt("", "train_epochs", 20);
+        train_epochs = Option::getInstance().getInt("", "train_epochs", 20);
     }
     Log::LOG("Running for %d epochs...\n", train_epochs);
 
     train(nets_, dp_train_, train_epochs);
 
-    std::string save_filename = option_.getString("", "SaveFile");
+    std::string save_filename = Option::getInstance().getString("", "SaveFile");
     if (save_filename != "")
     {
         net->saveWeight(save_filename);
     }
 
     //终测
-    testData(net, option_.getInt("", "force_output"), option_.getInt("", "test_max"));
+    testData(net, Option::getInstance().getInt("", "force_output"), Option::getInstance().getInt("", "test_max"));
     //附加测试，有多少个都能用
-    extraTest(net, "extra_test", option_.getInt("", "force_output"), option_.getInt("", "test_max"));
+    extraTest(net, "extra_test", Option::getInstance().getInt("", "force_output"), Option::getInstance().getInt("", "test_max"));
 
 #ifdef LAYER_TIME
     for (auto& l : nets_[0]->getLayerVector())
@@ -283,9 +284,9 @@ void Neural::train(std::vector<Net*>& nets, DataPreparer* data_preparer, int epo
     TrainInfo train_info;
     train_info.data_prepared = 0;
 
-    int test_test = option_.getInt("", "test_test", 0);
-    int test_test_origin = option_.getInt("", "test_test_origin", 0);
-    int test_epoch = option_.getInt("", "test_epoch", 1);
+    int test_test = Option::getInstance().getInt("", "test_test", 0);
+    int test_test_origin = Option::getInstance().getInt("", "test_test_origin", 0);
+    int test_epoch = Option::getInstance().getInt("", "test_epoch", 1);
 
     //创建训练进程
     std::vector<std::thread> net_threads;
@@ -357,16 +358,16 @@ void Neural::trainOneNet(std::vector<Net*>& nets, int net_id, TrainInfo& train_i
         Matrix::copyData(Y_test_cpu_, Y_test_gpu);
     }
 
-    int test_train = option_.getInt("", "test_train", 0);
-    int test_train_origin = option_.getInt("", "test_train_origin", 0);
-    int pre_test_train = option_.getInt("", "pre_test_train", 0);
-    int test_test = option_.getInt("", "test_test", 0);
-    int test_test_origin = option_.getInt("", "test_test_origin", 0);
-    int test_epoch = option_.getInt("", "test_epoch", 1);
-    int save_epoch = option_.getInt("", "save_epoch", 10);
-    int out_iter = option_.getInt("", "out_iter", 100);
-    int test_max = option_.getInt("", "test_max", 0);
-    std::string save_format = option_.getString("", "save_format", "save/save-{epoch}.txt");
+    int test_train = Option::getInstance().getInt("", "test_train", 0);
+    int test_train_origin = Option::getInstance().getInt("", "test_train_origin", 0);
+    int pre_test_train = Option::getInstance().getInt("", "pre_test_train", 0);
+    int test_test = Option::getInstance().getInt("", "test_test", 0);
+    int test_test_origin = Option::getInstance().getInt("", "test_test_origin", 0);
+    int test_epoch = Option::getInstance().getInt("", "test_epoch", 1);
+    int save_epoch = Option::getInstance().getInt("", "save_epoch", 10);
+    int out_iter = Option::getInstance().getInt("", "out_iter", 100);
+    int test_max = Option::getInstance().getInt("", "test_max", 0);
+    std::string save_format = Option::getInstance().getString("", "save_format", "save/save-{epoch}.txt");
     int total_batch = X_train_cpu_.getNumber();
 
     realc max_test_origin_accuracy = 0;
@@ -534,19 +535,19 @@ void Neural::testData(Net* net, int force_output, int test_max)
 {
     realc result;
     Matrix A(DeviceType::CPU);
-    if (option_.getInt("", "test_train"))
+    if (Option::getInstance().getInt("", "test_train"))
     {
         net->test("Test on train set", X_train_, Y_train_, A, force_output, test_max, 0);
     }
-    if (option_.getInt("", "test_train_cpu"))
+    if (Option::getInstance().getInt("", "test_train_cpu"))
     {
         net->test("Test on transformed train set", X_train_cpu_, Y_train_cpu_, A, force_output, test_max, 0);
     }
-    if (option_.getInt("", "test_test"))
+    if (Option::getInstance().getInt("", "test_test"))
     {
         net->test("Test on test set", X_test_, Y_test_, A, force_output, test_max, 0);
     }
-    if (option_.getInt("", "test_train_cpu"))
+    if (Option::getInstance().getInt("", "test_train_cpu"))
     {
         net->test("Test on transformed test set", X_test_cpu_, Y_test_cpu_, A, force_output, test_max, 0);
     }
@@ -555,11 +556,11 @@ void Neural::testData(Net* net, int force_output, int test_max)
 //附加测试集，一般无用
 void Neural::extraTest(Net* net, const std::string& section, int force_output, int test_max)
 {
-    if (!option_.hasSection(section))
+    if (!Option::getInstance().hasSection(section))
     {
         return;
     }
-    auto dp_test = Factory::createDP(option_, section, net->X().getDim(), net->Y().getDim());
+    auto dp_test = Factory::createDP(section, net->X().getDim(), net->Y().getDim());
     Matrix X, Y, A;
     dp_test->initData(X, Y);
     net->test("Extra test", X, Y, A, force_output, test_max);

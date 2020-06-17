@@ -1,5 +1,6 @@
 #include "DataPreparer.h"
 #include "File.h"
+#include "Option.h"
 #include <ctime>
 
 namespace woco
@@ -11,9 +12,9 @@ DataPreparer::DataPreparer()
 
 void DataPreparer::init()
 {
-    if (option_.hasSection(section_))
+    if (Option::getInstance().hasSection(section_))
     {
-        Log::setLog(option_.getInt(section_, "output_log", 1));
+        Log::setLog(Option::getInstance().getInt(section_, "output_log", 1));
     }
     else
     {
@@ -145,7 +146,7 @@ void DataPreparer::prepareData(int epoch, const std::string& info, Matrix& X_ori
 
 void DataPreparer::initData(Matrix& X, Matrix& Y)
 {
-    if (!option_.hasSection(section_))
+    if (!Option::getInstance().hasSection(section_))
     {
         return;
     }
@@ -155,13 +156,13 @@ void DataPreparer::initData(Matrix& X, Matrix& Y)
     //以下需注意数据集的维度和组数有可能在读取时被改变
     if (fill_ == 0)
     {
-        if (option_.getInt(section_, "data_in_txt", 0))
+        if (Option::getInstance().getInt(section_, "data_in_txt", 0))
         {
-            readTxt(option_.getString(section_, "data_file"), X, Y);
+            readTxt(Option::getInstance().getString(section_, "data_file"), X, Y);
         }
         else
         {
-            readBin(option_.getString(section_, "x_file"), option_.getString(section_, "y_file"), X, Y);
+            readBin(Option::getInstance().getString(section_, "x_file"), Option::getInstance().getString(section_, "y_file"), X, Y);
         }
     }
     else
