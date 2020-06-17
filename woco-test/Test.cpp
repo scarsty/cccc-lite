@@ -109,7 +109,7 @@ double Test::testActive()
     //X.initData(1);
     real v = 0.5;
     //as1.initData(0);
-    MatrixExtend::activeForward(X, A, ACTIVE_FUNCTION_ZIGZAG);
+    MatrixExtend::activeForward(X, A, ACTIVE_FUNCTION_SIN_STEP);
     X.printAsMatrix();
     A.printAsMatrix();
     Matrix::copyData(A, A.DMatrix());

@@ -94,6 +94,7 @@ enum ActiveFunctionType
     ACTIVE_FUNCTION_SOFTMAX_FAST_CE,
     ACTIVE_FUNCTION_SIN,
     ACTIVE_FUNCTION_ZIGZAG,
+    ACTIVE_FUNCTION_SIN_STEP,
 };
 
 enum ActivePhaseType

@@ -53,6 +53,9 @@ CUDA_FUNCTION22H(cuda_sin);
 CUDA_FUNCTION22H(cuda_cos);
 
 CUDA_FUNCTION22H(cuda_zigzag);
+CUDA_FUNCTION32H(cuda_zigzagb);
+
+CUDA_FUNCTION22H(cuda_step);
 
 #undef CUDA_FUNCTION22H
 #undef CUDA_FUNCTION32H

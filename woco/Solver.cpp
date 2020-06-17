@@ -153,6 +153,7 @@ void Solver::updateWeight(int batch)
     if (active_ != ACTIVE_FUNCTION_NONE)
     {
         MatrixExtend::activeForward(W0_, W_, active_);
+        MatrixExtend::step(W_, W_);    //测试
     }
 }
 
