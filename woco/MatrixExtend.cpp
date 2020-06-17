@@ -353,6 +353,11 @@ void MatrixExtend::activeForward(const Matrix& A, Matrix& R, ActiveFunctionType 
         break;
     case ACTIVE_FUNCTION_ZIGZAG:
         MatrixExtend::zigzag(A, R);
+        //Matrix::copyData(A, R);
+        break;
+    case ACTIVE_FUNCTION_SIN_STEP:
+        MatrixExtend::sin(A, R, M_PI / 2);
+        MatrixExtend::step(R, R);
         break;
     default:
         fprintf(stderr, "Parameters not enough!\n");
@@ -469,13 +474,12 @@ void MatrixExtend::activeBackward(Matrix& A, const Matrix& R, ActiveFunctionType
     //    }
     //    break;
     case ACTIVE_FUNCTION_SIN:
+    case ACTIVE_FUNCTION_SIN_STEP:
         MatrixExtend::cos(A, A.DMatrix(), M_PI / 2);
-        MatrixExtend::elementMul(A.DMatrix(), R.DMatrix(), A.DMatrix());
+        MatrixExtend::elementMul(A.DMatrix(), R.DMatrix(), A.DMatrix(), 1);    //不严格，需改为加法
         break;
     case ACTIVE_FUNCTION_ZIGZAG:
-        MatrixExtend::sin(A, A.DMatrix(), -M_PI / 2);
-        //MatrixExtend::sign(A.DMatrix(), A.DMatrix());
-        MatrixExtend::elementMul(A.DMatrix(), R.DMatrix(), A.DMatrix());
+        MatrixExtend::zigzagb(A, R);
         break;
     default:
         fprintf(stderr, "Parameters not enough!\n");
@@ -1461,6 +1465,44 @@ void MatrixExtend::zigzag(const Matrix& A, Matrix& R)
             auto& x = A.getData(i);
             R.getData(i) = x - 2 * floor((x - 1) / 2) - 2;
         }
+    }
+}
+
+//实际上这个激活函数在奇异点不连续，无法训练
+void MatrixExtend::zigzagb(Matrix& A, const Matrix& R)
+{
+    assert(checkMatrixDevice({ &A, &R }));
+    if (A.inGPU())
+    {
+        cuda_zigzagb(R.data(), R.DMatrix().data(), A.DMatrix().data(), A.getDataSize(), 1, 0);
+    }
+    else
+    {
+        auto p1 = R.data();
+        auto p2 = R.DMatrix().data();
+        auto p3 = A.DMatrix().data();
+        for (int i = 0; i < R.data_size_; i++)
+        {
+            if (abs(p1[i]) > 1 - 1e-2)
+            {
+                p3[i] = -p2[i] * 100;
+                continue;
+            }
+            p3[i] = p2[i];
+        }
+    }
+}
+
+void MatrixExtend::step(const Matrix& A, Matrix& R)
+{
+    assert(checkMatrixDevice({ &A, &R }));
+    if (A.inGPU())
+    {
+        cuda_step(A.data(), R.data(), A.getDataSize(), 0, 0);
+    }
+    else
+    {
+        //未完成
     }
 }
 

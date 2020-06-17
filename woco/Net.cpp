@@ -214,7 +214,7 @@ void Net::calNorm(realc& l1, realc& l2)
         l1 += m.sumAbs();
         l2 += m.dotSelf();
     }
-    Log::LOG("L1 = %g, L2 = %g\n", l1, l2);
+    //Log::LOG("L1 = %g, L2 = %g\n", l1, l2);
 }
 
 //设置数据组数

@@ -75,6 +75,9 @@ public:
     static void sin(const Matrix& A, Matrix& R, real a = 1);
     static void cos(const Matrix& A, Matrix& R, real a = 1);
     static void zigzag(const Matrix& A, Matrix& R);
+    static void zigzagb(Matrix& A, const Matrix& R);
+
+    static void step(const Matrix& A, Matrix& R);
 };
 
 }    // namespace woco

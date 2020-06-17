@@ -491,9 +491,9 @@ void Neural::trainOneNet(std::vector<Net*>& nets, int net_id, TrainInfo& train_i
                     }
                 }
             }
-            //realc l1, l2;
-            //net->calNorm(l1, l2);
-            //Log::LOG("L1 = %g, L2 = %g\n", l1, l2);
+            realc l1, l2;
+            net->calNorm(l1, l2);
+            Log::LOG("L1 = %g, L2 = %g\n", l1, l2);
             if (epoch_count % save_epoch == 0 && !save_format.empty())
             {
                 std::string save_name = save_format;

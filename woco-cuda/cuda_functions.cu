@@ -239,3 +239,18 @@ CUDA_FUNCTION22(cuda_zigzag,
     {
         p2[i] = a1 * (p1[i] + a2 - 2 * floor((p1[i] + a2 - 1) / 2) - 2);
     });
+
+CUDA_FUNCTION32(cuda_zigzagb,
+    {
+        if (abs(p1[i]) > 1 - 1e-2)
+        {
+            p3[i] = -p2[i] * 100;
+            return;
+        }
+        p3[i] = p2[i];
+    });
+
+CUDA_FUNCTION22(cuda_step,
+    {
+        p2[i] = round(p1[i] * 256) / 256;
+    });
