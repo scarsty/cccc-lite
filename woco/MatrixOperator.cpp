@@ -185,7 +185,23 @@ void MatrixOperator::print(const MatrixOperator::Queue& op_queue)
 
 void MatrixOperator::print() const
 {
-    fprintf(stdout, "%d->", int(type_));
+    std::string str;
+    std::vector<std::string> strs = {
+        "none",
+        "add",
+        "mul",
+        "ele_mul",
+        "add_bias",
+        "concat",
+        "active",
+        "pool",
+        "conv",
+        "reshape",
+        "loss",
+        "l2",
+    };
+
+    fprintf(stdout, "%s->", strs[int(type_)].c_str());
 #ifdef _DEBUG
     fprintf(stdout, "\n");
     for (const auto& m : matrix_in_)

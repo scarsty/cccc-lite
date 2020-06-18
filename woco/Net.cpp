@@ -32,7 +32,7 @@ void Net::makeStructure()
             solvers_[i].setWeight(weights_[i]);
         }
     }
-    //MatrixOperator::simpleQueue(op_queue_, X_, A_);
+    MatrixOperator::simpleQueue(op_queue_, X_, A_);
     MatrixOperator::print(op_queue_);
     MatrixOperator::print(loss_);
     X_.setNeedReverse(false);    //训练权重时X不需反向，可能是不对待查
@@ -238,10 +238,10 @@ int Net::resetBatchSize(int n)
 realc Net::adjustLearnRate(int ec)
 {
     realc lr = 0;
-    //for (auto l : layer_vector_)
-    //{
-    //    lr = l->adjustLearnRate(ec);
-    //}
+    for (auto& s : solvers_)
+    {
+        lr = s.adjustLearnRate(ec);
+    }
     return lr;
 }
 

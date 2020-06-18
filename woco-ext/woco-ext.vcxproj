@@ -13,6 +13,7 @@
   <ItemGroup>
     <ClCompile Include="..\..\common\convert.cpp" />
     <ClCompile Include="..\..\common\File.cpp" />
+    <ClCompile Include="Cifar10Reader.cpp" />
     <ClCompile Include="DataPreparerMnist.cpp" />
     <ClCompile Include="MnistReader.cpp" />
     <ClCompile Include="NetMnist.cpp" />
@@ -21,6 +22,7 @@
   <ItemGroup>
     <ClInclude Include="..\..\common\convert.h" />
     <ClInclude Include="..\..\common\File.h" />
+    <ClInclude Include="Cifar10Reader.h" />
     <ClInclude Include="DataPreparerMnist.h" />
     <ClInclude Include="MnistReader.h" />
     <ClInclude Include="NetMnist.h" />
@@ -32,7 +34,7 @@
     <ProjectGuid>{A5C5A5AE-E816-4189-9518-23190FDAC9AE}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
     <RootNamespace>neural</RootNamespace>
-    <ProjectName>woco-mnist</ProjectName>
+    <ProjectName>woco-ext</ProjectName>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />

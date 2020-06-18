@@ -1,4 +1,5 @@
 #include "DataPreparerMnist.h"
+#include "Cifar10Reader.h"
 #include "ConsoleControl.h"
 #include "MnistReader.h"
 #include "Option.h"
@@ -27,9 +28,14 @@ void DataPreparerMnist::fillData(Matrix& X, Matrix& Y)
     if (fill_times_ == 0)
     {
         //使用MNIST库，通常用来测试网络
-        MnistReader mnist;
-        std::string path = Option::getInstance().getString(section_, "path", "mnist");
-        mnist.load(X, Y, path, type_);
+        //MnistReader mnist;
+        //std::string path = Option::getInstance().getString(section_, "path", "mnist");
+        //mnist.load(X, Y, path, type_);
+
+                Cifar10Reader loader;
+        std::string path = Option::getInstance().getString(section_, "path", "cifar10");
+        loader.load(X, Y, path, type_);
+
         //data.save(mnist_path+"/train.bin");
         if (remove59_)
         {

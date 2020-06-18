@@ -149,6 +149,18 @@ void Solver::updateWeight(int batch)
             Matrix::copyData(W_, W_vector_[0]);
         }
         break;
+    case SOLVER_ADA_DELTA:
+        //LOG("ADADELTA\n");
+        //使用第0个矩阵作为真正的更新量，下同
+        dW->scale(1.0 / batch_);
+        MatrixExtend::adaDeltaUpdate(W_vector_[1], W_vector_[2], dW, W_vector_[0], real_vector_[1], real_vector_[0]);
+        Matrix::add(W, W_vector_[0], W, 1 - weight_decay_ * learn_rate_, -1);
+        break;
+    case SOLVER_ADAM:
+        dW->scale(1.0 / batch_);
+        MatrixExtend::adamUpdate(W_vector_[1], W_vector_[2], dW, W_vector_[0], real_vector_[2], real_vector_[3], real_vector_[0], time_step_);
+        Matrix::add(W, W_vector_[0], W, 1 - weight_decay_ * learn_rate_, -learn_rate_ * lr_weight_scale_);
+        break;
     }
     if (active_ != ACTIVE_FUNCTION_NONE)
     {

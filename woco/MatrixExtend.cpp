@@ -1397,7 +1397,7 @@ void MatrixExtend::fill(Matrix& m, RandomFillType random_type, int in, int out)
         break;
     case RANDOM_FILL_XAVIER:
         random_generator.set_random_type(RANDOM_UNIFORM);
-        a = sqrt(6.0 / (in + out));
+        a = sqrt(1.0 / (in + out));
         random_generator.set_parameter(-a, a);
         //LOG("Xavier, %d, %d, %f\n", prev_layer->out_total, out_total, a);
         break;

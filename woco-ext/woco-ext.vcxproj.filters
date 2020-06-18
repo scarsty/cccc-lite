@@ -26,6 +26,9 @@
     <ClInclude Include="..\..\common\convert.h">
       <Filter>headers</Filter>
     </ClInclude>
+    <ClInclude Include="Cifar10Reader.h">
+      <Filter>headers</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="DataPreparerMnist.cpp">
@@ -44,6 +47,9 @@
       <Filter>sources</Filter>
     </ClCompile>
     <ClCompile Include="extension.cpp">
+      <Filter>sources</Filter>
+    </ClCompile>
+    <ClCompile Include="Cifar10Reader.cpp">
       <Filter>sources</Filter>
     </ClCompile>
   </ItemGroup>

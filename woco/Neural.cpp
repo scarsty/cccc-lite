@@ -227,6 +227,10 @@ void Neural::run(int train_epochs /*= -1*/)
     //初测
     testData(net, Option::getInstance().getInt("", "force_output"), Option::getInstance().getInt("", "test_max"));
 
+    realc l1, l2;
+    net->calNorm(l1, l2);
+    Log::LOG("L1 = %g, L2 = %g\n", l1, l2);
+
     if (train_epochs < 0)
     {
         train_epochs = Option::getInstance().getInt("", "train_epochs", 20);
