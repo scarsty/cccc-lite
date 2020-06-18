@@ -12,7 +12,7 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "woco", "woco\woco.vcxproj",
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "woco-cuda", "woco-cuda\woco-cuda.vcxproj", "{41A4761D-BA0D-47FF-83CA-F4445F7AEDE0}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "woco-mnist", "woco-mnist\woco-mnist.vcxproj", "{A5C5A5AE-E816-4189-9518-23190FDAC9AE}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "woco-ext", "woco-ext\woco-ext.vcxproj", "{A5C5A5AE-E816-4189-9518-23190FDAC9AE}"
 	ProjectSection(ProjectDependencies) = postProject
 		{271C3640-1916-4736-B07F-DABF0F3914DF} = {271C3640-1916-4736-B07F-DABF0F3914DF}
 	EndProjectSection

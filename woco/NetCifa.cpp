@@ -53,6 +53,7 @@ void NetCifa::structure()
     {
         MatrixExtend::fill(m, RANDOM_FILL_XAVIER, m.getChannel(), m.getNumber());
     }
+    addLoss(5e-4 * L2(weights_));
 }
 
 int NetCifa::runScript(const std::string& script)
@@ -80,6 +81,17 @@ int NetCifa::registerFunctions()
                 dim.push_back(v[i].value);
             }
             return registerMatrix(Matrix(dim));
+        });
+    cifa_.register_function("M", [&](cifa::ObjectVector& v)
+        {
+            std::vector<int> dim;
+            for (int i = 0; i < v.size(); i++)
+            {
+                dim.push_back(v[i].value);
+            }
+            Matrix m(dim);
+            addWeight(m);
+            return registerMatrix(m);
         });
     cifa_.register_function("print_message", [&](cifa::ObjectVector& v)
         {
@@ -154,21 +166,20 @@ int NetCifa::registerFunctions()
         });
     cifa_.register_function("getRow", [&](cifa::ObjectVector& v)
         { return cifa::Object(map_matrix_[v[0]].getRow()); });
+    cifa_.register_function("getChannel", [&](cifa::ObjectVector& v)
+        { return cifa::Object(map_matrix_[v[0]].getChannel()); });
     cifa_.register_function("reshape", [&](cifa::ObjectVector& v)
         {
             auto dim = getVector(v, 1);
             return registerMatrix(reshape(map_matrix_[v[0]], dim));
         });
     cifa_.register_function("active", [&](cifa::ObjectVector& v)
-        {            
-            return registerMatrix(active(map_matrix_[v[0]], ActiveFunctionType(int(v[1]))));
-        });
+        { return registerMatrix(active(map_matrix_[v[0]], ActiveFunctionType(int(v[1])))); });
 
 #define REGISTER(func) \
     cifa_.register_function(#func, [&](cifa::ObjectVector& v) { return registerMatrix(func(map_matrix_[v[0]])); })
 
     REGISTER(relu);
-    REGISTER(sigmoid);
     REGISTER(softmax);
     REGISTER(softmax_ce);
 
