@@ -18,6 +18,7 @@ void Solver::setWeight(const Matrix& W)
     solver_type_ = op.getEnum("solver", "solver", SOLVER_SGD);
     momentum_ = op.getReal("solver", "momentum", 0.9);
     active_ = op.getEnum("solver", "active", ACTIVE_FUNCTION_NONE);
+    step_weight_ = op.getEnum("solver", "step_weight", 0);
 
     if (active_ != ACTIVE_FUNCTION_NONE)
     {
@@ -45,11 +46,11 @@ void Solver::setWeight(const Matrix& W)
         real_vector_[3] = op.getReal("solver", "ada_beta2", 0.95);
         if (solver_type_ == SOLVER_RMS_PROP)
         {
-            W_vector_.resize(2);
+            W_vector_.resize(1);
         }
         else
         {
-            W_vector_.resize(3);
+            W_vector_.resize(2);
         }
         for (auto& m : W_vector_)
         {
@@ -155,22 +156,23 @@ void Solver::updateWeight(int batch)
         }
         break;
     case SOLVER_ADA_DELTA:
-        //LOG("ADADELTA\n");
-        //使用第0个矩阵作为真正的更新量，下同
-        //dW->scale(1.0 / batch_);
-        //MatrixExtend::adaDeltaUpdate(W_vector_[1], W_vector_[2], dW, W_vector_[0], real_vector_[1], real_vector_[0]);
-        //Matrix::add(W, W_vector_[0], W, 1 - weight_decay_ * learn_rate_, -1);
+        W_.DMatrix().scale(1.0 / batch);
+        MatrixExtend::adaDeltaUpdate(W_vector_[0], W_vector_[1], W_.DMatrix(), DW_, real_vector_[1], real_vector_[0]);
+        Matrix::add(W0_, DW_, W0_, 1, -1);
         break;
     case SOLVER_ADAM:
         W_.DMatrix().scale(1.0 / batch);
-        MatrixExtend::adamUpdate(W_vector_[1], W_vector_[2], W_.DMatrix(), W_vector_[0], real_vector_[2], real_vector_[3], real_vector_[0], time_step_);
-        Matrix::add(W0_, W_vector_[0], W0_, 1, -learn_rate_);
+        MatrixExtend::adamUpdate(W_vector_[0], W_vector_[1], W_.DMatrix(), DW_, real_vector_[2], real_vector_[3], real_vector_[0], time_step_);
+        Matrix::add(W0_, DW_, W0_, 1, -learn_rate_);
         break;
     }
     if (active_ != ACTIVE_FUNCTION_NONE)
     {
         MatrixExtend::activeForward(W0_, W_, active_);
-        MatrixExtend::step(W_, W_);    //测试
+        if (step_weight_)
+        {
+            MatrixExtend::step(W_, W_);    //测试
+        }
     }
 }
 
