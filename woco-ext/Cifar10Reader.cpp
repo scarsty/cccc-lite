@@ -64,7 +64,7 @@ void Cifar10Reader::load(Matrix& X, Matrix& Y, std::string path /*= "cifa10"*/, 
         X.resize(32, 32, 3, 50000);
         Y.resize(10, 50000);
         Y.initData(0);
-        fprintf(stdout, "Loading Cifa10 train data... ");
+        fprintf(stdout, "Loading Cifar10 train data... ");
         readDara(X, Y, path + "data_batch_1.bin", 0);
         readDara(X, Y, path + "data_batch_2.bin", 10000);
         readDara(X, Y, path + "data_batch_3.bin", 20000);
@@ -77,7 +77,7 @@ void Cifar10Reader::load(Matrix& X, Matrix& Y, std::string path /*= "cifa10"*/, 
         X.resize(32, 32, 3, 10000);
         Y.resize(10, 10000);
         Y.initData(0);
-        fprintf(stdout, "Loading Cifa10 test data... ");
+        fprintf(stdout, "Loading Cifar10 test data... ");
         readDara(X, Y, path + "test_batch.bin", 0);
         fprintf(stdout, "done\n");
     }

@@ -11,9 +11,6 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="DataPreparerMnist.h">
-      <Filter>headers</Filter>
-    </ClInclude>
     <ClInclude Include="NetMnist.h">
       <Filter>headers</Filter>
     </ClInclude>
@@ -29,11 +26,11 @@
     <ClInclude Include="Cifar10Reader.h">
       <Filter>headers</Filter>
     </ClInclude>
+    <ClInclude Include="DataPreparerExt.h">
+      <Filter>headers</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="DataPreparerMnist.cpp">
-      <Filter>sources</Filter>
-    </ClCompile>
     <ClCompile Include="..\..\common\convert.cpp">
       <Filter>sources</Filter>
     </ClCompile>
@@ -50,6 +47,9 @@
       <Filter>sources</Filter>
     </ClCompile>
     <ClCompile Include="Cifar10Reader.cpp">
+      <Filter>sources</Filter>
+    </ClCompile>
+    <ClCompile Include="DataPreparerExt.cpp">
       <Filter>sources</Filter>
     </ClCompile>
   </ItemGroup>

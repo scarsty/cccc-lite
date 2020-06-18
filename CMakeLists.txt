@@ -8,7 +8,7 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 add_subdirectory(woco-cuda)
 add_subdirectory(woco)
 add_subdirectory(woco-windows)
-add_subdirectory(woco-mnist)
+add_subdirectory(woco-ext)
 
 if(WITH_PYTHON)
 add_subdirectory(woco-python)

@@ -1,4 +1,4 @@
-#include "DataPreparerMnist.h"
+#include "DataPreparerExt.h"
 #include "NetMnist.h"
 #include "dll_export.h"
 #include <map>
@@ -6,7 +6,7 @@
 extern "C" DLL_EXPORT void* dp_ext()
 {
     static int i = 0;
-    static std::map<int, woco::DataPreparerMnist> m;
+    static std::map<int, woco::DataPreparerExt> m;
     return &m[i++];
 }
 
