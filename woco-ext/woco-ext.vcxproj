@@ -14,7 +14,7 @@
     <ClCompile Include="..\..\common\convert.cpp" />
     <ClCompile Include="..\..\common\File.cpp" />
     <ClCompile Include="Cifar10Reader.cpp" />
-    <ClCompile Include="DataPreparerMnist.cpp" />
+    <ClCompile Include="DataPreparerExt.cpp" />
     <ClCompile Include="MnistReader.cpp" />
     <ClCompile Include="NetMnist.cpp" />
     <ClCompile Include="extension.cpp" />
@@ -23,7 +23,7 @@
     <ClInclude Include="..\..\common\convert.h" />
     <ClInclude Include="..\..\common\File.h" />
     <ClInclude Include="Cifar10Reader.h" />
-    <ClInclude Include="DataPreparerMnist.h" />
+    <ClInclude Include="DataPreparerExt.h" />
     <ClInclude Include="MnistReader.h" />
     <ClInclude Include="NetMnist.h" />
   </ItemGroup>

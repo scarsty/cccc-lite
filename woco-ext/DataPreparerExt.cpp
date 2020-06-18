@@ -1,4 +1,4 @@
-#include "DataPreparerMnist.h"
+#include "DataPreparerExt.h"
 #include "Cifar10Reader.h"
 #include "ConsoleControl.h"
 #include "MnistReader.h"
@@ -10,11 +10,11 @@
 namespace woco
 {
 
-DataPreparerMnist::DataPreparerMnist()
+DataPreparerExt::DataPreparerExt()
 {
 }
 
-void DataPreparerMnist::init2()
+void DataPreparerExt::init2()
 {
     DataPreparerImage::init2();
     OPTION_GET_INT(type_);
@@ -23,18 +23,24 @@ void DataPreparerMnist::init2()
 }
 
 //one example to deal MNIST
-void DataPreparerMnist::fillData(Matrix& X, Matrix& Y)
+void DataPreparerExt::fillData(Matrix& X, Matrix& Y)
 {
     if (fill_times_ == 0)
     {
-        //使用MNIST库，通常用来测试网络
-        //MnistReader mnist;
-        //std::string path = Option::getInstance().getString(section_, "path", "mnist");
-        //mnist.load(X, Y, path, type_);
-
-                Cifar10Reader loader;
-        std::string path = Option::getInstance().getString(section_, "path", "cifar10");
-        loader.load(X, Y, path, type_);
+        std::string format = Option::getInstance().getString(section_, "format", "mnist");
+        if (format == "mnist")
+        {
+            //使用MNIST库，通常用来测试网络
+            MnistReader loader;
+            std::string path = Option::getInstance().getString(section_, "path", "mnist");
+            loader.load(X, Y, path, type_);
+        }
+        else if (format == "cifar10")
+        {
+            Cifar10Reader loader;
+            std::string path = Option::getInstance().getString(section_, "path", "cifar10");
+            loader.load(X, Y, path, type_);
+        }
 
         //data.save(mnist_path+"/train.bin");
         if (remove59_)
@@ -65,7 +71,7 @@ void DataPreparerMnist::fillData(Matrix& X, Matrix& Y)
     fill_times_++;
 }
 
-void DataPreparerMnist::transOne(Matrix& X1, Matrix& Y1)
+void DataPreparerExt::transOne(Matrix& X1, Matrix& Y1)
 {
     DataPreparerImage::transOne(X1, Y1);
     if (random_diff_ && !X1.inGPU())

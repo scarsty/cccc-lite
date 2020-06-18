@@ -5,7 +5,7 @@
 namespace woco
 {
 
-class DataPreparerMnist : public DataPreparerImage
+class DataPreparerExt : public DataPreparerImage
 {
 private:
     int fill_times_ = 0;
@@ -15,7 +15,7 @@ private:
     Random<double> rand_;
 
 public:
-    DataPreparerMnist();
+    DataPreparerExt();
 
     void init2() override;
     void fillData(Matrix& X, Matrix& Y) override;

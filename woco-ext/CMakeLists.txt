@@ -1,4 +1,4 @@
-project(woco-mnist)
+project(woco-ext)
 
 set(CMAKE_VERBOSE_MAKEFILE on)
 set(CMAKE_CXX_COMPILER $ENV{CXX})
@@ -9,6 +9,6 @@ aux_source_directory(./ SRC_LIST)
 include_directories(../include /usr/local/cuda/include ../src ../../common ../woco-cuda ../woco)
 link_directories(.)
 
-add_library(woco-mnist SHARED ${SRC_LIST})
-target_link_libraries(woco-mnist woco)
+add_library(woco-ext SHARED ${SRC_LIST})
+target_link_libraries(woco-ext woco)
 
