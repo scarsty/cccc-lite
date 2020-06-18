@@ -34,6 +34,7 @@ protected:
     std::vector<Matrix> W_vector_;
 
     ActiveFunctionType active_ = ACTIVE_FUNCTION_NONE;
+    int step_weight_ = 0;
 
 public:
     SolverType getSolverType() { return solver_type_; }

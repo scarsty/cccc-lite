@@ -55,3 +55,4 @@ woco-test/x64/
 *.vsp
 *.pb.*
 *.onnx
+work/cifar10/
