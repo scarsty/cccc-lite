@@ -386,7 +386,16 @@ void active(const Matrix& A, Matrix& R, ActiveFunctionType af)
     }
     if (MatrixOperator::making_)
     {
-        MatrixOperator::op_queue_.emplace_back(MatrixOperator(MatrixOpType::ACTIVE, { A }, { R }, { af }, {}));
+        std::vector<int> int_vector;
+        std::vector<real> real_vector;
+        std::vector<Matrix> matrix_vector;
+        MatrixExtend::activeBufferInit(A, af, int_vector, matrix_vector);
+        int_vector.push_back(af);
+        if (af != 1)
+        {
+            af = af;
+        }
+        MatrixOperator::op_queue_.emplace_back(MatrixOperator(MatrixOpType::ACTIVE, { A }, { R }, int_vector, real_vector, matrix_vector));
     }
 }
 
@@ -399,6 +408,7 @@ void active(const Matrix& A, Matrix& R, ActiveFunctionType af, std::vector<int>&
     if (MatrixOperator::making_)
     {
         auto v = int_vector;
+        MatrixExtend::activeBufferInit(A, af, int_vector, matrix_vector);
         v.push_back(af);
         MatrixOperator::op_queue_.emplace_back(MatrixOperator(MatrixOpType::ACTIVE, { A }, { R }, v, real_vector, matrix_vector));
     }

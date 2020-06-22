@@ -247,8 +247,12 @@ realc Net::adjustLearnRate(int ec)
 
 //测试一个大组
 //返回值是max位置准确率，即标签正确率
-//test_max时，result返回准确率，否则返回的是error
-int Net::test(const std::string& info, Matrix& X, Matrix& Y, Matrix& A, int output_group, int test_max, int attack_times)
+//test_type
+//0-不测试
+//1-测试最大值
+//2-测试error
+//1+2
+real Net::test(const std::string& info, Matrix& X, Matrix& Y, Matrix& A, int output_group, int test_type, int attack_times)
 {
     if (info != "")
     {
@@ -269,7 +273,7 @@ int Net::test(const std::string& info, Matrix& X, Matrix& Y, Matrix& A, int outp
     }
 
     A.resize(Y);
-    bool need_y = output_group > 0 || test_max > 0;
+    bool need_y = output_group > 0 || test_type > 0;
     setActivePhase(ACTIVE_PHASE_TEST);
     Matrix X_gpu(DeviceType::GPU), Y_gpu(DeviceType::GPU), A_gpu(DeviceType::GPU);
     if (X.getDeviceType() == DeviceType::GPU)
@@ -298,11 +302,7 @@ int Net::test(const std::string& info, Matrix& X, Matrix& Y, Matrix& A, int outp
     }
 
     realc total_error = 0, error = 0;
-    realc* errorp = nullptr;
-    if (test_max == 0)
-    {
-        errorp = &error;
-    }
+
     for (int i = 0; i < group_size; i += X_.getNumber())
     {
         //检查最后一组是不是组数不足,unfinished
@@ -320,20 +320,8 @@ int Net::test(const std::string& info, Matrix& X, Matrix& Y, Matrix& A, int outp
         {
             attack(X_, Y_);
         }
-        if (errorp)
-        {
-            total_error += error * X_.getNumber();
-        }
     }
 
-    if (test_max == 0)
-    {
-        total_error /= X_.getNumber();
-        //*result = total_error;
-        ConsoleControl::setColor(CONSOLE_COLOR_LIGHT_RED);
-        Log::LOG("Real error = %e\n", total_error);
-        ConsoleControl::setColor(CONSOLE_COLOR_NONE);
-    }
     if (attack_times)
     {
         Matrix::copyData(X_gpu, X);
@@ -345,10 +333,17 @@ int Net::test(const std::string& info, Matrix& X, Matrix& Y, Matrix& A, int outp
 
     //setActivePhase(ACTIVE_PHASE_TRAIN);////////////////////////
 
-    if (output_group == 0 && test_max == 0)
+    if (output_group == 0 && test_type == 0)
     {
         return 0;
     }
+
+    if (A.getRow() > 50)
+    {
+        test_type &= 2;
+    }
+
+    ConsoleControl::setColor(CONSOLE_COLOR_LIGHT_RED);
 
     int y_size = Y.getRow();
     auto Y_cpu = Y.clone(DeviceType::CPU);
@@ -367,57 +362,25 @@ int Net::test(const std::string& info, Matrix& X, Matrix& Y, Matrix& A, int outp
         }
         Log::LOG("\n");
     }
-
-    if (test_max)
+    if (test_type & 1)
     {
-        ConsoleControl::setColor(CONSOLE_COLOR_LIGHT_RED);
-        Matrix A_max(A_cpu.getDim(), DeviceType::CPU);
 
-        //查看最后一层是否是拼起来的
-        //auto layer_out = getLastLayer();
-        if (op_queue_.back().getType() == MatrixOpType::CONCAT)
+        Matrix A_max(A_cpu.getDim(), DeviceType::CPU);
+        A_max.initData(0);
+        for (int i_group = 0; i_group < A_cpu.getCol(); i_group++)
         {
-            //    A_max.initData(0);
-            //    for (int i_group = 0; i_group < A_cpu.getCol(); i_group++)
-            //    {
-            //        int total_loc = 0;
-            //        for (int i_combine = 0; i_combine < layer_out->getPrevLayers().size(); i_combine++)
-            //        {
-            //            real max_v = -9999;
-            //            int max_loc = 0;
-            //            int out = layer_out->getPrevLayers()[i_combine]->getOutTotal();
-            //            for (int i = 0; i < out; i++)
-            //            {
-            //                real v = A_cpu.getData(total_loc + i, i_group);
-            //                if (v > max_v)
-            //                {
-            //                    max_v = v;
-            //                    max_loc = i;
-            //                }
-            //            }
-            //            A_max->getData(total_loc + max_loc, i_group) = 1;
-            //            total_loc += out;
-            //        }
-            //    }
-        }
-        else
-        {
-            A_max.initData(0);
-            for (int i_group = 0; i_group < A_cpu.getCol(); i_group++)
+            real max_v = -9999;
+            int max_loc = 0;
+            for (int i = 0; i < A_cpu.getRow(); i++)
             {
-                real max_v = -9999;
-                int max_loc = 0;
-                for (int i = 0; i < A_cpu.getRow(); i++)
+                real v = A_cpu.getData(i, i_group);
+                if (v > max_v)
                 {
-                    real v = A_cpu.getData(i, i_group);
-                    if (v > max_v)
-                    {
-                        max_v = v;
-                        max_loc = i;
-                    }
+                    max_v = v;
+                    max_loc = i;
                 }
-                A_max.getData(max_loc, i_group) = 1;
             }
+            A_max.getData(max_loc, i_group) = 1;
         }
 
         for (int i = 0; i < (std::min)(group_size, output_group); i++)
@@ -463,9 +426,35 @@ int Net::test(const std::string& info, Matrix& X, Matrix& Y, Matrix& A, int outp
             }
         }
         Log::LOG("\n");
-        ConsoleControl::setColor(CONSOLE_COLOR_NONE);
     }
-    return 0;
+    if (test_type & 2)
+    {
+        Matrix E(A.getDim());
+        ActiveFunctionType af = ACTIVE_FUNCTION_NONE;
+        if (op_queue_.back().getPataInt().size() > 0)
+        {
+            af = ActiveFunctionType(op_queue_.back().getPataInt().back());
+        }
+        switch (af)
+        {
+        case woco::ACTIVE_FUNCTION_SIGMOID_CE:
+            MatrixExtend::crossEntropy(A_gpu, Y_gpu, E);
+            error = E.sumAbs();
+            break;
+        case woco::ACTIVE_FUNCTION_SOFTMAX_CE:
+        case woco::ACTIVE_FUNCTION_SOFTMAX_FAST_CE:
+            MatrixExtend::crossEntropy2(A_gpu, Y_gpu, E);
+            error = E.sumAbs();
+        default:
+            MatrixExtend::add(A_gpu, Y_gpu, E, 1, -1);
+            error = E.dotSelf();
+            break;
+        }
+        error /= E.getNumber();
+        Log::LOG("Real error = %g\n", error);
+    }
+    ConsoleControl::setColor(CONSOLE_COLOR_NONE);
+    return error;
 }
 
 //将所有参数集中在同一块内存，方便并行中的数据交换

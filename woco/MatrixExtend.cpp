@@ -128,7 +128,7 @@ void MatrixExtend::splitByChannel(const Matrix& A, std::vector<Matrix>& R_vector
 }
 
 //初始化激活需要的缓冲区
-void MatrixExtend::activeBufferInit(ActiveFunctionType af, Matrix& A, std::vector<int>& int_vector, std::vector<Matrix>& matrix_vector)
+void MatrixExtend::activeBufferInit(const Matrix& A, ActiveFunctionType af, std::vector<int>& int_vector, std::vector<Matrix>& matrix_vector)
 {
     auto cuda = A.cuda();
     switch (af)
@@ -349,14 +349,26 @@ void MatrixExtend::activeForward(const Matrix& A, Matrix& R, ActiveFunctionType 
     //    }
     //    break;
     case ACTIVE_FUNCTION_SIN:
-        MatrixExtend::sin(A, R, M_PI / 2);
+        MatrixExtend::sin(A, R, M_PI / 2*128);
         break;
     case ACTIVE_FUNCTION_ZIGZAG:
         MatrixExtend::zigzag(A, R);
         //Matrix::copyData(A, R);
         break;
     case ACTIVE_FUNCTION_SIN_STEP:
-        MatrixExtend::sin(A, R, M_PI / 2);
+    {
+        //auto temp = A.clone(DeviceType::CPU);
+        //int sum = 0;
+        //for (int i = 0; i < A.getDataSize(); i++)
+        //{
+        //    if (abs(temp.getData(i)) > 1) { sum++; }
+        //}
+        //if (sum > 0)
+        //{
+        //    fprintf(stdout, "fajdogairfjgaiorg %d / %d\n", sum, temp.getDataSize());
+        //}
+    }
+        MatrixExtend::sin(A, R, M_PI / 2 * 128);
         MatrixExtend::step(R, R);
         break;
     default:
@@ -475,7 +487,7 @@ void MatrixExtend::activeBackward(Matrix& A, const Matrix& R, ActiveFunctionType
     //    break;
     case ACTIVE_FUNCTION_SIN:
     case ACTIVE_FUNCTION_SIN_STEP:
-        MatrixExtend::cos(A, A.DMatrix(), M_PI / 2);
+        MatrixExtend::cos(A, A.DMatrix(), M_PI / 2*128);
         MatrixExtend::elementMul(A.DMatrix(), R.DMatrix(), A.DMatrix(), 1);    //不严格，需改为加法
         break;
     case ACTIVE_FUNCTION_ZIGZAG:
@@ -1397,7 +1409,7 @@ void MatrixExtend::fill(Matrix& m, RandomFillType random_type, int in, int out)
         break;
     case RANDOM_FILL_XAVIER:
         random_generator.set_random_type(RANDOM_UNIFORM);
-        a = sqrt(1.0 / (in + out));
+        a = sqrt(6.0 / (in + out));
         random_generator.set_parameter(-a, a);
         //LOG("Xavier, %d, %d, %f\n", prev_layer->out_total, out_total, a);
         break;

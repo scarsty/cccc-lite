@@ -20,6 +20,7 @@ void DataPreparerExt::init2()
     OPTION_GET_INT(type_);
     OPTION_GET_INT(random_diff_);
     OPTION_GET_INT(remove59_);
+    OPTION_GET_INT(aem_);
 }
 
 //one example to deal MNIST
@@ -66,6 +67,11 @@ void DataPreparerExt::fillData(Matrix& X, Matrix& Y)
             }
             X.resizeNumber(X.getNumber() - count);
             Y.resizeNumber(Y.getNumber() - count);
+        }
+
+        if (aem_)
+        {
+            Y = X;
         }
     }
     fill_times_++;
