@@ -1,5 +1,6 @@
 #include "NetCifa.h"
 #include "Log.h"
+#include "Option.h"
 
 namespace woco
 {
@@ -32,10 +33,21 @@ std::vector<int> NetCifa::getVector(cifa::ObjectVector& v, int index)
     {
         return r;
     }
-    for (auto& o : v[index].v)
+    std::function<void(cifa::Object&)> expand = [&r, &expand](cifa::Object& o)
     {
-        r.push_back(o.value);
-    }
+        if (o.v.size() > 0)
+        {
+            for (auto& o1 : o.v)
+            {
+                expand(o1);
+            }
+        }
+        else
+        {
+            r.push_back(o.value);
+        }
+    };
+    expand(v[index]);
     return r;
 }
 
@@ -52,8 +64,9 @@ void NetCifa::structure()
     for (auto& m : weights_)
     {
         MatrixExtend::fill(m, RANDOM_FILL_XAVIER, m.getChannel(), m.getNumber());
+        m.scale(0.3);
     }
-    addLoss(5e-4 * L2(weights_));
+    //addLoss(5e-4 * L2(weights_));
 }
 
 int NetCifa::runScript(const std::string& script)
@@ -73,7 +86,7 @@ int NetCifa::runScript(const std::string& script)
 int NetCifa::registerFunctions()
 {
     cifa_.register_user_data("__this", this);
-    cifa_.register_function("Matrix", [&](cifa::ObjectVector& v)
+    cifa_.register_function("Matrix", [this](cifa::ObjectVector& v)
         {
             std::vector<int> dim;
             for (int i = 0; i < v.size(); i++)
@@ -82,7 +95,7 @@ int NetCifa::registerFunctions()
             }
             return registerMatrix(Matrix(dim));
         });
-    cifa_.register_function("M", [&](cifa::ObjectVector& v)
+    cifa_.register_function("M", [this](cifa::ObjectVector& v)
         {
             std::vector<int> dim;
             for (int i = 0; i < v.size(); i++)
@@ -93,23 +106,23 @@ int NetCifa::registerFunctions()
             addWeight(m);
             return registerMatrix(m);
         });
-    cifa_.register_function("print_message", [&](cifa::ObjectVector& v)
+    cifa_.register_function("print_message", [this](cifa::ObjectVector& v)
         {
             fprintf(stdout, "%g\n", v[0].value);
             map_matrix_[v[0]].message();
             return cifa::Object();
         });
-    cifa_.register_function("setXYA", [&](cifa::ObjectVector& v)
+    cifa_.register_function("setXYA", [=](cifa::ObjectVector& v)
         {
             setXYA(map_matrix_[v[0]], map_matrix_[v[1]], map_matrix_[v[2]]);
             return cifa::Object();
         });
-    cifa_.register_function("clearWeight", [&](cifa::ObjectVector& v)
+    cifa_.register_function("clearWeight", [this](cifa::ObjectVector& v)
         {
             weights_.clear();
             return cifa::Object();
         });
-    cifa_.register_function("addWeight", [&](cifa::ObjectVector& v)
+    cifa_.register_function("addWeight", [this](cifa::ObjectVector& v)
         {
             for (auto& o : v)
             {
@@ -118,7 +131,7 @@ int NetCifa::registerFunctions()
             return cifa::Object();
         });
 
-    cifa_.user_add = [&](const cifa::Object& l, const cifa::Object& r)
+    cifa_.user_add = [this](const cifa::Object& l, const cifa::Object& r)
     {
         if (l.type == "Matrix" && r.type == "Matrix")
         {
@@ -130,7 +143,7 @@ int NetCifa::registerFunctions()
         }
         return cifa::Object(l.value + r.value);
     };
-    cifa_.user_mul = [&](const cifa::Object& l, const cifa::Object& r)
+    cifa_.user_mul = [this](const cifa::Object& l, const cifa::Object& r)
     {
         if (l.type == "Matrix" && r.type == "Matrix")
         {
@@ -151,39 +164,32 @@ int NetCifa::registerFunctions()
         }
         return cifa::Object(l.value * r.value);
     };
-    cifa_.register_function("conv", [&](cifa::ObjectVector& v)
+    cifa_.register_function("conv", [this](cifa::ObjectVector& v)
         {
             auto stride = getVector(v, 2);
             auto padding = getVector(v, 3);
             return registerMatrix(conv(map_matrix_[v[0]], map_matrix_[v[1]], stride, padding));
         });
-    cifa_.register_function("maxpool", [&](cifa::ObjectVector& v)
+    cifa_.register_function("maxpool", [this](cifa::ObjectVector& v)
         {
             auto window = getVector(v, 1);
             auto stride = getVector(v, 2);
             auto padding = getVector(v, 3);
             return registerMatrix(maxpool(map_matrix_[v[0]], window, stride, padding));
         });
-    cifa_.register_function("getRow", [&](cifa::ObjectVector& v)
+    cifa_.register_function("getRow", [this](cifa::ObjectVector& v)
         { return cifa::Object(map_matrix_[v[0]].getRow()); });
-    cifa_.register_function("getChannel", [&](cifa::ObjectVector& v)
+    cifa_.register_function("getChannel", [this](cifa::ObjectVector& v)
         { return cifa::Object(map_matrix_[v[0]].getChannel()); });
-    cifa_.register_function("reshape", [&](cifa::ObjectVector& v)
+    cifa_.register_function("reshape", [this](cifa::ObjectVector& v)
         {
             auto dim = getVector(v, 1);
             return registerMatrix(reshape(map_matrix_[v[0]], dim));
         });
-    cifa_.register_function("active", [&](cifa::ObjectVector& v)
+    cifa_.register_function("active", [this](cifa::ObjectVector& v)
         { return registerMatrix(active(map_matrix_[v[0]], ActiveFunctionType(int(v[1])))); });
 
-#define REGISTER(func) \
-    cifa_.register_function(#func, [&](cifa::ObjectVector& v) { return registerMatrix(func(map_matrix_[v[0]])); })
-
-    REGISTER(relu);
-    REGISTER(softmax);
-    REGISTER(softmax_ce);
-
-    cifa_.register_function("addLoss", [&](cifa::ObjectVector& v)
+    cifa_.register_function("addLoss", [this](cifa::ObjectVector& v)
         {
             for (auto& o : v)
             {
@@ -191,10 +197,22 @@ int NetCifa::registerFunctions()
             }
             return cifa::Object();
         });
-    cifa_.register_function("crossEntropy", [&](cifa::ObjectVector& v)
+    cifa_.register_function("crossEntropy", [this](cifa::ObjectVector& v)
         { return registerLoss(crossEntropy(map_matrix_[v[0]], map_matrix_[v[1]])); });
-    cifa_.register_function("L2", [&](cifa::ObjectVector& v)
+    cifa_.register_function("L2", [this](cifa::ObjectVector& v)
         { return registerLoss(L2(map_matrix_[v[0]])); });
+
+    for (int i = -1; i < 30; i++)
+    {
+        auto str = Option::getInstance().getStringFromEnum(ActiveFunctionType(i));
+        if (str == "")
+        {
+            continue;
+        }
+        cifa_.register_parameter("active_" + str, i);
+        cifa_.register_function(str, [this, i](cifa::ObjectVector& v)
+            { return registerMatrix(active(map_matrix_[v[0]], ActiveFunctionType(i))); });
+    }
 
     return 0;
 }

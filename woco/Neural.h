@@ -116,8 +116,8 @@ public:
 public:
     //以下构成一组调度范例
     void run(int train_epochs = -1);
-    void testData(Net* net, int force_output = 0, int test_max = 0);
-    void extraTest(Net* net, const std::string& section, int force_output = 0, int test_max = 0);
+    void testData(Net* net, int force_output = 0, int test_type = 0);
+    void extraTest(Net* net, const std::string& section, int force_output = 0, int test_type = 0);
 
 public:
     int testExternalData(void* x, void* y, void* a, int n, int attack_times = 0);

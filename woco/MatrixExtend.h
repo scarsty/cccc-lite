@@ -22,7 +22,7 @@ public:
     static void concatByChannelBackward(std::vector<Matrix>& A_vector, const Matrix& R);
     static void splitByChannel(const Matrix& A, std::vector<Matrix>& R_vector);
 
-    static void activeBufferInit(ActiveFunctionType af, Matrix& A, std::vector<int>& int_vector, std::vector<Matrix>& matrix_vector);
+    static void activeBufferInit(const Matrix& A, ActiveFunctionType af, std::vector<int>& int_vector, std::vector<Matrix>& matrix_vector);
 
     //激活的实际计算
     //激活和反向激活中，输入和输出矩阵都是同维度

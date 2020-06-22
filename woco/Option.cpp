@@ -118,6 +118,8 @@ void Option::initEnums()
             { "sigmoid_ce", ACTIVE_FUNCTION_SIGMOID_CE },
             { "softmax_ce", ACTIVE_FUNCTION_SOFTMAX_CE },
             { "softmax_fast_ce", ACTIVE_FUNCTION_SOFTMAX_FAST_CE },
+            { "sin", ACTIVE_FUNCTION_SIN},
+            { "sin_step", ACTIVE_FUNCTION_SIN_STEP },
         });
 
     registerEnum<CostFunctionType>(
