@@ -83,7 +83,7 @@ private:
 
 public:
     realc adjustLearnRate(int ec);
-    real test(const std::string& info, Matrix& X, Matrix& Y, Matrix& A, int output_group = 0, int test_type = 0, int attack_times = 0);
+    real test(const std::string& info, Matrix& X, Matrix& Y, Matrix& A, int output_group = 0, int test_max = 0, int attack_times = 0);
 
 public:
     void combineParameters();

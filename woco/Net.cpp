@@ -252,7 +252,7 @@ realc Net::adjustLearnRate(int ec)
 //1-测试最大值
 //2-测试error
 //1+2
-real Net::test(const std::string& info, Matrix& X, Matrix& Y, Matrix& A, int output_group, int test_type, int attack_times)
+real Net::test(const std::string& info, Matrix& X, Matrix& Y, Matrix& A, int output_group, int test_max, int attack_times)
 {
     if (info != "")
     {
@@ -273,7 +273,7 @@ real Net::test(const std::string& info, Matrix& X, Matrix& Y, Matrix& A, int out
     }
 
     A.resize(Y);
-    bool need_y = output_group > 0 || test_type > 0;
+    bool need_y = output_group > 0 || test_max > 0;
     setActivePhase(ACTIVE_PHASE_TEST);
     Matrix X_gpu(DeviceType::GPU), Y_gpu(DeviceType::GPU), A_gpu(DeviceType::GPU);
     if (X.getDeviceType() == DeviceType::GPU)
@@ -331,128 +331,122 @@ real Net::test(const std::string& info, Matrix& X, Matrix& Y, Matrix& A, int out
     //恢复网络原来的设置组数
     //resetBatchSize(batch_);    //暂时不处理
 
-    //setActivePhase(ACTIVE_PHASE_TRAIN);////////////////////////
+    //setActivePhase(ACTIVE_PHASE_TRAIN);
 
-    if (output_group == 0 && test_type == 0)
+    if (output_group == 0 && test_max == 0)
     {
         return 0;
     }
 
-    if (A.getRow() > 50)
-    {
-        test_type &= 2;
-    }
-
     ConsoleControl::setColor(CONSOLE_COLOR_LIGHT_RED);
-
-    int y_size = Y.getRow();
-    auto Y_cpu = Y.clone(DeviceType::CPU);
-    auto A_cpu = A_gpu.clone(DeviceType::CPU);
-
-    for (int i = 0; i < (std::min)(group_size, output_group); i++)
+    if (A.getRow() < 120)
     {
-        for (int j = 0; j < y_size; j++)
-        {
-            Log::LOG("%6.3f ", A_cpu.getData(j, i));
-        }
-        Log::LOG(" --> ");
-        for (int j = 0; j < y_size; j++)
-        {
-            Log::LOG("%6.3f ", Y_cpu.getData(j, i));
-        }
-        Log::LOG("\n");
-    }
-    if (test_type & 1)
-    {
-
-        Matrix A_max(A_cpu.getDim(), DeviceType::CPU);
-        A_max.initData(0);
-        for (int i_group = 0; i_group < A_cpu.getCol(); i_group++)
-        {
-            real max_v = -9999;
-            int max_loc = 0;
-            for (int i = 0; i < A_cpu.getRow(); i++)
-            {
-                real v = A_cpu.getData(i, i_group);
-                if (v > max_v)
-                {
-                    max_v = v;
-                    max_loc = i;
-                }
-            }
-            A_max.getData(max_loc, i_group) = 1;
-        }
+        int y_size = Y.getRow();
+        auto Y_cpu = Y.clone(DeviceType::CPU);
+        auto A_cpu = A_gpu.clone(DeviceType::CPU);
 
         for (int i = 0; i < (std::min)(group_size, output_group); i++)
         {
-            int o = A_max.indexColMaxAbs(i);
-            int e = Y.indexColMaxAbs(i);
-            Log::LOG("%3d (%6.4f) --> %3d\n", o, A_cpu.getData(o, i), e);
-        }
-        std::vector<int> right(y_size), total(y_size);
-        for (int j = 0; j < y_size; j++)
-        {
-            right[j] = 0;
-            total[j] = 0;
-        }
-        int right_total = 0;
-        int total_total = 0;
-        for (int i = 0; i < group_size; i++)
-        {
             for (int j = 0; j < y_size; j++)
             {
-                if (Y_cpu.getData(j, i) == 1)
+                Log::LOG("%6.3f ", A_cpu.getData(j, i));
+            }
+            Log::LOG(" --> ");
+            for (int j = 0; j < y_size; j++)
+            {
+                Log::LOG("%6.3f ", Y_cpu.getData(j, i));
+            }
+            Log::LOG("\n");
+        }
+        if (test_max)
+        {
+            Matrix A_max(A_cpu.getDim(), DeviceType::CPU);
+            A_max.initData(0);
+            for (int i_group = 0; i_group < A_cpu.getCol(); i_group++)
+            {
+                real max_v = -9999;
+                int max_loc = 0;
+                for (int i = 0; i < A_cpu.getRow(); i++)
                 {
-                    total[j]++;
-                    total_total++;
-                    if (A_max.getData(j, i) == 1)
+                    real v = A_cpu.getData(i, i_group);
+                    if (v > max_v)
                     {
-                        right[j]++;
-                        right_total++;
+                        max_v = v;
+                        max_loc = i;
+                    }
+                }
+                A_max.getData(max_loc, i_group) = 1;
+            }
+
+            for (int i = 0; i < (std::min)(group_size, output_group); i++)
+            {
+                int o = A_max.indexColMaxAbs(i);
+                int e = Y.indexColMaxAbs(i);
+                Log::LOG("%3d (%6.4f) --> %3d\n", o, A_cpu.getData(o, i), e);
+            }
+            std::vector<int> right(y_size), total(y_size);
+            for (int j = 0; j < y_size; j++)
+            {
+                right[j] = 0;
+                total[j] = 0;
+            }
+            int right_total = 0;
+            int total_total = 0;
+            for (int i = 0; i < group_size; i++)
+            {
+                for (int j = 0; j < y_size; j++)
+                {
+                    if (Y_cpu.getData(j, i) == 1)
+                    {
+                        total[j]++;
+                        total_total++;
+                        if (A_max.getData(j, i) == 1)
+                        {
+                            right[j]++;
+                            right_total++;
+                        }
                     }
                 }
             }
-        }
-        double accuracy_total = 1.0 * right_total / total_total;
-        Log::LOG("Total accuracy: %.2f%% (%d/%d) (error/total)\n", 100 * accuracy_total, total_total - right_total, total_total);
+            double accuracy_total = 1.0 * right_total / total_total;
+            Log::LOG("Total accuracy: %.2f%% (%d/%d) (error/total)\n", 100 * accuracy_total, total_total - right_total, total_total);
 
-        for (int j = 0; j < y_size; j++)
-        {
-            double accur = 100.0 * right[j] / total[j];
-            Log::LOG("%d: %.2f%% (%d/%d)", j, accur, total[j] - right[j], total[j]);
-            if (j != y_size - 1)
+            for (int j = 0; j < y_size; j++)
             {
-                Log::LOG(", ");
+                double accur = 100.0 * right[j] / total[j];
+                Log::LOG("%d: %.2f%% (%d/%d)", j, accur, total[j] - right[j], total[j]);
+                if (j != y_size - 1)
+                {
+                    Log::LOG(", ");
+                }
             }
+            Log::LOG("\n");
         }
-        Log::LOG("\n");
     }
-    if (test_type & 2)
+    Matrix E(A.getDim());
+    ActiveFunctionType af = ACTIVE_FUNCTION_NONE;
+    if (op_queue_.back().getPataInt().size() > 0)
     {
-        Matrix E(A.getDim());
-        ActiveFunctionType af = ACTIVE_FUNCTION_NONE;
-        if (op_queue_.back().getPataInt().size() > 0)
-        {
-            af = ActiveFunctionType(op_queue_.back().getPataInt().back());
-        }
-        switch (af)
-        {
-        case woco::ACTIVE_FUNCTION_SIGMOID_CE:
-            MatrixExtend::crossEntropy(A_gpu, Y_gpu, E);
-            error = E.sumAbs();
-            break;
-        case woco::ACTIVE_FUNCTION_SOFTMAX_CE:
-        case woco::ACTIVE_FUNCTION_SOFTMAX_FAST_CE:
-            MatrixExtend::crossEntropy2(A_gpu, Y_gpu, E);
-            error = E.sumAbs();
-        default:
-            MatrixExtend::add(A_gpu, Y_gpu, E, 1, -1);
-            error = E.dotSelf();
-            break;
-        }
-        error /= E.getNumber();
-        Log::LOG("Real error = %g\n", error);
+        af = ActiveFunctionType(op_queue_.back().getPataInt().back());
     }
+    switch (af)
+    {
+    case woco::ACTIVE_FUNCTION_SIGMOID_CE:
+        MatrixExtend::crossEntropy(A_gpu, Y_gpu, E);
+        error = E.sumAbs();
+        break;
+    case woco::ACTIVE_FUNCTION_SOFTMAX_CE:
+    case woco::ACTIVE_FUNCTION_SOFTMAX_FAST_CE:
+        MatrixExtend::crossEntropy2(A_gpu, Y_gpu, E);
+        error = E.sumAbs();
+    default:
+        MatrixExtend::add(A_gpu, Y_gpu, E, 1, -1);
+        error = E.dotSelf();
+        break;
+    }
+    error /= E.getNumber();
+    Log::LOG("Real error = %g\n", error);
+
     ConsoleControl::setColor(CONSOLE_COLOR_NONE);
     return error;
 }

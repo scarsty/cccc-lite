@@ -64,7 +64,7 @@ void NetCifa::structure()
     for (auto& m : weights_)
     {
         MatrixExtend::fill(m, RANDOM_FILL_XAVIER, m.getChannel(), m.getNumber());
-        m.scale(0.3);
+        //m.scale(0.3);
     }
     //addLoss(5e-4 * L2(weights_));
 }
@@ -112,7 +112,7 @@ int NetCifa::registerFunctions()
             map_matrix_[v[0]].message();
             return cifa::Object();
         });
-    cifa_.register_function("setXYA", [=](cifa::ObjectVector& v)
+    cifa_.register_function("setXYA", [this](cifa::ObjectVector& v)
         {
             setXYA(map_matrix_[v[0]], map_matrix_[v[1]], map_matrix_[v[2]]);
             return cifa::Object();
