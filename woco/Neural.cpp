@@ -225,7 +225,7 @@ void Neural::run(int train_epochs /*= -1*/)
 {
     auto net = nets_[0];
     //初测
-    testData(net, Option::getInstance().getInt("", "force_output"), Option::getInstance().getInt("", "test_type"));
+    testData(net, Option::getInstance().getInt("", "force_output"), Option::getInstance().getInt("", "test_max"));
 
     realc l1, l2;
     net->calNorm(l1, l2);
@@ -246,9 +246,9 @@ void Neural::run(int train_epochs /*= -1*/)
     }
 
     //终测
-    testData(net, Option::getInstance().getInt("", "force_output"), Option::getInstance().getInt("", "test_type"));
+    testData(net, Option::getInstance().getInt("", "force_output"), Option::getInstance().getInt("", "test_max"));
     //附加测试，有多少个都能用
-    extraTest(net, "extra_test", Option::getInstance().getInt("", "force_output"), Option::getInstance().getInt("", "test_type"));
+    extraTest(net, "extra_test", Option::getInstance().getInt("", "force_output"), Option::getInstance().getInt("", "test_max"));
 
 #ifdef LAYER_TIME
     for (auto& l : nets_[0]->getLayerVector())
@@ -370,7 +370,7 @@ void Neural::trainOneNet(std::vector<Net*>& nets, int net_id, TrainInfo& train_i
     int test_epoch = Option::getInstance().getInt("", "test_epoch", 1);
     int save_epoch = Option::getInstance().getInt("", "save_epoch", 10);
     int out_iter = Option::getInstance().getInt("", "out_iter", 100);
-    int test_type = Option::getInstance().getInt("", "test_type", 0);
+    int test_max = Option::getInstance().getInt("", "test_max", 0);
     std::string save_format = Option::getInstance().getString("", "save_format", "save/save-{epoch}.txt");
     int total_batch = X_train_cpu_.getNumber();
 
@@ -463,17 +463,17 @@ void Neural::trainOneNet(std::vector<Net*>& nets, int net_id, TrainInfo& train_i
             Matrix A;
             if (test_train_origin)
             {
-                net->test(content + "original train set", X_train_, Y_train_, A, 0, test_type, 0);
+                net->test(content + "original train set", X_train_, Y_train_, A, 0, test_max, 0);
             }
             if (test_train)
             {
-                net->test(content + "transformed train set", X_train_gpu, Y_train_gpu, A, 0, test_type, 0);
+                net->test(content + "transformed train set", X_train_gpu, Y_train_gpu, A, 0, test_max, 0);
             }
             if (dp_test_)
             {
                 if (test_test_origin)
                 {
-                    net->test(content + "original test set", X_test_, Y_test_, A, 0, test_type, 0);
+                    net->test(content + "original test set", X_test_, Y_test_, A, 0, test_max, 0);
                     if (test_result >= max_test_origin_accuracy)
                     {
                         max_test_origin_accuracy = test_result;
@@ -487,7 +487,7 @@ void Neural::trainOneNet(std::vector<Net*>& nets, int net_id, TrainInfo& train_i
                         Matrix::copyData(X_test_cpu_, X_test_gpu);
                         Matrix::copyData(Y_test_cpu_, Y_test_gpu);
                     }
-                    net->test(content + "transformed test set", X_test_gpu, Y_test_gpu, A, 0, test_type, 0);
+                    net->test(content + "transformed test set", X_test_gpu, Y_test_gpu, A, 0, test_max, 0);
                     if (test_result >= max_test_accuracy)
                     {
                         max_test_accuracy = test_result;
@@ -535,30 +535,30 @@ void Neural::trainOneNet(std::vector<Net*>& nets, int net_id, TrainInfo& train_i
 }
 
 //输出训练集和测试集的测试结果
-void Neural::testData(Net* net, int force_output, int test_type)
+void Neural::testData(Net* net, int force_output, int test_max)
 {
     realc result;
     Matrix A(DeviceType::CPU);
     if (Option::getInstance().getInt("", "test_train"))
     {
-        net->test("Test on train set", X_train_, Y_train_, A, force_output, test_type, 0);
+        net->test("Test on train set", X_train_, Y_train_, A, force_output, test_max, 0);
     }
     if (Option::getInstance().getInt("", "test_train_cpu"))
     {
-        net->test("Test on transformed train set", X_train_cpu_, Y_train_cpu_, A, force_output, test_type, 0);
+        net->test("Test on transformed train set", X_train_cpu_, Y_train_cpu_, A, force_output, test_max, 0);
     }
     if (Option::getInstance().getInt("", "test_test"))
     {
-        net->test("Test on test set", X_test_, Y_test_, A, force_output, test_type, 0);
+        net->test("Test on test set", X_test_, Y_test_, A, force_output, test_max, 0);
     }
     if (Option::getInstance().getInt("", "test_train_cpu"))
     {
-        net->test("Test on transformed test set", X_test_cpu_, Y_test_cpu_, A, force_output, test_type, 0);
+        net->test("Test on transformed test set", X_test_cpu_, Y_test_cpu_, A, force_output, test_max, 0);
     }
 }
 
 //附加测试集，一般无用
-void Neural::extraTest(Net* net, const std::string& section, int force_output, int test_type)
+void Neural::extraTest(Net* net, const std::string& section, int force_output, int test_max)
 {
     if (!Option::getInstance().hasSection(section))
     {
@@ -567,7 +567,7 @@ void Neural::extraTest(Net* net, const std::string& section, int force_output, i
     auto dp_test = Factory::createDP(section, net->X().getDim(), net->Y().getDim());
     Matrix X, Y, A;
     dp_test->initData(X, Y);
-    net->test("Extra test", X, Y, A, force_output, test_type);
+    net->test("Extra test", X, Y, A, force_output, test_max);
 }
 
 int Neural::testExternalData(void* x, void* y, void* a, int n, int attack_times)
