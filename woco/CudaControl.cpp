@@ -4,6 +4,10 @@
 #include <cstdlib>
 #include <vector>
 
+#ifdef _WIN32
+#include <nvml.h>
+#endif
+
 namespace woco
 {
 
@@ -421,13 +425,12 @@ void CudaControl::findBestDevice()
         return;
     }
 
-    int i = 0;
-    cudaDeviceProp device_prop;
-
     double best_state = -1e8;
     std::vector<int> pci(device_count_);
     int best_i = 0;
-
+#ifdef NVML_API_VERSION
+    nvmlInit();
+#endif
     for (int i = 0; i < device_count_; i++)
     {
         auto& state = cuda_toolkit_vector_[i]->state_score_;
@@ -435,19 +438,32 @@ void CudaControl::findBestDevice()
         pci[i] = i;
 
         auto ct = cuda_toolkit_vector_[i];
+        cudaDeviceProp device_prop;
         cudaGetDeviceProperties(&device_prop, ct->cuda_id_);
         setDevice(i);
         if (device_prop.computeMode != cudaComputeModeProhibited)
         {
             //通常情况系数是2，800M系列是1，但是不管了
             double flops = 2.0e3 * device_prop.clockRate * getSPcores(device_prop);
-            size_t free, total;
-            cudaMemGetInfo(&free, &total);
             char pci_info[128];
             cudaDeviceGetPCIBusId(pci_info, 128, i);
-            fprintf(stdout, "Device %d(%s): %s, %7.2f GFLOPS (single), free memory %7.2f MB (%g%%)\n",
+            size_t free, total;
+#ifdef NVML_API_VERSION
+            nvmlDevice_t nvml_device;
+            nvmlDeviceGetHandleByPciBusId(pci_info, &nvml_device);
+            nvmlMemory_t nvml_memory;
+            nvmlDeviceGetMemoryInfo(nvml_device, &nvml_memory);
+            free = nvml_memory.free;
+            total = nvml_memory.total;
+            unsigned int temperature;
+            nvmlDeviceGetTemperature(nvml_device, NVML_TEMPERATURE_GPU, &temperature);
+#else
+            cudaMemGetInfo(&free, &total);
+#endif
+            fprintf(stdout, "Device %d (%s): %s, %7.2f GFLOPS (single), free memory %7.2f MB (%g%%)\n",
                 ct->cuda_id_, pci_info, device_prop.name, flops / 1e9, free / 1048576.0, 100.0 * free / total);
             state = flops / 1e12 + free / 1e9;
+            pci[i] = device_prop.pciBusID;
             if (state > best_state)
             {
                 best_state = state;
@@ -455,7 +471,9 @@ void CudaControl::findBestDevice()
             }
         }
     }
-
+#ifdef NVML_API_VERSION
+    nvmlShutdown();
+#endif
     //这里需要重新计算，考虑与最好设备的距离
     for (int i = 0; i < device_count_; i++)
     {
