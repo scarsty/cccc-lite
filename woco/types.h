@@ -8,11 +8,6 @@
 
 #include "dll_export.h"
 
-#if defined(__arm__) || defined(__aarch64__)
-#else
-#include "nvml.h"
-#endif
-
 //#define _NO_CUDA
 #if CUDNN_VERSION < 6000 || defined(_NO_CUDA)
 #include "cuda_hack.h"

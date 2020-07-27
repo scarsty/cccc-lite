@@ -142,44 +142,10 @@ int CudaControl::checkDevices()
         cuda_toolkit_vector_.push_back(new CudaControl());
     }
 
-    std::vector<int> cuda_pci(device_count_), nvml_pci(device_count_);
-    //首先指定一个假的
     for (int i = 0; i < device_count_; i++)
     {
-        cuda_toolkit_vector_[i]->nvml_id_ = i;
         cuda_toolkit_vector_[i]->cuda_id_ = i;
-        cuda_pci[i] = i;
-        nvml_pci[i] = i;
     }
-
-#ifdef NVML_API_VERSION
-    nvmlInit();
-    for (int i = 0; i < device_count_; i++)
-    {
-        cudaDeviceProp device_prop;
-        cudaGetDeviceProperties(&device_prop, i);
-        cuda_pci[i] = device_prop.pciBusID;
-
-        nvmlDevice_t nvml_device;
-        nvmlPciInfo_st nvml_pciinfo;
-        nvmlDeviceGetHandleByIndex(i, &nvml_device);
-        nvmlDeviceGetPciInfo(nvml_device, &nvml_pciinfo);
-        nvml_pci[i] = nvml_pciinfo.bus;
-    }
-#endif
-    //fprintf(stdout, "nvml(cuda) ");
-    for (int nvml_i = 0; nvml_i < device_count_; nvml_i++)
-    {
-        for (int cuda_i = 0; cuda_i < device_count_; cuda_i++)
-        {
-            if (cuda_pci[cuda_i] == nvml_pci[nvml_i])
-            {
-                cuda_toolkit_vector_[nvml_i]->cuda_id_ = cuda_i;
-            }
-        }
-        //fprintf(stdout, "%d(%d) ", nvml_i, nvml_cuda_id_[nvml_i]);
-    }
-    //fprintf(stdout, "\n");
 
     findBestDevice();
     return device_count_;
@@ -189,8 +155,6 @@ int CudaControl::checkDevices()
 int CudaControl::init(int use_cuda, int dev_id /*= -1*/)
 {
     //cblas_ = new Cblas();
-
-    nvml_id_ = dev_id;
     cudnnCreateTensorDescriptor(&tensor_desc_);
     cudnnCreateTensorDescriptor(&tensor_desc2_);
     cudnnCreateActivationDescriptor(&activation_desc_);
@@ -224,7 +188,7 @@ int CudaControl::init(int use_cuda, int dev_id /*= -1*/)
     //{
     //    curandSetPseudoRandomGeneratorSeed(toolkit_.curand_generator_, 1234ULL);
     //}
-    fprintf(stdout, "CUDA initialization on device %d succeed\n", nvml_id_);
+    fprintf(stdout, "CUDA initialization on device %d succeed\n", cuda_id_);
     fprintf(stdout, "Float precision is %ld\n", sizeof(real) * 8);
     inited_ = true;
     global_device_type_ = DeviceType::GPU;
@@ -275,9 +239,6 @@ void CudaControl::destroyAll()
     global_device_type_ = DeviceType::CPU;
     cuda_toolkit_vector_.clear();
     device_count_ = -1;
-#ifdef NVML_API_VERSION
-    nvmlShutdown();
-#endif
 }
 
 woco::DeviceType CudaControl::getGlobalCudaType()
@@ -307,7 +268,7 @@ int CudaControl::setDevice(int dev_id)
 
 void CudaControl::setDevice()
 {
-    setDevice(nvml_id_);
+    setDevice(cuda_id_);
 }
 
 int CudaControl::getCurrentDevice()
@@ -356,11 +317,6 @@ int CudaControl::getBestDevice(int i /*= 0*/)
     //    }
     //}
     return best_device[i].dev_id;
-}
-
-int CudaControl::getCudaDeviceFromNvml(int nvml_id)
-{
-    return cuda_toolkit_vector_[nvml_id]->cuda_id_;
 }
 
 void CudaControl::setTensorDesc4D(cudnnTensorDescriptor_t tensor, int w, int h, int c, int n)
@@ -480,29 +436,18 @@ void CudaControl::findBestDevice()
 
         auto ct = cuda_toolkit_vector_[i];
         cudaGetDeviceProperties(&device_prop, ct->cuda_id_);
-
+        setDevice(i);
         if (device_prop.computeMode != cudaComputeModeProhibited)
         {
             //通常情况系数是2，800M系列是1，但是不管了
             double flops = 2.0e3 * device_prop.clockRate * getSPcores(device_prop);
-#ifdef NVML_API_VERSION
-            nvmlDevice_t nvml_device;
-            nvmlDeviceGetHandleByIndex(i, &nvml_device);
-            nvmlMemory_t nvml_memory;
-            nvmlDeviceGetMemoryInfo(nvml_device, &nvml_memory);
-            nvmlPciInfo_st nvml_pciinfo;
-            nvmlDeviceGetPciInfo(nvml_device, &nvml_pciinfo);
-            pci[i] = nvml_pciinfo.bus;
-            unsigned int temperature;
-            nvmlDeviceGetTemperature(nvml_device, NVML_TEMPERATURE_GPU, &temperature);
-            fprintf(stdout, "Device %d(%d): %s, %7.2f GFLOPS (single), free memory %7.2f MB (%g%%), temperature %u C\n",
-                i, ct->cuda_id_, device_prop.name, flops / 1e9, nvml_memory.free / 1048576.0, 100.0 * nvml_memory.free / nvml_memory.total, temperature);
-            state = flops / 1e12 + nvml_memory.free / 1e9 - temperature / 5.0;
-#else
-            fprintf(stdout, "Device %d: %s, %7.2f GFLOPS, total memory %g MB\n",
-                ct->cuda_id_, device_prop.name, flops / 1e9, device_prop.totalGlobalMem / 1e6);
-            state += flops / 1e12 + device_prop.totalGlobalMem / 1e9;
-#endif
+            size_t free, total;
+            cudaMemGetInfo(&free, &total);
+            char pci_info[128];
+            cudaDeviceGetPCIBusId(pci_info, 128, i);
+            fprintf(stdout, "Device %d(%s): %s, %7.2f GFLOPS (single), free memory %7.2f MB (%g%%)\n",
+                ct->cuda_id_, pci_info, device_prop.name, flops / 1e9, free / 1048576.0, 100.0 * free / total);
+            state = flops / 1e12 + free / 1e9;
             if (state > best_state)
             {
                 best_state = state;

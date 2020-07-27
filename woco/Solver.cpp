@@ -147,14 +147,18 @@ void Solver::updateWeight(int batch)
     {
     case SOLVER_SGD:
     case SOLVER_NAG:
+    {
         //DMatrix是包含正则化之后的
         Matrix::add(DW_, W_.DMatrix(), DW_, momentum_, 1);
-        Matrix::add(W0_, DW_, W0_, 1, -learn_rate_ / batch);
+        auto AA = DW_.clone();
+        //AA.scale(batch / sqrt(AA.dotSelf()));
+        Matrix::add(W0_, AA, W0_, 1, -learn_rate_ / batch);
         if (solver_type_ == SOLVER_NAG)
         {
             Matrix::copyData(W_, W_vector_[0]);
         }
-        break;
+    }
+    break;
     case SOLVER_ADA_DELTA:
         W_.DMatrix().scale(1.0 / batch);
         MatrixExtend::adaDeltaUpdate(W_vector_[0], W_vector_[1], W_.DMatrix(), DW_, real_vector_[1], real_vector_[0]);

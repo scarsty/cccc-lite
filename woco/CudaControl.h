@@ -77,7 +77,7 @@ public:
     cudnnSpatialTransformerDescriptor_t spatial_transformer_desc_ = nullptr;
     cudnnLRNDescriptor_t lrn_desc_ = nullptr;
 
-    int nvml_id_;    //与vector中顺序相同
+    int cuda_id_;    //与vector中顺序相同
     MicroArchitectureType micro_arch_;
 
 private:
@@ -85,9 +85,6 @@ private:
     static std::vector<CudaControl*> cuda_toolkit_vector_;    //排序按照nvml_id_
     static DeviceType global_device_type_;
 
-    //nvml和cudaSetDevice的取值不同，其中nvml的值应当更加合理
-    //新版本驱动中似乎已经相同
-    int cuda_id_;
     double state_score_ = 0;
 
     static int deviceCount();
@@ -99,12 +96,10 @@ public:
     static DeviceType getGlobalCudaType();
     static void setGlobalCudaType(DeviceType ct);
     static int setDevice(int dev_id);    //仅为快速切换，无错误检查！
-    int getDevice() { return nvml_id_; }
+    int getDevice() { return cuda_id_; }
     void setDevice();
     static int getCurrentDevice();
     static int getBestDevice(int i = 0);
-
-    static int getCudaDeviceFromNvml(int nvml_id);
 
     //设置张量数据，用于简化代码
     static void setTensorDesc4D(cudnnTensorDescriptor_t tensor, int w, int h, int c, int n);

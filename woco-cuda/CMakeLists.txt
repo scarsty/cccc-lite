@@ -2,7 +2,7 @@ project(woco-cuda)
 cmake_minimum_required(VERSION 2.6)
 find_package(CUDA QUIET REQUIRED)
 
-set(CUDA_NVCC_FLAGS "-O3 -arch=sm_53")
+set(CUDA_NVCC_FLAGS "-O3 --generate-code arch=compute_75,code=sm_75 --generate-code arch=compute_61,code=sm_61")
 if (CMAKE_COMPILER_IS_GNUCC)
     execute_process(COMMAND ${CMAKE_C_COMPILER} -dumpversion
                     OUTPUT_VARIABLE GCC_VERSION)
