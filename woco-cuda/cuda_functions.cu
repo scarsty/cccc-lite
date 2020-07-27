@@ -1,9 +1,6 @@
 
 #include "cuda_runtime.h"
 #include "device_launch_parameters.h"
-#define __CUDA_INTERNAL_COMPILATION__
-#include "math_functions.h"
-#undef __CUDA_INTERNAL_COMPILATION__
 #include "cuda_functions.h"
 #include <stdio.h>
 
@@ -198,7 +195,7 @@ CUDA_FUNCTION44(cuda_adam_update,
         real_cuda& t = a4;
         p1[i] = p1[i] * beta1 + p3[i] * (real_cuda(1) - beta1);
         p2[i] = p2[i] * beta2 + p3[i] * p3[i] * (real_cuda(1) - beta2);
-        p4[i] = p3[i] / (real_cuda(1) - pow(beta1, a4)) / (sqrt(p2[i] / (real_cuda(1) - pow(beta2, a4))) + epsilon);
+        p4[i] = p3[i] / (real_cuda(1) - pow(beta1, t)) / (sqrt(p2[i] / (real_cuda(1) - pow(beta2, t))) + epsilon);
     });
 
 CUDA_FUNCTION32(cuda_rms_prop_update,

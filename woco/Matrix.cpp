@@ -425,7 +425,7 @@ void Matrix::copyDataAcrossDevice(const Matrix& A, Matrix& R, int64_t size)
     int64_t size_in_byte = size * sizeof(real);
     if (R.inGPU() && A.inGPU())
     {
-        cudaError state = cudaMemcpyPeer(R.data(), CudaControl::getCudaDeviceFromNvml(R.cuda()->nvml_id_), A.data(), CudaControl::getCudaDeviceFromNvml(A.cuda()->nvml_id_), size_in_byte);
+        cudaError state = cudaMemcpyPeer(R.data(), R.cuda()->cuda_id_, A.data(), A.cuda()->cuda_id_, size_in_byte);
         if (state != cudaSuccess)
         {
             fprintf(stderr, "Error: cudaMemcpyPeer failed with error code is %d, size in byte is %ld (%g)!\n", state, size_in_byte, 1.0 * size_in_byte);
