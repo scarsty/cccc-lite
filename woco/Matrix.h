@@ -11,6 +11,7 @@
 #include <cstring>
 #include <functional>
 #include <memory>
+#include <string>
 #include <vector>
 
 #define MATRIX_OPERATOR

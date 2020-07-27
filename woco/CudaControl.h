@@ -26,7 +26,7 @@ enum MicroArchitectureType
     ARCH_TURING = 7,
 };
 
-struct DLL_EXPORT TensorDescWrapper
+struct DLL_EXPORT TensorDescWrapper    //这里不是很正常，可能时cudnn8里面改了一些行为
 {
     cudnnTensorDescriptor_t tensor_desc_ = nullptr;
     TensorDescWrapper();
