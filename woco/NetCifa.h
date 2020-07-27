@@ -23,8 +23,8 @@ private:
     std::map<cifa::Object, Matrix, CompareObject> map_matrix_;
     std::map<cifa::Object, MatrixOperator::Queue, CompareObject> map_loss_;
 
-    cifa::Object registerMatrix(Matrix& m);
-    cifa::Object registerLoss(MatrixOperator::Queue& loss);
+    cifa::Object registerMatrix(Matrix m);
+    cifa::Object registerLoss(MatrixOperator::Queue loss);
     static std::vector<int> getVector(cifa::ObjectVector& v, int index);
 
 public:

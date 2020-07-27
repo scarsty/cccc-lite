@@ -10,7 +10,7 @@ NetCifa::NetCifa()
     registerFunctions();
 }
 
-cifa::Object NetCifa::registerMatrix(Matrix& m)
+cifa::Object NetCifa::registerMatrix(Matrix m)
 {
     static int count;
     cifa::Object o(count++, "Matrix");
@@ -18,7 +18,7 @@ cifa::Object NetCifa::registerMatrix(Matrix& m)
     return o;
 }
 
-cifa::Object NetCifa::registerLoss(MatrixOperator::Queue& loss)
+cifa::Object NetCifa::registerLoss(MatrixOperator::Queue loss)
 {
     static int count;
     cifa::Object o(count++, "Loss");
