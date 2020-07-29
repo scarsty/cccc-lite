@@ -118,7 +118,7 @@
     </Lib>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="..\..\cifa\cifa\Cifa.cpp" />
+    <ClCompile Include="..\..\common\Cifa.cpp" />
     <ClCompile Include="DataPreparer.cpp" />
     <ClCompile Include="Factory.cpp" />
     <ClCompile Include="DataPreparerImage.cpp" />
@@ -130,15 +130,15 @@
     <ClCompile Include="..\..\common\File.cpp" />
     <ClCompile Include="Log.cpp" />
     <ClCompile Include="Matrix.cpp" />
-    <ClCompile Include="Net.cpp" />
+    <ClCompile Include="..\..\wc\Net.cpp" />
     <ClCompile Include="NetCifa.cpp" />
-    <ClCompile Include="Neural.cpp" />
+    <ClCompile Include="..\..\wc\Neural.cpp" />
     <ClCompile Include="Option.cpp" />
     <ClCompile Include="..\..\common\convert.cpp" />
     <ClCompile Include="Solver.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\..\cifa\cifa\Cifa.h" />
+    <ClInclude Include="..\..\common\Cifa.h" />
     <ClInclude Include="blas_types.h" />
     <ClInclude Include="DataPreparer.h" />
     <ClInclude Include="Factory.h" />

@@ -59,9 +59,6 @@
     <ClCompile Include="MatrixExtend.cpp">
       <Filter>matrix</Filter>
     </ClCompile>
-    <ClCompile Include="Net.cpp">
-      <Filter>net</Filter>
-    </ClCompile>
     <ClCompile Include="MatrixOperator.cpp">
       <Filter>matrix</Filter>
     </ClCompile>
@@ -80,9 +77,6 @@
     <ClCompile Include="..\..\common\File.cpp">
       <Filter>common</Filter>
     </ClCompile>
-    <ClCompile Include="Neural.cpp">
-      <Filter>neural</Filter>
-    </ClCompile>
     <ClCompile Include="Factory.cpp">
       <Filter>factory</Filter>
     </ClCompile>
@@ -95,8 +89,14 @@
     <ClCompile Include="NetCifa.cpp">
       <Filter>net</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\cifa\cifa\Cifa.cpp">
+    <ClCompile Include="..\..\common\Cifa.cpp">
       <Filter>net</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\wc\Net.cpp">
+      <Filter>net</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\wc\Neural.cpp">
+      <Filter>neural</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -184,7 +184,7 @@
     <ClInclude Include="NetCifa.h">
       <Filter>net</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\cifa\cifa\Cifa.h">
+    <ClInclude Include="..\..\common\Cifa.h">
       <Filter>net</Filter>
     </ClInclude>
   </ItemGroup>
