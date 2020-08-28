@@ -26,18 +26,24 @@ enum MicroArchitectureType
     ARCH_TURING = 7,
 };
 
-struct DLL_EXPORT TensorDescWrapper    //这里不是很正常，可能时cudnn8里面改了一些行为
-{
-    cudnnTensorDescriptor_t tensor_desc_ = nullptr;
-    TensorDescWrapper();
-    TensorDescWrapper(const TensorDescWrapper& o);
-    TensorDescWrapper(TensorDescWrapper&& o);
-    TensorDescWrapper& operator=(const TensorDescWrapper& o);
-    //TensorDescWrapper& operator=(TensorDescWrapper o);
-    TensorDescWrapper& operator=(TensorDescWrapper&& o);
-    ~TensorDescWrapper();
-    const cudnnTensorDescriptor_t& get() const { return tensor_desc_; }
-};
+//struct DLL_EXPORT TensorDescWrapper    //这里不是很正常，可能时cudnn8里面改了一些行为
+//{
+//    cudnnTensorDescriptor_t tensor_desc_ = nullptr;
+//    TensorDescWrapper();
+//    TensorDescWrapper(const TensorDescWrapper& o);
+//    TensorDescWrapper(TensorDescWrapper&& o);
+//    TensorDescWrapper& operator=(const TensorDescWrapper& o);
+//    //TensorDescWrapper& operator=(TensorDescWrapper o);
+//    TensorDescWrapper& operator=(TensorDescWrapper&& o);
+//    ~TensorDescWrapper();
+//    const cudnnTensorDescriptor_t& get() const { return tensor_desc_; }
+//};
+
+//struct DLL_EXPORT TensorDescWrapper    //这里不是很正常，可能时cudnn8里面改了一些行为
+//{
+//    uint8_t s[128] = { 0 };
+//    cudnnTensorDescriptor_t get() const { return (cudnnTensorDescriptor_t)s; }
+//};
 
 //该类包含一些cuda的基本参数，例如cublas和cudnn的handle
 //此类型不能被随机创建，而仅能从已知的对象中选择一个

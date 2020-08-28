@@ -132,6 +132,7 @@ public:
     //        n.setLearnRateBase(lrb);
     //    }
     //}
+    void run_test();
 };
 
 //暂时阻塞等待条件。注意，这里只能用宏，用函数写起来很麻烦
@@ -148,4 +149,6 @@ public:
         } \
     } while (0)
 
+//#undef WAIT_UNTIL
+//#define WAIT_UNTIL(condition)
 }    // namespace woco

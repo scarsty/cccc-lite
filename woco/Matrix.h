@@ -68,7 +68,8 @@ protected:
 
     Size dim_;    //维度
 
-    TensorDescWrapper tensor_desc_;
+    //TensorDescWrapper tensor_desc_;
+    uint8_t tensor_desc_[128];
 
     //数据，被迫使用双重指针是因为矩阵计算返回对象，和生成计算流的需要！
     std::shared_ptr<real*> data_ = std::make_shared<real*>();
@@ -98,7 +99,7 @@ private:
     inline real* data() const { return *data_; }
     bool haveD() const { return d_this_->get() != nullptr; }
     const CudaControl* cuda() const { return shared_data_->cuda_; }
-    cudnnTensorDescriptor_t getCudnnTensorDesc() const { return tensor_desc_.get(); }
+    cudnnTensorDescriptor_t getCudnnTensorDesc() const { return (cudnnTensorDescriptor_t)tensor_desc_; }
 
 public:
     DeviceType getDeviceType() const { return shared_data_->cuda_ == nullptr ? DeviceType::CPU : DeviceType::GPU; }
