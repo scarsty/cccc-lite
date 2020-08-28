@@ -69,7 +69,7 @@ protected:
     Size dim_;    //维度
 
     //TensorDescWrapper tensor_desc_;
-    uint8_t tensor_desc_[128];
+    uint8_t tensor_desc_[128];    //这里太麻烦了，干脆这么糊弄吧
 
     //数据，被迫使用双重指针是因为矩阵计算返回对象，和生成计算流的需要！
     std::shared_ptr<real*> data_ = std::make_shared<real*>();

@@ -67,7 +67,6 @@ void MatrixOperator::backward(MatrixOperator::Queue& op_queue, MatrixOperator::Q
     }
     workspace.initData(0);    //这个好像比较慢，采用操作模式无法避免，与层模式相比属于性能瓶颈之一
     */
-
     for (auto& op : op_queue)
     {
         for (auto& m : op.matrix_in_)
@@ -87,11 +86,7 @@ void MatrixOperator::backward(MatrixOperator::Queue& op_queue, MatrixOperator::Q
     {
         op.backward();
     }
-    //for (int i = op_queue.size() - 1; i >= 0; i--)
-    //{
-    //    //auto& op = op_queue[i];
-    //    //backwardOne(op);
-    //}
+
     //用迭代器貌似会快
     for (auto it = op_queue.rbegin(); it != op_queue.rend(); ++it)
     {
@@ -202,7 +197,6 @@ void MatrixOperator::print(const MatrixOperator::Queue& op_queue)
 
 void MatrixOperator::print() const
 {
-    std::string str;
     std::vector<std::string> strs = {
         "none",
         "add",

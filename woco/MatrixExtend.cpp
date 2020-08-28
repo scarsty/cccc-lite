@@ -991,8 +991,7 @@ void MatrixExtend::convolutionBackward(Matrix& A, Matrix& W, const Matrix& R, Ma
             {
                 int n;
                 cudnnConvolutionBwdDataAlgoPerf_t cbdap[conv_method_count];
-                //cudnnGetConvolutionBackwardDataAlgorithmMaxCount(cuda->cudnn_handle_, &n);
-                auto t = cudnnGetConvolutionBackwardDataAlgorithm_v7(cuda->cudnn_handle_, cuda->filter_desc_,
+                auto t = cudnnFindConvolutionBackwardDataAlgorithm(cuda->cudnn_handle_, cuda->filter_desc_,
                     R.getCudnnTensorDesc(), cuda->convolution_desc_, A.getCudnnTensorDesc(), conv_method_count, &n, cbdap);
                 int c = 0;
                 size_t memory = 0;
@@ -1029,14 +1028,8 @@ void MatrixExtend::convolutionBackward(Matrix& A, Matrix& W, const Matrix& R, Ma
             {
                 int n;
                 cudnnConvolutionBwdFilterAlgoPerf_t cbfap[conv_method_count];
-
-                cudnnGetConvolutionBackwardFilterAlgorithm_v7(cuda->cudnn_handle_, A.getCudnnTensorDesc(), R.getCudnnTensorDesc(), cuda->convolution_desc_, cuda->filter_desc_, conv_method_count, &n, cbfap);
-                //    cuda->convolution_desc_, cuda->filter_desc_, conv_method_count, &n, cbfap);
-
-                //cudnnGetConvolutionBackwardFilterWorkspaceSize();
-
-                //cudnnFindConvolutionBackwardFilterAlgorithm(cuda->cudnn_handle_, A.DMatrix().getCudnnTensorDesc(), R.DMatrix().getCudnnTensorDesc(),
-                //    cuda->convolution_desc_, cuda->filter_desc_, conv_method_count, &n, cbfap);
+                cudnnFindConvolutionBackwardFilterAlgorithm(cuda->cudnn_handle_, A.getCudnnTensorDesc(), R.getCudnnTensorDesc(), 
+                    cuda->convolution_desc_, cuda->filter_desc_, conv_method_count, &n, cbfap);
                 int c = 0;
                 size_t memory = 0;
                 for (int i = 0; i < n; i++)
