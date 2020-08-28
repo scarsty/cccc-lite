@@ -349,7 +349,7 @@ void MatrixExtend::activeForward(const Matrix& A, Matrix& R, ActiveFunctionType 
     //    }
     //    break;
     case ACTIVE_FUNCTION_SIN:
-        MatrixExtend::sin(A, R, M_PI / 2*128);
+        MatrixExtend::sin(A, R, M_PI / 2 * 128);
         break;
     case ACTIVE_FUNCTION_ZIGZAG:
         MatrixExtend::zigzag(A, R);
@@ -487,7 +487,7 @@ void MatrixExtend::activeBackward(Matrix& A, const Matrix& R, ActiveFunctionType
     //    break;
     case ACTIVE_FUNCTION_SIN:
     case ACTIVE_FUNCTION_SIN_STEP:
-        MatrixExtend::cos(A, A.DMatrix(), M_PI / 2*128);
+        MatrixExtend::cos(A, A.DMatrix(), M_PI / 2 * 128);
         MatrixExtend::elementMul(A.DMatrix(), R.DMatrix(), A.DMatrix(), 1);    //不严格，需改为加法
         break;
     case ACTIVE_FUNCTION_ZIGZAG:
@@ -721,8 +721,12 @@ void MatrixExtend::poolingBackward(Matrix& A, const Matrix& R, PoolingType pooli
             cudnnSetPoolingNdDescriptor(cuda->pooling_desc_, cudnnPoolingMode_t(pooling_type), CUDNN_NOT_PROPAGATE_NAN,
                 window.size(), wr.data(), pr.data(), sr.data());
         }
-        cudnnPoolingBackward(cuda->cudnn_handle_, cuda->pooling_desc_,
+        auto s = cudnnPoolingBackward(cuda->cudnn_handle_, cuda->pooling_desc_,
             &a, R.getCudnnTensorDesc(), R.data(), R.getCudnnTensorDesc(), R.DMatrix().data(), A.getCudnnTensorDesc(), A.data(), &r, A.getCudnnTensorDesc(), A.DMatrix().data());
+        if (s)
+        {
+            fprintf(stderr, "Pooling backward error %d", s);
+        }
     }
     else
     {
@@ -879,7 +883,7 @@ void MatrixExtend::convolutionForward(const Matrix& A, const Matrix& W, Matrix& 
             //workspace->message();
         }
         auto cfa = cudnnConvolutionFwdAlgo_t(method % conv_method_count);
-        //auto tensor = cudnnSetConvolutionMathType(cuda->convolution_desc_, cudnnMathType_t(method / conv_method_count % conv_method_count));
+        auto tensor = cudnnSetConvolutionMathType(cuda->convolution_desc_, cudnnMathType_t(method / conv_method_count % conv_method_count));
         auto scf = cudnnConvolutionForward(cuda->cudnn_handle_, &a, A.getCudnnTensorDesc(), A.data(), cuda->filter_desc_, W.data(),
             cuda->convolution_desc_, cfa, workspace.data(), workspace.getDataSizeInByte(), &r, R.getCudnnTensorDesc(), R.data());
         if (scf)
@@ -987,7 +991,8 @@ void MatrixExtend::convolutionBackward(Matrix& A, Matrix& W, const Matrix& R, Ma
             {
                 int n;
                 cudnnConvolutionBwdDataAlgoPerf_t cbdap[conv_method_count];
-                auto t = cudnnFindConvolutionBackwardDataAlgorithm(cuda->cudnn_handle_, cuda->filter_desc_,
+                //cudnnGetConvolutionBackwardDataAlgorithmMaxCount(cuda->cudnn_handle_, &n);
+                auto t = cudnnGetConvolutionBackwardDataAlgorithm_v7(cuda->cudnn_handle_, cuda->filter_desc_,
                     R.getCudnnTensorDesc(), cuda->convolution_desc_, A.getCudnnTensorDesc(), conv_method_count, &n, cbdap);
                 int c = 0;
                 size_t memory = 0;
@@ -1009,7 +1014,7 @@ void MatrixExtend::convolutionBackward(Matrix& A, Matrix& W, const Matrix& R, Ma
                 //workspace->message();
             }
             auto cbda = cudnnConvolutionBwdDataAlgo_t(method_dx % conv_method_count);
-            //auto tensor = cudnnSetConvolutionMathType(cuda->convolution_desc_, cudnnMathType_t(method_dx / conv_method_count % conv_method_count));
+            auto tensor = cudnnSetConvolutionMathType(cuda->convolution_desc_, cudnnMathType_t(method_dx / conv_method_count % conv_method_count));
             auto scbx = cudnnConvolutionBackwardData(cuda->cudnn_handle_, &a, cuda->filter_desc_, W.data(), R.getCudnnTensorDesc(), R.DMatrix().data(),
                 cuda->convolution_desc_, cbda, workspace.data(), workspace.getDataSizeInByte(), &r, A.getCudnnTensorDesc(), A.DMatrix().data());
             if (scbx)
@@ -1024,8 +1029,14 @@ void MatrixExtend::convolutionBackward(Matrix& A, Matrix& W, const Matrix& R, Ma
             {
                 int n;
                 cudnnConvolutionBwdFilterAlgoPerf_t cbfap[conv_method_count];
-                cudnnFindConvolutionBackwardFilterAlgorithm(cuda->cudnn_handle_, A.getCudnnTensorDesc(), R.getCudnnTensorDesc(),
-                    cuda->convolution_desc_, cuda->filter_desc_, conv_method_count, &n, cbfap);
+
+                cudnnGetConvolutionBackwardFilterAlgorithm_v7(cuda->cudnn_handle_, A.getCudnnTensorDesc(), R.getCudnnTensorDesc(), cuda->convolution_desc_, cuda->filter_desc_, conv_method_count, &n, cbfap);
+                //    cuda->convolution_desc_, cuda->filter_desc_, conv_method_count, &n, cbfap);
+
+                //cudnnGetConvolutionBackwardFilterWorkspaceSize();
+
+                //cudnnFindConvolutionBackwardFilterAlgorithm(cuda->cudnn_handle_, A.DMatrix().getCudnnTensorDesc(), R.DMatrix().getCudnnTensorDesc(),
+                //    cuda->convolution_desc_, cuda->filter_desc_, conv_method_count, &n, cbfap);
                 int c = 0;
                 size_t memory = 0;
                 for (int i = 0; i < n; i++)
@@ -1046,7 +1057,7 @@ void MatrixExtend::convolutionBackward(Matrix& A, Matrix& W, const Matrix& R, Ma
                 //workspace->message();
             }
             auto cbfa = cudnnConvolutionBwdFilterAlgo_t(method_dw % conv_method_count);
-            //auto tensor = cudnnSetConvolutionMathType(cuda->convolution_desc_, cudnnMathType_t(method_dw / conv_method_count % conv_method_count));
+            auto tensor = cudnnSetConvolutionMathType(cuda->convolution_desc_, cudnnMathType_t(method_dw / conv_method_count % conv_method_count));
             auto scbw = cudnnConvolutionBackwardFilter(cuda->cudnn_handle_, &a, A.getCudnnTensorDesc(), A.data(), R.getCudnnTensorDesc(), R.DMatrix().data(),
                 cuda->convolution_desc_, cbfa, workspace.data(), workspace.getDataSizeInByte(), &r, cuda->filter_desc_, W.DMatrix().data());
             if (scbw)

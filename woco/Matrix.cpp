@@ -1188,6 +1188,17 @@ void Matrix::message(const std::string& info) const
     }
     fprintf(stdout, "\b\b), add = %p\n", getDataPointer());
     fprintf(stdout, "norm^2 = %g\n", dotSelf());
+    cudnnDataType_t t;
+    int n;
+    int d1[8];
+    int s1[8];
+    cudnnGetTensorNdDescriptor(getCudnnTensorDesc(), 8, &t, &n, d1, s1);
+    fprintf(stdout, "%d %d\n", t, n);
+    for (int i = 0; i < 8; i++)
+    {
+        fprintf(stdout, "%d %d\n", d1[i], s1[i]);
+    }
+    //cudnnSetTensorNdDescriptor(tensor_desc_, t, n, d1, s1);
 }
 
 }    // namespace woco

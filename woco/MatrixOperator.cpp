@@ -34,6 +34,7 @@ void MatrixOperator::forward(MatrixOperator::Queue& op_queue)
 void MatrixOperator::backward(MatrixOperator::Queue& op_queue, MatrixOperator::Queue& loss, Matrix& workspace)
 {
     //使用一个workspace减少调用次数
+    /*
     if (workspace.getDataSize() == 0)
     {
         std::map<Matrix*, int> map_size;
@@ -65,6 +66,22 @@ void MatrixOperator::backward(MatrixOperator::Queue& op_queue, MatrixOperator::Q
         }
     }
     workspace.initData(0);    //这个好像比较慢，采用操作模式无法避免，与层模式相比属于性能瓶颈之一
+    */
+
+    for (auto& op : op_queue)
+    {
+        for (auto& m : op.matrix_in_)
+        {
+            m.DMatrix().initData(0);
+        }
+    }
+    for (auto& op : loss)
+    {
+        for (auto& m : op.matrix_in_)
+        {
+            m.DMatrix().initData(0);
+        }
+    }
 
     for (auto& op : loss)
     {
@@ -110,7 +127,7 @@ void MatrixOperator::forward()
         break;
     case MatrixOpType::CONV:
         MatrixExtend::convolutionForward(matrix_in_[0], matrix_in_[1], matrix_out_[0],
-            para_matrix_[1], para_int_[1], para_int2_[0], para_int2_[1], para_real_[0]);
+            para_matrix_[0], para_int_[1], para_int2_[0], para_int2_[1], para_real_[0]);
         break;
     }
 }
@@ -203,16 +220,16 @@ void MatrixOperator::print() const
 
     fprintf(stdout, "%s->", strs[int(type_)].c_str());
 #ifdef _DEBUG
-    fprintf(stdout, "\n");
-    for (const auto& m : matrix_in_)
-    {
-        m.message();
-    }
-    for (const auto& m : matrix_out_)
-    {
-        m.message();
-    }
-    fprintf(stdout, "\n");
+    //fprintf(stdout, "\n");
+    //for (const auto& m : matrix_in_)
+    //{
+    //    m.message();
+    //}
+    //for (const auto& m : matrix_out_)
+    //{
+    //    m.message();
+    //}
+    //fprintf(stdout, "\n");
 #endif
 }
 
