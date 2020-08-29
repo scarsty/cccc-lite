@@ -11,7 +11,7 @@ namespace woco
 void MatrixExtend::addBias(const Matrix& A, const Matrix& bias, Matrix& R, realc a, realc b)
 {
     assert(checkMatrixDevice({ &A, &bias, &R }));
-    assert(bias.getDataSize() == bias.getChannel() || bias.getNumber() == 1);
+    assert(bias.getDataSize() == bias.channel() || bias.number() == 1);
     copyData(A, R);
     if (A.inGPU())
     {
@@ -22,24 +22,24 @@ void MatrixExtend::addBias(const Matrix& A, const Matrix& bias, Matrix& R, realc
         }
         else
         {
-            CudaControl::setTensorDesc4D(cuda->tensor_desc_, bias.width_, bias.height_, bias.channel_, bias.number_);
-            CudaControl::setTensorDesc4D(cuda->tensor_desc2_, R.width_, R.height_, R.channel_, R.number_);
+            CudaControl::setTensorDesc4D(cuda->tensor_desc_, bias.width(), bias.height(), bias.channel(), bias.number());
+            CudaControl::setTensorDesc4D(cuda->tensor_desc2_, R.width(), R.height(), R.channel(), R.number());
             cudnnAddTensor(cuda->cudnn_handle_, &a, cuda->tensor_desc_, bias.data(), &b, cuda->tensor_desc2_, R.data());
         }
     }
     else
     {
-        if (bias.getDataSize() == bias.getChannel())
+        if (bias.getDataSize() == bias.channel())
         {
-            for (int i = 0; i < R.data_size_; i++)
+            for (int i = 0; i < R.data_size(); i++)
             {
-                int c = i % R.getRow() / (R.getRow() / R.getChannel());
+                int c = i % R.row() / (R.row() / R.channel());
                 R.data()[i] += bias.data()[c];
             }
         }
         else
         {
-            for (int i = 0; i < R.data_size_; i++)
+            for (int i = 0; i < R.data_size(); i++)
             {
                 int c = i % bias.getDataSize();
                 R.data()[i] += bias.data()[c];
@@ -69,11 +69,11 @@ void MatrixExtend::addBiasBackward(Matrix& A, Matrix& bias, const Matrix& R, rea
             {
                 //bias.DMatrix().scale(r);
                 //这个就是对对应的dR求和
-                for (int n = 0; n < R.number_; n++)
+                for (int n = 0; n < R.number(); n++)
                 {
-                    for (int c = 0; c < R.channel_; c++)
+                    for (int c = 0; c < R.channel(); c++)
                     {
-                        bias.DMatrix().getData(0, 0, c, 0) += a * VectorMath::sum(R.DMatrix().getDataPointer(0, 0, c, n), R.width_ * R.height_);
+                        bias.DMatrix().getData(0, 0, c, 0) += a * VectorMath::sum(R.DMatrix().getDataPointer(0, 0, c, n), R.width() * R.height());
                     }
                 }
             }
@@ -83,21 +83,21 @@ void MatrixExtend::addBiasBackward(Matrix& A, Matrix& bias, const Matrix& R, rea
 
 void MatrixExtend::concatByChannel(const std::vector<Matrix>& A_vector, Matrix& R)
 {
-    for (int n = 0; n < R.getCol(); n++)
+    for (int n = 0; n < R.col(); n++)
     {
         int c_off = 0;
         for (int i = 0; i < A_vector.size(); i++)
         {
             auto& tmp = A_vector[i];
-            copyDataPointer(tmp, tmp.getDataPointer(0, 0, 0, n), R, R.getDataPointer(0, 0, c_off, n), tmp.getRow());
-            c_off += tmp.getChannel();
+            copyDataPointer(tmp, tmp.getDataPointer(0, 0, 0, n), R, R.getDataPointer(0, 0, c_off, n), tmp.row());
+            c_off += tmp.channel();
         }
     }
 }
 
 void MatrixExtend::concatByChannelBackward(std::vector<Matrix>& A_vector, const Matrix& R)
 {
-    for (int n = 0; n < R.getCol(); n++)
+    for (int n = 0; n < R.col(); n++)
     {
         int c_off = 0;
         for (int i = 0; i < A_vector.size(); i++)
@@ -106,23 +106,23 @@ void MatrixExtend::concatByChannelBackward(std::vector<Matrix>& A_vector, const 
             auto& tmp = A_vector[i].DMatrix();
             if (A_vector[i].needReverse())
             {
-                copyDataPointer(R, R.DMatrix().getDataPointer(0, 0, c_off, n), tmp, tmp.getDataPointer(0, 0, 0, n), tmp.getRow());
+                copyDataPointer(R, R.DMatrix().getDataPointer(0, 0, c_off, n), tmp, tmp.getDataPointer(0, 0, 0, n), tmp.row());
             }
-            c_off += tmp.getChannel();
+            c_off += tmp.channel();
         }
     }
 }
 
 void MatrixExtend::splitByChannel(const Matrix& A, std::vector<Matrix>& R_vector)
 {
-    for (int n = 0; n < A.getCol(); n++)
+    for (int n = 0; n < A.col(); n++)
     {
         int c_off = 0;
         for (int i = 0; i < R_vector.size(); i++)
         {
             auto& tmp = R_vector[i];
-            copyDataPointer(A, A.getDataPointer(0, 0, c_off, n), tmp, tmp.getDataPointer(0, 0, 0, n), tmp.getRow());
-            c_off += tmp.getChannel();
+            copyDataPointer(A, A.getDataPointer(0, 0, c_off, n), tmp, tmp.getDataPointer(0, 0, 0, n), tmp.row());
+            c_off += tmp.channel();
         }
     }
 }
@@ -166,7 +166,7 @@ void MatrixExtend::activeBufferInit(const Matrix& A, ActiveFunctionType af, std:
     case ACTIVE_FUNCTION_SPATIAL_TRANSFORMER:
         if (A.inGPU())
         {
-            matrix_vector = { Matrix(3, 2, 1, A.number_), Matrix(A).dim_, Matrix(3, 2, 1, A.number_), Matrix(A).dim_ };
+            matrix_vector = { Matrix(3, 2, 1, A.number()), Matrix(A).dim_, Matrix(3, 2, 1, A.number()), Matrix(A).dim_ };
         }
         break;
     case ACTIVE_FUNCTION_RECURRENT:
@@ -176,13 +176,13 @@ void MatrixExtend::activeBufferInit(const Matrix& A, ActiveFunctionType af, std:
         //1 matrix: factor for mul
         Matrix m(A.dim_, DeviceType::CPU);
         m.initData(1);
-        for (int w = 0; w < A.getWidth(); w++)
+        for (int w = 0; w < A.width(); w++)
         {
-            for (int h = 0; h < A.getHeight(); h++)
+            for (int h = 0; h < A.height(); h++)
             {
                 for (int c : int_vector)
                 {
-                    for (int n = 0; n < A.getNumber(); n++)
+                    for (int n = 0; n < A.number(); n++)
                     {
                         m.getData(w, h, c, n) = 0;
                     }
@@ -220,7 +220,7 @@ void MatrixExtend::activeForward(const Matrix& A, Matrix& R, ActiveFunctionType 
         }
         else
         {
-            VectorMath::sigmoid_v(A.data(), R.data(), R.data_size_, a, r);
+            VectorMath::sigmoid_v(A.data(), R.data(), R.data_size(), a, r);
         }
         break;
     case ACTIVE_FUNCTION_RELU:
@@ -232,7 +232,7 @@ void MatrixExtend::activeForward(const Matrix& A, Matrix& R, ActiveFunctionType 
         }
         else
         {
-            VectorMath::relu_v(A.data(), R.data(), R.data_size_, a, r);
+            VectorMath::relu_v(A.data(), R.data(), R.data_size(), a, r);
         }
         break;
     case ACTIVE_FUNCTION_TANH:
@@ -244,14 +244,14 @@ void MatrixExtend::activeForward(const Matrix& A, Matrix& R, ActiveFunctionType 
         }
         else
         {
-            VectorMath::tanh_v(A.data(), R.data(), R.data_size_, a, r);
+            VectorMath::tanh_v(A.data(), R.data(), R.data_size(), a, r);
         }
         break;
     case ACTIVE_FUNCTION_SOFTMAX:
     case ACTIVE_FUNCTION_SOFTMAX_CE:
         if (A.inGPU())
         {
-            CudaControl::setTensorDesc4D(cuda->tensor_desc_, 1, 1, A.row_, A.number_);
+            CudaControl::setTensorDesc4D(cuda->tensor_desc_, 1, 1, A.row(), A.number());
             cudnnSoftmaxForward(cuda->cudnn_handle_, CUDNN_SOFTMAX_ACCURATE, CUDNN_SOFTMAX_MODE_INSTANCE,
                 &a, cuda->tensor_desc_, A.data(), &r, cuda->tensor_desc_, R.data());
         }
@@ -259,12 +259,12 @@ void MatrixExtend::activeForward(const Matrix& A, Matrix& R, ActiveFunctionType 
         {
             //因为数值问题，可能需要减去每列最大值
             MatrixExtend::copyData(A, R);
-            for (int i = 0; i < R.number_; i++)
+            for (int i = 0; i < R.number(); i++)
             {
-                VectorMath::minus_max(R.getDataPointer(0, i), R.row_);
+                VectorMath::minus_max(R.getDataPointer(0, i), R.row());
             }
-            VectorMath::exp_v(R.data(), R.data(), R.data_size_);
-            for (int i = 0; i < R.number_; i++)
+            VectorMath::exp_v(R.data(), R.data(), R.data_size());
+            for (int i = 0; i < R.number(); i++)
             {
                 real sum = R.sumAbsCol(i);
                 if (sum == 0)
@@ -279,14 +279,14 @@ void MatrixExtend::activeForward(const Matrix& A, Matrix& R, ActiveFunctionType 
     case ACTIVE_FUNCTION_SOFTMAX_FAST_CE:
         if (A.inGPU())
         {
-            CudaControl::setTensorDesc4D(cuda->tensor_desc_, 1, 1, A.row_, A.number_);
+            CudaControl::setTensorDesc4D(cuda->tensor_desc_, 1, 1, A.row(), A.number());
             cudnnSoftmaxForward(cuda->cudnn_handle_, CUDNN_SOFTMAX_FAST, CUDNN_SOFTMAX_MODE_INSTANCE,
                 &a, cuda->tensor_desc_, A.data(), &r, cuda->tensor_desc_, R.data());
         }
         else
         {
-            VectorMath::exp_v(A.data(), R.data(), R.data_size_, a, r);
-            for (int i = 0; i < R.number_; i++)
+            VectorMath::exp_v(A.data(), R.data(), R.data_size(), a, r);
+            for (int i = 0; i < R.number(); i++)
             {
                 real sum = R.sumAbsCol(i);
                 if (sum == 0)
@@ -300,27 +300,27 @@ void MatrixExtend::activeForward(const Matrix& A, Matrix& R, ActiveFunctionType 
     case ACTIVE_FUNCTION_SOFTMAX_LOG:
         if (A.inGPU())
         {
-            CudaControl::setTensorDesc4D(cuda->tensor_desc_, 1, 1, A.row_, A.number_);
+            CudaControl::setTensorDesc4D(cuda->tensor_desc_, 1, 1, A.row(), A.number());
             cudnnSoftmaxForward(cuda->cudnn_handle_, CUDNN_SOFTMAX_LOG, CUDNN_SOFTMAX_MODE_INSTANCE,
                 &a, cuda->tensor_desc_, A.data(), &r, cuda->tensor_desc_, R.data());
         }
         else
         {
             activeForward(A, R, ACTIVE_FUNCTION_SOFTMAX);
-            VectorMath::log_v(R.data(), R.data(), R.data_size_, a, r);
+            VectorMath::log_v(R.data(), R.data(), R.data_size(), a, r);
         }
         break;
     case ACTIVE_FUNCTION_ABSMAX:
         //计算时尽量不要使用，只用在验证时
-        if (R.data_size_ <= 0)
+        if (R.data_size() <= 0)
         {
             return;
         }
         if (A.inGPU())
         {
-            Matrix T(R.row_, R.number_, DeviceType::CPU);
+            Matrix T(R.row(), R.number(), DeviceType::CPU);
             T.scale(0);
-            for (int i_group = 0; i_group < R.number_; i_group++)
+            for (int i_group = 0; i_group < R.number(); i_group++)
             {
                 int index = A.indexColMaxAbs(i_group);
                 T.getData(index, i_group) = 1;
@@ -330,7 +330,7 @@ void MatrixExtend::activeForward(const Matrix& A, Matrix& R, ActiveFunctionType 
         else
         {
             R.scale(0);
-            for (int i_group = 0; i_group < R.number_; i_group++)
+            for (int i_group = 0; i_group < R.number(); i_group++)
             {
                 int index = A.indexColMaxAbs(i_group);
                 R.getData(index, i_group) = 1;
@@ -402,7 +402,7 @@ void MatrixExtend::activeBackward(Matrix& A, const Matrix& R, ActiveFunctionType
         }
         else
         {
-            VectorMath::sigmoid_vb(R.data(), R.DMatrix().data(), A.data(), A.DMatrix().data(), A.data_size_, a, r);
+            VectorMath::sigmoid_vb(R.data(), R.DMatrix().data(), A.data(), A.DMatrix().data(), A.data_size(), a, r);
         }
         break;
     case ACTIVE_FUNCTION_RELU:
@@ -414,7 +414,7 @@ void MatrixExtend::activeBackward(Matrix& A, const Matrix& R, ActiveFunctionType
         }
         else
         {
-            VectorMath::relu_vb(R.data(), R.DMatrix().data(), A.data(), A.DMatrix().data(), A.data_size_, a, r);
+            VectorMath::relu_vb(R.data(), R.DMatrix().data(), A.data(), A.DMatrix().data(), A.data_size(), a, r);
         }
         break;
     case ACTIVE_FUNCTION_TANH:
@@ -427,7 +427,7 @@ void MatrixExtend::activeBackward(Matrix& A, const Matrix& R, ActiveFunctionType
         }
         else
         {
-            VectorMath::tanh_vb(R.data(), R.DMatrix().data(), A.data(), A.DMatrix().data(), A.data_size_, a, r);
+            VectorMath::tanh_vb(R.data(), R.DMatrix().data(), A.data(), A.DMatrix().data(), A.data_size(), a, r);
         }
         break;
     case ACTIVE_FUNCTION_SOFTMAX:
@@ -439,36 +439,36 @@ void MatrixExtend::activeBackward(Matrix& A, const Matrix& R, ActiveFunctionType
             {
                 softmax_flag = CUDNN_SOFTMAX_FAST;
             }
-            CudaControl::setTensorDesc4D(cuda->tensor_desc_, 1, 1, A.row_, A.number_);
+            CudaControl::setTensorDesc4D(cuda->tensor_desc_, 1, 1, A.row(), A.number());
             auto s = cudnnSoftmaxBackward(cuda->cudnn_handle_, softmax_flag, CUDNN_SOFTMAX_MODE_INSTANCE,
                 &a, cuda->tensor_desc_, R.data(), cuda->tensor_desc_, R.DMatrix().data(), &r, cuda->tensor_desc_, A.DMatrix().data());
         }
         else
         {
-            for (int i = 0; i < A.number_; i++)
+            for (int i = 0; i < A.number(); i++)
             {
                 real v = MatrixExtend::dotCol(R, i, R.DMatrix(), i);
-                VectorMath::softmax_vb_sub(R.getDataPointer(0, i), R.DMatrix().getDataPointer(0, i), v, A.DMatrix().getDataPointer(0, i), A.row_);
+                VectorMath::softmax_vb_sub(R.getDataPointer(0, i), R.DMatrix().getDataPointer(0, i), v, A.DMatrix().getDataPointer(0, i), A.row());
             }
         }
         break;
     case ACTIVE_FUNCTION_SOFTMAX_LOG:
         if (A.inGPU())
         {
-            CudaControl::setTensorDesc4D(cuda->tensor_desc_, 1, 1, A.row_, A.number_);
+            CudaControl::setTensorDesc4D(cuda->tensor_desc_, 1, 1, A.row(), A.number());
             auto s = cudnnSoftmaxBackward(cuda->cudnn_handle_, CUDNN_SOFTMAX_LOG, CUDNN_SOFTMAX_MODE_INSTANCE,
                 &a, cuda->tensor_desc_, R.data(), cuda->tensor_desc_, R.DMatrix().data(), &r, cuda->tensor_desc_, A.DMatrix().data());
         }
         else
         {
-            for (int i = 0; i < A.number_; i++)
+            for (int i = 0; i < A.number(); i++)
             {
                 real v = 0;
-                for (int j = 0; j < A.row_; j++)
+                for (int j = 0; j < A.row(); j++)
                 {
                     v += R.DMatrix().getData(i, j);
                 }
-                VectorMath::softmaxlog_vb_sub(R.getDataPointer(0, i), R.DMatrix().getDataPointer(0, i), v, A.DMatrix().getDataPointer(0, i), A.row_);
+                VectorMath::softmaxlog_vb_sub(R.getDataPointer(0, i), R.DMatrix().getDataPointer(0, i), v, A.DMatrix().getDataPointer(0, i), A.row());
             }
         }
         break;
@@ -520,7 +520,7 @@ void MatrixExtend::activeForward2(const Matrix& A, Matrix& R, ActiveFunctionType
         }
         else
         {
-            VectorMath::clipped_relu_v(A.data(), R.data(), real_vector[0], R.data_size_, a, r);
+            VectorMath::clipped_relu_v(A.data(), R.data(), real_vector[0], R.data_size(), a, r);
         }
         break;
     case ACTIVE_FUNCTION_DROPOUT:
@@ -572,7 +572,7 @@ void MatrixExtend::activeBackward2(Matrix& A, const Matrix& R, ActiveFunctionTyp
         }
         else
         {
-            VectorMath::clipped_relu_vb(R.data(), R.DMatrix().data(), A.data(), A.DMatrix().data(), real_vector[0], A.data_size_, a, r);
+            VectorMath::clipped_relu_vb(R.data(), R.DMatrix().data(), A.data(), A.DMatrix().data(), real_vector[0], A.data_size(), a, r);
         }
         break;
     case ACTIVE_FUNCTION_DROPOUT:
@@ -640,11 +640,11 @@ void MatrixExtend::poolingForward(const Matrix& A, Matrix& R, PoolingType poolin
     else
     {
         R.initData(0);
-        for (int p = 0; p < R.number_ * R.channel_; p++)
+        for (int p = 0; p < R.number() * R.channel(); p++)
         {
-            for (int wA = 0; wA < R.width_; wA++)
+            for (int wA = 0; wA < R.width(); wA++)
             {
-                for (int hA = 0; hA < R.height_; hA++)
+                for (int hA = 0; hA < R.height(); hA++)
                 {
                     real v = 0;
                     if (pooling_type == POOLING_MAX)
@@ -654,9 +654,9 @@ void MatrixExtend::poolingForward(const Matrix& A, Matrix& R, PoolingType poolin
                     int n = 0;
                     int wX0 = wA * stride[0] - padding[0];
                     int hX0 = hA * stride[1] - padding[1];
-                    for (int wX = wX0; wX < std::min(A.width_, wX0 + window[0]); wX++)
+                    for (int wX = wX0; wX < std::min(A.width(), wX0 + window[0]); wX++)
                     {
-                        for (int hX = hX0; hX < std::min(A.height_, hX0 + window[1]); hX++)
+                        for (int hX = hX0; hX < std::min(A.height(), hX0 + window[1]); hX++)
                         {
                             if (pooling_type == POOLING_AVERAGE_PADDING || pooling_type == POOLING_AVERAGE_NOPADDING)
                             {
@@ -731,11 +731,11 @@ void MatrixExtend::poolingBackward(Matrix& A, const Matrix& R, PoolingType pooli
     else
     {
         //dX->initData(0);
-        for (int p = 0; p < R.number_ * R.channel_; p++)
+        for (int p = 0; p < R.number() * R.channel(); p++)
         {
-            for (int wdA = 0; wdA < R.width_; wdA++)
+            for (int wdA = 0; wdA < R.width(); wdA++)
             {
-                for (int hdA = 0; hdA < R.height_; hdA++)
+                for (int hdA = 0; hdA < R.height(); hdA++)
                 {
                     int wdX0 = wdA * stride[0] - padding[0];
                     int hdX0 = hdA * stride[1] - padding[1];
@@ -743,9 +743,9 @@ void MatrixExtend::poolingBackward(Matrix& A, const Matrix& R, PoolingType pooli
                     {
                         real max_v = -REAL_MAX;
                         real* max_p = nullptr;
-                        for (int wdX = wdX0; wdX < std::min(A.width_, wdX0 + window[0]); wdX++)
+                        for (int wdX = wdX0; wdX < std::min(A.width(), wdX0 + window[0]); wdX++)
                         {
-                            for (int hdX = hdX0; hdX < std::min(A.height_, hdX0 + window[1]); hdX++)
+                            for (int hdX = hdX0; hdX < std::min(A.height(), hdX0 + window[1]); hdX++)
                             {
                                 if (A.haveData(wdX, hdX, p, 0))
                                 {
@@ -768,16 +768,16 @@ void MatrixExtend::poolingBackward(Matrix& A, const Matrix& R, PoolingType pooli
                         int n;
                         if (pooling_type == POOLING_AVERAGE_NOPADDING)
                         {
-                            n = std::min(window[0], A.width_ - wdA * stride[0]) * std::min(window[1], A.height_ - hdA * stride[1]);
+                            n = std::min(window[0], A.width() - wdA * stride[0]) * std::min(window[1], A.height() - hdA * stride[1]);
                         }
                         else
                         {
                             n = window[0] * window[1];
                         }
                         real v = R.DMatrix().getData(wdA, hdA, p, 0) / n;
-                        for (int wdX = wdX0; wdX < std::min(A.width_, wdX0 + window[0]); wdX++)
+                        for (int wdX = wdX0; wdX < std::min(A.width(), wdX0 + window[0]); wdX++)
                         {
-                            for (int hdX = hdX0; hdX < std::min(A.height_, hdX0 + window[1]); hdX++)
+                            for (int hdX = hdX0; hdX < std::min(A.height(), hdX0 + window[1]); hdX++)
                             {
                                 if (A.haveData(wdX, hdX, p, 0))
                                 {
@@ -796,14 +796,14 @@ void MatrixExtend::poolingBackward(Matrix& A, const Matrix& R, PoolingType pooli
 //这个循环顺序次数最少
 #define CONV_OPERATION1(A, W, R, pw, ph, sw, sh, DO_SOMETHING) \
     do { \
-        for (int wR = 0; wR < R.width_; wR++) \
-            for (int hR = 0; hR < R.height_; hR++) \
-                for (int wW = 0; wW < W.width_; wW++) \
-                    for (int hW = 0; hW < W.height_; hW++) \
+        for (int wR = 0; wR < R.width(); wR++) \
+            for (int hR = 0; hR < R.height(); hR++) \
+                for (int wW = 0; wW < W.width(); wW++) \
+                    for (int hW = 0; hW < W.height(); hW++) \
                     { \
                         int wA = wR + wW - pw; \
                         int hA = hR + hW - ph; \
-                        if (wA >= 0 && wA < A.width_ && hA >= 0 && hA < A.height_) \
+                        if (wA >= 0 && wA < A.width() && hA >= 0 && hA < A.height()) \
                         { \
                             DO_SOMETHING \
                         } \
@@ -827,7 +827,7 @@ void MatrixExtend::convolutionForward(const Matrix& A, const Matrix& W, Matrix& 
         if (stride.size() == 2)
         {
             scd = cudnnSetConvolution2dDescriptor(cuda->convolution_desc_, padding[1], padding[0], stride[1], stride[0], 1, 1, CUDNN_CROSS_CORRELATION, MYCUDNN_DATA_REAL);
-            sfd = cudnnSetFilter4dDescriptor(cuda->filter_desc_, MYCUDNN_DATA_REAL, CUDNN_TENSOR_NCHW, W.number_, W.channel_, W.height_, W.width_);
+            sfd = cudnnSetFilter4dDescriptor(cuda->filter_desc_, MYCUDNN_DATA_REAL, CUDNN_TENSOR_NCHW, W.number(), W.channel(), W.height(), W.width());
         }
         else
         {
@@ -844,7 +844,7 @@ void MatrixExtend::convolutionForward(const Matrix& A, const Matrix& W, Matrix& 
         }
         cudnnSetConvolutionMathType(cuda->convolution_desc_, CUDNN_TENSOR_OP_MATH);
         //寻找最快的算法
-        if (method < A.getNumber() * conv_method_count * conv_method_count)
+        if (method < A.number() * conv_method_count * conv_method_count)
         {
             int n;
             cudnnConvolutionFwdAlgoPerf_t cfap[conv_method_count];
@@ -871,7 +871,7 @@ void MatrixExtend::convolutionForward(const Matrix& A, const Matrix& W, Matrix& 
                         memory = std::max(memory, cfap[i].memory);
                     }
                 }
-                method = cfap[c].algo + cfap[c].mathType * conv_method_count + A.getNumber() * conv_method_count * conv_method_count;
+                method = cfap[c].algo + cfap[c].mathType * conv_method_count + A.number() * conv_method_count * conv_method_count;
                 //size_t memory = cfap[c].memory;
                 if (memory > workspace.getDataSizeInByte())
                 {
@@ -895,8 +895,8 @@ void MatrixExtend::convolutionForward(const Matrix& A, const Matrix& W, Matrix& 
     {
         R.initData(0);
         //辅助矩阵的尺寸
-        int row = R.width_ * R.height_;
-        int col = A.channel_ * W.width_ * W.height_;
+        int row = R.width() * R.height();
+        int col = A.channel() * W.width() * W.height();
         Matrix A_ex(row, col, DeviceType::CPU);
         if (method < 0)
         {
@@ -904,7 +904,7 @@ void MatrixExtend::convolutionForward(const Matrix& A, const Matrix& W, Matrix& 
             workspace.resize(1, 1, row * col, 3);
             workspace.initData(-1);
             //ex_pos记录展开的位置，预先记录节省时间
-            for (int cA = 0; cA < A.channel_; cA++)
+            for (int cA = 0; cA < A.channel(); cA++)
             {
                 CONV_OPERATION1(A, W, R, padding[0], padding[1], stride[0], stride[1],
                     {
@@ -918,9 +918,9 @@ void MatrixExtend::convolutionForward(const Matrix& A, const Matrix& W, Matrix& 
                     });
             }
         }
-        Matrix A_sub(A.row_, 1, DeviceType::CPU);
-        Matrix R_sub(R.width_ * R.height_, R.channel_, DeviceType::CPU);    //todo这两个应该是专用于share, 这样写会导致内存多释放一次,待处理,下同
-        for (int i = 0; i < A.number_; i++)
+        Matrix A_sub(A.row(), 1, DeviceType::CPU);
+        Matrix R_sub(R.width() * R.height(), R.channel(), DeviceType::CPU);    //todo这两个应该是专用于share, 这样写会导致内存多释放一次,待处理,下同
+        for (int i = 0; i < A.number(); i++)
         {
             A_sub.shareData(A, 0, i);
             R_sub.shareData(R, 0, i);
@@ -939,11 +939,11 @@ void MatrixExtend::convolutionForward(const Matrix& A, const Matrix& W, Matrix& 
 #ifdef DIRECT_COMPUTE_CONVOLUTION
         //这是原始计算方法，速度很慢，不要打开这段代码
         //fprintf(stderr, "Please supply buffer vector and use the faster convolution method.\n");
-        for (int n = 0; n < R.number_; n++)
+        for (int n = 0; n < R.number(); n++)
         {
-            for (int cX = 0; cX < A.channel_; cX++)
+            for (int cX = 0; cX < A.channel(); cX++)
             {
-                for (int cA = 0; cA < R.channel_; cA++)
+                for (int cA = 0; cA < R.channel(); cA++)
                 {
                     CONV_OPERATION1(A, W, R,
                         {
@@ -969,7 +969,7 @@ void MatrixExtend::convolutionBackward(Matrix& A, Matrix& W, const Matrix& R, Ma
         if (stride.size() == 2)
         {
             cudnnSetConvolution2dDescriptor(cuda->convolution_desc_, padding[1], padding[0], stride[1], stride[0], 1, 1, CUDNN_CROSS_CORRELATION, MYCUDNN_DATA_REAL);
-            cudnnSetFilter4dDescriptor(cuda->filter_desc_, MYCUDNN_DATA_REAL, CUDNN_TENSOR_NCHW, W.number_, W.channel_, W.height_, W.width_);
+            cudnnSetFilter4dDescriptor(cuda->filter_desc_, MYCUDNN_DATA_REAL, CUDNN_TENSOR_NCHW, W.number(), W.channel(), W.height(), W.width());
         }
         else
         {
@@ -987,7 +987,7 @@ void MatrixExtend::convolutionBackward(Matrix& A, Matrix& W, const Matrix& R, Ma
         if (A.needReverse())
         {
             //寻找最快的算法
-            if (method_dx < A.getNumber() * conv_method_count * conv_method_count)
+            if (method_dx < A.number() * conv_method_count * conv_method_count)
             {
                 int n;
                 cudnnConvolutionBwdDataAlgoPerf_t cbdap[conv_method_count];
@@ -1002,7 +1002,7 @@ void MatrixExtend::convolutionBackward(Matrix& A, Matrix& W, const Matrix& R, Ma
                         memory = std::max(memory, cbdap[i].memory);
                     }
                 }
-                method_dx = cbdap[c].algo + cbdap[c].mathType * conv_method_count + A.getNumber() * conv_method_count * conv_method_count;
+                method_dx = cbdap[c].algo + cbdap[c].mathType * conv_method_count + A.number() * conv_method_count * conv_method_count;
                 //size_t memory = cbdap[c].memory;
                 if (memory > workspace.getDataSizeInByte())
                 {
@@ -1024,7 +1024,7 @@ void MatrixExtend::convolutionBackward(Matrix& A, Matrix& W, const Matrix& R, Ma
         if (W.needReverse())
         {
             //寻找最快的算法
-            if (method_dw < A.getNumber() * conv_method_count * conv_method_count)
+            if (method_dw < A.number() * conv_method_count * conv_method_count)
             {
                 int n;
                 cudnnConvolutionBwdFilterAlgoPerf_t cbfap[conv_method_count];
@@ -1039,7 +1039,7 @@ void MatrixExtend::convolutionBackward(Matrix& A, Matrix& W, const Matrix& R, Ma
                         memory = std::max(memory, cbfap[i].memory);
                     }
                 }
-                method_dw = cbfap[c].algo + cbfap[c].mathType * conv_method_count + A.getNumber() * conv_method_count * conv_method_count;
+                method_dw = cbfap[c].algo + cbfap[c].mathType * conv_method_count + A.number() * conv_method_count * conv_method_count;
                 //size_t memory = cbfap[c].memory;
                 if (memory > workspace.getDataSizeInByte())
                 {
@@ -1070,17 +1070,17 @@ void MatrixExtend::convolutionBackward(Matrix& A, Matrix& W, const Matrix& R, Ma
         {
             //计算dX从数学上来看可以反向来求展开后的dX，再压缩，但是看起来加法次数较多
             //转置W的输入和输出
-            Matrix W2(W.width_, W.height_, W.number_, W.channel_, DeviceType::CPU);
-            for (int i = 0; i < W.channel_; i++)
+            Matrix W2(W.width(), W.height(), W.number(), W.channel(), DeviceType::CPU);
+            for (int i = 0; i < W.channel(); i++)
             {
-                for (int j = 0; j < W.number_; j++)
+                for (int j = 0; j < W.number(); j++)
                 {
-                    copyDataPointer(W, W.getDataPointer(0, 0, i, j), W2, W2.getDataPointer(0, 0, j, i), W.width_ * W.height_);
+                    copyDataPointer(W, W.getDataPointer(0, 0, i, j), W2, W2.getDataPointer(0, 0, j, i), W.width() * W.height());
                 }
             }
             //辅助矩阵的尺寸
-            int row = A.width_ * A.height_;
-            int col = R.channel_ * W.width_ * W.height_;
+            int row = A.width() * A.height();
+            int col = R.channel() * W.width() * W.height();
             Matrix dR_ex(row, col, DeviceType::CPU);
             dR_ex.initData(0);
             if (method_dx < 0)
@@ -1088,7 +1088,7 @@ void MatrixExtend::convolutionBackward(Matrix& A, Matrix& W, const Matrix& R, Ma
                 method_dx = 0;
                 //workspace->resize(1, 1, 3, row * col);
                 //workspace->initData(-1);
-                for (int cR = 0; cR < R.channel_; cR++)
+                for (int cR = 0; cR < R.channel(); cR++)
                 {
                     CONV_OPERATION1(A, W, R, padding[0], padding[1], stride[0], stride[1],
                         {
@@ -1102,9 +1102,9 @@ void MatrixExtend::convolutionBackward(Matrix& A, Matrix& W, const Matrix& R, Ma
                         });
                 }
             }
-            Matrix dR_sub(R.row_, 1, DeviceType::CPU);
-            Matrix dA_sub(A.width_ * A.height_, A.channel_, DeviceType::CPU);
-            for (int i = 0; i < R.number_; i++)
+            Matrix dR_sub(R.row(), 1, DeviceType::CPU);
+            Matrix dA_sub(A.width() * A.height(), A.channel(), DeviceType::CPU);
+            for (int i = 0; i < R.number(); i++)
             {
                 dR_sub.shareData(R, 0, i);
                 dA_sub.shareData(A, 0, i);
@@ -1123,8 +1123,8 @@ void MatrixExtend::convolutionBackward(Matrix& A, Matrix& W, const Matrix& R, Ma
         {
             W.DMatrix().scale(r);
             //辅助矩阵的尺寸
-            int row = W.width_ * W.height_ * W.channel_;
-            int col = R.width_ * R.height_;
+            int row = W.width() * W.height() * W.channel();
+            int col = R.width() * R.height();
             Matrix A_ex(row, col, DeviceType::CPU);
             A_ex.initData(0);
             if (method_dw < 0)
@@ -1133,7 +1133,7 @@ void MatrixExtend::convolutionBackward(Matrix& A, Matrix& W, const Matrix& R, Ma
                 //workspace->resize(1, 1, 3, row * col);
                 //workspace->initData(-1);
                 //cW==cX, nW=cA
-                for (int cW = 0; cW < W.channel_; cW++)
+                for (int cW = 0; cW < W.channel(); cW++)
                 {
                     CONV_OPERATION1(A, W, R, padding[0], padding[1], stride[0], stride[1],
                         {
@@ -1146,9 +1146,9 @@ void MatrixExtend::convolutionBackward(Matrix& A, Matrix& W, const Matrix& R, Ma
                         });
                 }
             }
-            Matrix dR_sub(R.width_ * R.height_, R.channel_, DeviceType::CPU);
-            Matrix A_sub(A.row_, 1, DeviceType::CPU);
-            for (int i = 0; i < R.number_; i++)
+            Matrix dR_sub(R.width() * R.height(), R.channel(), DeviceType::CPU);
+            Matrix A_sub(A.row(), 1, DeviceType::CPU);
+            for (int i = 0; i < R.number(); i++)
             {
                 dR_sub.shareData(R, 0, i);
                 A_sub.shareData(A, 0, i);
@@ -1184,11 +1184,11 @@ void MatrixExtend::convolutionBackward(Matrix& A, Matrix& W, const Matrix& R, Ma
         {
             dX.scale(r);
         }
-        for (int n = 0; n < R.number_; n++)
+        for (int n = 0; n < R.number(); n++)
         {
-            for (int cX = 0; cX < A.channel_; cX++)
+            for (int cX = 0; cX < A.channel(); cX++)
             {
-                for (int cA = 0; cA < R.channel_; cA++)
+                for (int cA = 0; cA < R.channel(); cA++)
                 {
                     CONV_OPERATION1(A, W, R, wX, hX, wW, hW, wA, hA,
                         {
@@ -1229,7 +1229,7 @@ void MatrixExtend::dropoutForward(const Matrix& A, Matrix& R, ActivePhaseType wo
     {
         Random<real> r;
         r.set_seed(seed);
-        for (int i = 0; i < R.data_size_; i++)
+        for (int i = 0; i < R.data_size(); i++)
         {
             if (r.rand() < v)
             {
@@ -1256,7 +1256,7 @@ void MatrixExtend::dropoutBackward(Matrix& A, const Matrix& R, real v, int seed,
     }
     else
     {
-        for (int i = 0; i < A.data_size_; i++)
+        for (int i = 0; i < A.data_size(); i++)
         {
             if (R.data()[i] == 0)
             {
@@ -1320,7 +1320,7 @@ void MatrixExtend::adaDeltaUpdate(Matrix& mean_d2, Matrix& mean_ada_d2, Matrix& 
     assert(checkMatrixDevice({ &mean_d2, &mean_ada_d2, &d, &ada_d }));
     if (d.inGPU())
     {
-        cuda_ada_delta_update(mean_d2.data(), mean_ada_d2.data(), d.data(), ada_d.data(), d.data_size_, rou, epsilon);
+        cuda_ada_delta_update(mean_d2.data(), mean_ada_d2.data(), d.data(), ada_d.data(), d.data_size(), rou, epsilon);
     }
     else
     {
@@ -1328,7 +1328,7 @@ void MatrixExtend::adaDeltaUpdate(Matrix& mean_d2, Matrix& mean_ada_d2, Matrix& 
         auto p2 = mean_ada_d2.data();
         auto p3 = d.data();
         auto p4 = ada_d.data();
-        for (int i = 0; i < d.data_size_; i++)
+        for (int i = 0; i < d.data_size(); i++)
         {
             p1[i] = p1[i] * rou + p3[i] * p3[i] * (1 - rou);
             p4[i] = p3[i] * sqrt((p2[i] + epsilon) / (p1[i] + epsilon));
@@ -1342,7 +1342,7 @@ void MatrixExtend::adamUpdate(Matrix& mean_d, Matrix& mean_d2, Matrix& d, Matrix
     assert(checkMatrixDevice({ &mean_d, &mean_d2, &d, &ada_d }));
     if (d.inGPU())
     {
-        cuda_adam_update(mean_d.data(), mean_d2.data(), d.data(), ada_d.data(), d.data_size_, beta1, beta2, epsilon, t);
+        cuda_adam_update(mean_d.data(), mean_d2.data(), d.data(), ada_d.data(), d.data_size(), beta1, beta2, epsilon, t);
     }
     else
     {
@@ -1350,7 +1350,7 @@ void MatrixExtend::adamUpdate(Matrix& mean_d, Matrix& mean_d2, Matrix& d, Matrix
         auto p2 = mean_d2.data();
         auto p3 = d.data();
         auto p4 = ada_d.data();
-        for (int i = 0; i < d.data_size_; i++)
+        for (int i = 0; i < d.data_size(); i++)
         {
             p1[i] = p1[i] * beta1 + p3[i] * (1 - beta1);
             p2[i] = p2[i] * beta2 + p3[i] * p3[i] * (1 - beta2);
@@ -1364,14 +1364,14 @@ void MatrixExtend::adaRMSPropUpdate(Matrix& mean_d2, Matrix& d, Matrix& ada_d, r
     assert(checkMatrixDevice({ &mean_d2, &d, &ada_d }));
     if (d.inGPU())
     {
-        cuda_rms_prop_update(mean_d2.data(), d.data(), ada_d.data(), d.data_size_, rou, epsilon);
+        cuda_rms_prop_update(mean_d2.data(), d.data(), ada_d.data(), d.data_size(), rou, epsilon);
     }
     else
     {
         auto p1 = mean_d2.data();
         auto p2 = d.data();
         auto p3 = ada_d.data();
-        for (int i = 0; i < d.data_size_; i++)
+        for (int i = 0; i < d.data_size(); i++)
         {
             p1[i] = p1[i] * rou + p2[i] * p2[i] * (1 - rou);
             p3[i] = p2[i] * sqrt(1.0 / (p1[i] + epsilon));
@@ -1384,11 +1384,11 @@ void MatrixExtend::sparse(Matrix& rou_hat, Matrix& R, real rou, real beta)
 {
     if (rou_hat.inGPU())
     {
-        cuda_sparse(rou_hat.data(), R.data(), R.data_size_, rou, beta);
+        cuda_sparse(rou_hat.data(), R.data(), R.data_size(), rou, beta);
     }
     else
     {
-        for (int i = 0; i < R.data_size_; i++)
+        for (int i = 0; i < R.data_size(); i++)
         {
             R.data()[i] = ((1 - rou) / (1 - rou_hat.data()[i]) - rou / rou_hat.data()[i]) * beta;
         }
@@ -1444,7 +1444,7 @@ void MatrixExtend::sin(const Matrix& A, Matrix& R, real a)
     }
     else
     {
-        for (int i = 0; i < R.data_size_; i++)
+        for (int i = 0; i < R.data_size(); i++)
         {
             R.getData(i) = ::sin(a * A.getData(i));
         }
@@ -1460,7 +1460,7 @@ void MatrixExtend::cos(const Matrix& A, Matrix& R, real a)
     }
     else
     {
-        for (int i = 0; i < R.data_size_; i++)
+        for (int i = 0; i < R.data_size(); i++)
         {
             R.getData(i) = ::cos(a * A.getData(i));
         }
@@ -1476,7 +1476,7 @@ void MatrixExtend::zigzag(const Matrix& A, Matrix& R)
     }
     else
     {
-        for (int i = 0; i < R.data_size_; i++)
+        for (int i = 0; i < R.data_size(); i++)
         {
             auto& x = A.getData(i);
             R.getData(i) = x - 2 * floor((x - 1) / 2) - 2;
@@ -1497,7 +1497,7 @@ void MatrixExtend::zigzagb(Matrix& A, const Matrix& R)
         auto p1 = R.data();
         auto p2 = R.DMatrix().data();
         auto p3 = A.DMatrix().data();
-        for (int i = 0; i < R.data_size_; i++)
+        for (int i = 0; i < R.data_size(); i++)
         {
             if (abs(p1[i]) > 1 - 1e-2)
             {

@@ -347,7 +347,7 @@ void elementMul(const Matrix& A, const Matrix& B, Matrix& R, real a)
 
 void add(const Matrix& A, const Matrix& B, Matrix& R, realc a, realc b)
 {
-    if (B.getNumber() == 1)    //此处判断需完善
+    if (B.number() == 1)    //此处判断需完善
     {
         addBias(A, B, R);
         return;
@@ -474,7 +474,7 @@ Matrix scale(const Matrix& A, real r)
 
 Matrix mul(const Matrix& A, const Matrix& B, real a)
 {
-    Matrix R(A.getRow(), B.getCol(), A.getDeviceType());
+    Matrix R(A.row(), B.col(), A.getDeviceType());
     mul(A, B, R, a);
     return R;
 }
