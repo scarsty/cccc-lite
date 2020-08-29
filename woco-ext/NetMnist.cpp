@@ -20,7 +20,7 @@ void NetMnist::structureExample()
     auto A1 = relu(maxpool(conv(X, W1) + b1, { 2, 2 }));
     auto A2 = relu(maxpool(conv(A1, W2) + b2, { 2, 2 }));
 
-    Matrix W3(256, A2.getRow()), b3(256, 1);
+    Matrix W3(256, A2.row()), b3(256, 1);
     Matrix W4(10, 256), b4(10, 1);
 
     auto A = softmax_ce(W4 * relu(W3 * A2 + b3) + b4);    //计算结果
@@ -34,7 +34,7 @@ void NetMnist::structureExample()
     weights_ = { W1, b1, W2, b2, W3, b3, W4, b4 };
     for (auto& m : weights_)
     {
-        MatrixExtend::fill(m, RANDOM_FILL_XAVIER, m.getChannel(), m.getNumber());
+        MatrixExtend::fill(m, RANDOM_FILL_XAVIER, m.channel(), m.number());
     }
 
     //损失
@@ -63,14 +63,14 @@ void NetMnist::structure()
     auto b2 = Matrix(1, 1, 50, 1);
     auto A1 = relu(maxpool(conv(X, W1) + b1, { 2, 2 }));
     auto A2 = relu(maxpool(conv(A1, W2) + b2, { 2, 2 }));
-    auto W3 = Matrix(256, A2.getRow());
+    auto W3 = Matrix(256, A2.row());
     auto b3 = Matrix(256, 1);
     auto W4 = Matrix(10, 256);
     auto b4 = Matrix(10, 1);
     auto A = softmax_ce(W4 * relu(W3 * A2 + b3) + b4);
     auto Y = Matrix(1, 1, 10, batch);
     //print_message(A);
-    //print(A2.getRow());
+    //print(A2.row());
     setXYA(X, Y, A);
     addWeight(W1, b1, W2, b2, W3, b3, W4, b4);
     addLoss(crossEntropy(A, Y) + 1e-4 * (L2(W1) + L2(W2) + L2(W3) + L2(W4)));
@@ -78,7 +78,7 @@ void NetMnist::structure()
 
     for (auto& m : weights_)
     {
-        MatrixExtend::fill(m, RANDOM_FILL_XAVIER, m.getChannel(), m.getNumber());
+        MatrixExtend::fill(m, RANDOM_FILL_XAVIER, m.channel(), m.number());
     }
 }
 

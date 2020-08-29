@@ -63,7 +63,7 @@ void NetCifa::structure()
 
     for (auto& m : weights_)
     {
-        MatrixExtend::fill(m, RANDOM_FILL_XAVIER, m.getChannel(), m.getNumber());
+        MatrixExtend::fill(m, RANDOM_FILL_XAVIER, m.channel(), m.number());
         //m.scale(0.3);
     }
     //addLoss(5e-4 * L2(weights_));
@@ -178,9 +178,9 @@ int NetCifa::registerFunctions()
             return registerMatrix(maxpool(map_matrix_[v[0]], window, stride, padding));
         });
     cifa_.register_function("getRow", [this](cifa::ObjectVector& v)
-        { return cifa::Object(map_matrix_[v[0]].getRow()); });
+        { return cifa::Object(map_matrix_[v[0]].row()); });
     cifa_.register_function("getChannel", [this](cifa::ObjectVector& v)
-        { return cifa::Object(map_matrix_[v[0]].getChannel()); });
+        { return cifa::Object(map_matrix_[v[0]].channel()); });
     cifa_.register_function("reshape", [this](cifa::ObjectVector& v)
         {
             auto dim = getVector(v, 1);

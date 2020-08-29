@@ -48,7 +48,7 @@ void DataPreparerExt::fillData(Matrix& X, Matrix& Y)
         {
             //如果需要进行旋转和转置的实验，则5和9不适合留在数据集
             int count = 0;
-            for (int i = 0; i < X.getNumber(); i++)
+            for (int i = 0; i < X.number(); i++)
             {
                 if (Y.getData(0, 0, 5, i) == 1 || Y.getData(0, 0, 9, i) == 1)
                 {
@@ -56,17 +56,17 @@ void DataPreparerExt::fillData(Matrix& X, Matrix& Y)
                 }
             }
             int k = 0;
-            for (int i = 0; i < X.getNumber(); i++)
+            for (int i = 0; i < X.number(); i++)
             {
                 if (Y.getData(0, 0, 5, i) != 1 && Y.getData(0, 0, 9, i) != 1)
                 {
-                    Matrix::copyDataPointer(X, X.getDataPointer(0, 0, 0, i), X, X.getDataPointer(0, 0, 0, k), X.getRow());
-                    Matrix::copyDataPointer(Y, Y.getDataPointer(0, 0, 0, i), Y, Y.getDataPointer(0, 0, 0, k), Y.getRow());
+                    Matrix::copyDataPointer(X, X.getDataPointer(0, 0, 0, i), X, X.getDataPointer(0, 0, 0, k), X.row());
+                    Matrix::copyDataPointer(Y, Y.getDataPointer(0, 0, 0, i), Y, Y.getDataPointer(0, 0, 0, k), Y.row());
                     k++;
                 }
             }
-            X.resizeNumber(X.getNumber() - count);
-            Y.resizeNumber(Y.getNumber() - count);
+            X.resizeNumber(X.number() - count);
+            Y.resizeNumber(Y.number() - count);
         }
 
         if (aem_)

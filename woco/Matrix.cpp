@@ -78,13 +78,17 @@ void Matrix::DataWarpper::free()
 
 //任意阶张量
 //描述符最低为4维
-Matrix::Matrix(const Size& dim, DeviceType device_type)
+Matrix::Matrix(const Size& dim, DeviceType device_type, bool create_d)
 {
     if (device_type == DeviceType::GPU && CudaControl::getGlobalCudaType() == DeviceType::GPU)
     {
         shared_data_->setCudaAsCurrent();
     }
     resize(dim);
+    if (create_d)
+    {
+        d_this_ = std::make_shared<Matrix>(Size{ 0, 0 }, getDeviceType(), false);
+    }
 }
 
 //4阶张量形式
@@ -132,20 +136,16 @@ Matrix Matrix::cloneSharedCol(int col) const
 
 Matrix& Matrix::DMatrix() const
 {
-    if (!haveD())
+    if (d_this_->getDataSize() == 0)
     {
-        mallocDData();
+        d_this_->resize(dim_);
     }
-    else
-    {
-        (*d_this_)->setDim(dim_);
-    }
-    return **d_this_;
+    return *d_this_;
 }
 
 void Matrix::mallocDData() const
 {
-    *d_this_ = std::make_unique<Matrix>(this->dim_, getDeviceType());
+    //*d_this_ = std::make_unique<Matrix>(this->dim_, getDeviceType());
     //d_this_->get()->shared_data_ = shared_ddata_;
     //d_this_->get() = shared_ddata_->data_;
     //d_this_->resize(dim_);
@@ -163,24 +163,24 @@ void Matrix::setDim(const Size& dim)
 {
     dim_ = dim;
     int dim_size = dim.size();
-    number_ = dim.back();
+    number_ref() = dim.back();
 
-    width_ = 1;
-    height_ = 1;
-    channel_ = 1;
-    data_size_ = 1;
-    row_ = 1;
+    width_ref() = 1;
+    height_ref() = 1;
+    channel_ref() = 1;
+    data_size() = 1;
+    //row_ref() = 1;
     for (int i = 0; i < dim_size; i++)
     {
-        data_size_ *= int64_t(dim[i]);
-        if (i < dim_size - 1) { row_ *= dim[i]; }
-        if (i < dim_size - 3) { width_ *= dim[i]; }
-        if (i == dim_size - 3) { height_ = dim[i]; }
-        if (i == dim_size - 2) { channel_ = dim[i]; }
+        data_size() *= int64_t(dim[i]);
+        //if (i < dim_size - 1) { row() *= dim[i]; }
+        if (i < dim_size - 3) { width_ref() *= dim[i]; }
+        if (i == dim_size - 3) { height_ref() = dim[i]; }
+        if (i == dim_size - 2) { channel_ref() = dim[i]; }
     }
     if (dim.size() <= 4)
     {
-        CudaControl::setTensorDesc4D(getCudnnTensorDesc(), width_, height_, channel_, number_);
+        CudaControl::setTensorDesc4D(getCudnnTensorDesc(), width(), height(), channel(), number());
     }
     else
     {
@@ -224,10 +224,10 @@ int Matrix::resize(const Size& dim, bool reserve_data, bool force)
         return 2;
     }
     //空间不够或者强制则重新分配
-    if (shared_data_->data_ == nullptr || data_size_ > shared_data_->occupy_data_size_ || force)
+    if (shared_data_->data_ == nullptr || data_size() > shared_data_->occupy_data_size_ || force)
     {
         //重新申请空间
-        shared_data_->resize(data_size_, reserve_data, force);
+        shared_data_->resize(data_size(), reserve_data, force);
     }
     *data_ = shared_data_->data_;
     return 0;
@@ -249,7 +249,7 @@ int Matrix::resizeAndNumber(const Size& dim, int n, bool reserve_data, bool forc
 int Matrix::resizeKeepNumber(const Size& dim, bool reserve_data, bool force)
 {
     auto dim1 = dim;
-    dim1.back() = number_;
+    dim1.back() = number();
     return resize(dim1, reserve_data, force);
 }
 
@@ -258,11 +258,11 @@ int Matrix::resizeKeepNumber(const Size& dim, bool reserve_data, bool force)
 void Matrix::print(FILE* fout) const
 {
     auto temp = dataMirrorCPU();
-    for (int p = 0; p < channel_ * number_; p++)
+    for (int p = 0; p < channel() * number(); p++)
     {
-        for (int h = 0; h < height_; h++)
+        for (int h = 0; h < height(); h++)
         {
-            for (int w = 0; w < width_; w++)
+            for (int w = 0; w < width(); w++)
             {
                 auto v = temp->data_[whcn2i(w, h, p, 0)];
                 fprintf(fout, "%g ", realc(v));
@@ -277,7 +277,7 @@ void Matrix::print(FILE* fout) const
 void Matrix::printAsVector(FILE* fout) const
 {
     auto temp = dataMirrorCPU();
-    for (int i = 0; i < data_size_; i++)
+    for (int i = 0; i < data_size(); i++)
     {
         fprintf(fout, "%14.11g ", temp->data_[i]);
     }
@@ -288,9 +288,9 @@ void Matrix::printAsVector(FILE* fout) const
 void Matrix::printAsMatrix(FILE* fout) const
 {
     auto temp = dataMirrorCPU();
-    for (int r = 0; r < row_; r++)
+    for (int r = 0; r < row(); r++)
     {
-        for (int c = 0; c < number_; c++)
+        for (int c = 0; c < number(); c++)
         {
             auto v = temp->data_[mn2i(r, c)];
             fprintf(fout, "%g ", realc(v));
@@ -317,12 +317,12 @@ void Matrix::printAsMatrix(FILE* fout) const
 
 int64_t Matrix::save(void* buffer, int64_t size) const
 {
-    return copyDataPointer(getDeviceType(), getDataPointer(), DeviceType::CPU, (real*)buffer, std::min(data_size_, size));
+    return copyDataPointer(getDeviceType(), getDataPointer(), DeviceType::CPU, (real*)buffer, std::min(data_size(), size));
 }
 
 int64_t Matrix::load(const void* buffer, int64_t size)
 {
-    return copyDataPointer(DeviceType::CPU, (real*)buffer, getDeviceType(), getDataPointer(), std::min(data_size_, size));
+    return copyDataPointer(DeviceType::CPU, (real*)buffer, getDeviceType(), getDataPointer(), std::min(data_size(), size));
 }
 
 //int Matrix::save(const std::string filename)
@@ -344,11 +344,11 @@ void Matrix::copyDataInFromHost(real* src, int64_t size)
 {
     if (inGPU())
     {
-        cudaMemcpy(data(), src, int(sizeof(real) * std::min(size, data_size_)), cudaMemcpyHostToDevice);
+        cudaMemcpy(data(), src, int(sizeof(real) * std::min(size, data_size())), cudaMemcpyHostToDevice);
     }
     else
     {
-        memcpy(data(), src, int(sizeof(real) * std::min(size, data_size_)));
+        memcpy(data(), src, int(sizeof(real) * std::min(size, data_size())));
     }
 }
 
@@ -357,11 +357,11 @@ void Matrix::copyDataOutToHost(real* dst, int64_t size)
 {
     if (inGPU())
     {
-        cudaMemcpy(dst, data(), int(sizeof(real) * std::min(size, data_size_)), cudaMemcpyDeviceToHost);
+        cudaMemcpy(dst, data(), int(sizeof(real) * std::min(size, data_size())), cudaMemcpyDeviceToHost);
     }
     else
     {
-        memcpy(dst, data(), int(sizeof(real) * std::min(size, data_size_)));
+        memcpy(dst, data(), int(sizeof(real) * std::min(size, data_size())));
     }
 }
 
@@ -501,19 +501,19 @@ Matrix& Matrix::initData(real v, int inc /*=0*/)
         }
         else
         {
-            for (int i = 0; i < data_size_; i++)
+            for (int i = 0; i < data_size(); i++)
             {
                 temp->data_[i] = i * inc + v;
             }
         }
-        copyDataPointer(DeviceType::CPU, temp->data_, getDeviceType(), getDataPointer(), data_size_);
+        copyDataPointer(DeviceType::CPU, temp->data_, getDeviceType(), getDataPointer(), data_size());
     }
     return *this;
 }
 
 Matrix& Matrix::initData(real* data, int64_t size)
 {
-    copyDataPointer(DeviceType::CPU, data, getDeviceType(), getDataPointer(), std::min(size, data_size_));
+    copyDataPointer(DeviceType::CPU, data, getDeviceType(), getDataPointer(), std::min(size, data_size()));
     return *this;
 }
 
@@ -526,9 +526,9 @@ Matrix& Matrix::initRandom(int seed /*= 0*/)
     }
     Random<real> r;
     r.set_seed(seed);
-    std::vector<real> temp(data_size_);
+    std::vector<real> temp(data_size());
     r.rand_data(temp.data(), temp.size());
-    copyDataPointer(DeviceType::CPU, temp.data(), getDeviceType(), getDataPointer(), data_size_);
+    copyDataPointer(DeviceType::CPU, temp.data(), getDeviceType(), getDataPointer(), data_size());
     return *this;
 }
 
@@ -541,8 +541,8 @@ void Matrix::toGPU()
         std::swap(temp, shared_data_->data_);
         shared_data_->occupy_data_size_ = 0;
         shared_data_->setCudaAsCurrent();
-        shared_data_->resize(data_size_);
-        copyDataPointer(DeviceType::CPU, temp, DeviceType::GPU, shared_data_->data_, data_size_);
+        shared_data_->resize(data_size());
+        copyDataPointer(DeviceType::CPU, temp, DeviceType::GPU, shared_data_->data_, data_size());
         delete[] temp;
         *data_ = shared_data_->data_;
     }
@@ -553,11 +553,11 @@ void Matrix::toCPU(bool reserve_data)
 {
     if (inGPU())
     {
-        real* temp = new real[data_size_];
-        copyDataPointer(DeviceType::GPU, shared_data_->data_, DeviceType::CPU, temp, data_size_);
+        real* temp = new real[data_size()];
+        copyDataPointer(DeviceType::GPU, shared_data_->data_, DeviceType::CPU, temp, data_size());
         shared_data_->free();
         shared_data_->setCuda(nullptr);
-        shared_data_->occupy_data_size_ = data_size_;
+        shared_data_->occupy_data_size_ = data_size();
         std::swap(temp, shared_data_->data_);
         *data_ = shared_data_->data_;
     }
@@ -570,38 +570,38 @@ void Matrix::flip(int flip_flag)
     {
         return;
     }
-    Matrix temp(width_, height_, DeviceType::CPU);
-    for (int c = 0; c < channel_; c++)
+    Matrix temp(width(), height(), DeviceType::CPU);
+    for (int c = 0; c < channel(); c++)
     {
-        for (int n = 0; n < number_; n++)
+        for (int n = 0; n < number(); n++)
         {
             Matrix::copyDataPointer(*this, getDataPointer(0, 0, c, n), temp, temp.getDataPointer());
             switch (flip_flag)
             {
             case 1:
-                for (int i = 0; i < width_; i++)
+                for (int i = 0; i < width(); i++)
                 {
-                    for (int j = 0; j < height_; j++)
+                    for (int j = 0; j < height(); j++)
                     {
-                        getData(i, j, c, n) = temp.getData(width_ - 1 - i, j);
+                        getData(i, j, c, n) = temp.getData(width() - 1 - i, j);
                     }
                 }
                 break;
             case 0:
-                for (int i = 0; i < width_; i++)
+                for (int i = 0; i < width(); i++)
                 {
-                    for (int j = 0; j < height_; j++)
+                    for (int j = 0; j < height(); j++)
                     {
-                        getData(i, j, c, n) = temp.getData(i, height_ - 1 - j);
+                        getData(i, j, c, n) = temp.getData(i, height() - 1 - j);
                     }
                 }
                 break;
             case -1:
-                for (int i = 0; i < width_; i++)
+                for (int i = 0; i < width(); i++)
                 {
-                    for (int j = 0; j < height_; j++)
+                    for (int j = 0; j < height(); j++)
                     {
-                        getData(i, j, c, n) = temp.getData(width_ - 1 - i, height_ - 1 - j);
+                        getData(i, j, c, n) = temp.getData(width() - 1 - i, height() - 1 - j);
                     }
                 }
                 break;
@@ -619,16 +619,16 @@ void Matrix::transpose()
         return;
     }
     auto temp = clone(DeviceType::CPU);
-    if (row_ != channel_)
+    if (row() != channel())
     {
-        resize(height_, width_, channel_, number_);
-        for (int c = 0; c < channel_; c++)
+        resize(height(), width(), channel(), number());
+        for (int c = 0; c < channel(); c++)
         {
-            for (int n = 0; n < number_; n++)
+            for (int n = 0; n < number(); n++)
             {
-                for (int i = 0; i < width_; i++)
+                for (int i = 0; i < width(); i++)
                 {
-                    for (int j = 0; j < height_; j++)
+                    for (int j = 0; j < height(); j++)
                     {
                         getData(i, j, c, n) = temp.getData(j, i, c, n);
                     }
@@ -638,10 +638,10 @@ void Matrix::transpose()
     }
     else
     {
-        resize(number_, row_);
-        for (int c = 0; c < channel_; c++)
+        resize(number(), row());
+        for (int c = 0; c < channel(); c++)
         {
-            for (int n = 0; n < number_; n++)
+            for (int n = 0; n < number(); n++)
             {
                 getData(c, n) = temp.getData(n, c);
             }
@@ -655,10 +655,10 @@ std::shared_ptr<Matrix::DataWarpper> Matrix::dataMirrorCPU(bool reserve_data) co
     if (inGPU())
     {
         auto new_shared_data = std::make_shared<DataWarpper>();
-        new_shared_data->resize(data_size_);
+        new_shared_data->resize(data_size());
         if (reserve_data)
         {
-            copyDataPointer(DeviceType::GPU, shared_data_->data_, DeviceType::CPU, new_shared_data->data_, data_size_);
+            copyDataPointer(DeviceType::GPU, shared_data_->data_, DeviceType::CPU, new_shared_data->data_, data_size());
         }
         return new_shared_data;
     }
@@ -673,17 +673,17 @@ void Matrix::repeat(int c)
 {
     if (inGPU())
     {
-        for (int i = c; i < number_; i *= 2)
+        for (int i = c; i < number(); i *= 2)
         {
-            cudaMemcpy(getDataPointer(0, i), getDataPointer(0, 0), sizeof(real) * row_ * std::min(i, number_ - i), cudaMemcpyDeviceToDevice);
+            cudaMemcpy(getDataPointer(0, i), getDataPointer(0, 0), sizeof(real) * row() * std::min(i, number() - i), cudaMemcpyDeviceToDevice);
         }
     }
     else
     {
         //#pragma loop(hint_parallel(8))
-        for (int i = c; i < number_; i *= 2)
+        for (int i = c; i < number(); i *= 2)
         {
-            memcpy(getDataPointer(0, i), getDataPointer(0, 0), sizeof(real) * row_ * std::min(i, number_ - i));
+            memcpy(getDataPointer(0, i), getDataPointer(0, 0), sizeof(real) * row() * std::min(i, number() - i));
         }
     }
 }
@@ -693,11 +693,11 @@ int Matrix::indexColMaxAbs(int c) const
 {
     if (inGPU())
     {
-        return cuda()->cublas_->iamax(row_, getDataPointer(0, c), 1);
+        return cuda()->cublas_->iamax(row(), getDataPointer(0, c), 1);
     }
     else
     {
-        return Cblas::iamax(row_, getDataPointer(0, c), 1);
+        return Cblas::iamax(row(), getDataPointer(0, c), 1);
     }
 }
 
@@ -706,11 +706,11 @@ realc Matrix::sumAbs() const
 {
     if (inGPU())
     {
-        return cuda()->cublas_->asum(data_size_, data(), 1);
+        return cuda()->cublas_->asum(data_size(), data(), 1);
     }
     else
     {
-        return Cblas::asum(data_size_, data(), 1);
+        return Cblas::asum(data_size(), data(), 1);
     }
 }
 
@@ -719,17 +719,17 @@ realc Matrix::sumAbsCol(int c) const
 {
     if (inGPU())
     {
-        return cuda()->cublas_->asum(row_, getDataPointer(0, c), 1);
+        return cuda()->cublas_->asum(row(), getDataPointer(0, c), 1);
     }
     else
     {
-        return Cblas::asum(row_, getDataPointer(0, c), 1);
+        return Cblas::asum(row(), getDataPointer(0, c), 1);
     }
 }
 
 realc Matrix::sum() const
 {
-    Matrix temp1(data_size_, 1);
+    Matrix temp1(data_size(), 1);
     temp1.initData(1);
     real r = dot(*this, temp1);
     return r;
@@ -739,11 +739,11 @@ void Matrix::sectionLimit(real v0, real v1)
 {
     if (inGPU())
     {
-        cuda_sectionlimit(data(), nullptr, data(), data_size_, v0, v1);
+        cuda_sectionlimit(data(), nullptr, data(), data_size(), v0, v1);
     }
     else
     {
-        for (int i = 0; i < data_size_; i++)
+        for (int i = 0; i < data_size(); i++)
         {
             data()[i] = std::min(data()[i], v1);
             data()[i] = std::max(data()[i], v0);
@@ -765,11 +765,11 @@ void Matrix::scale(real v)
     }
     if (inGPU())
     {
-        cuda()->cublas_->scal(data_size_, v, data(), 1);
+        cuda()->cublas_->scal(data_size(), v, data(), 1);
     }
     else
     {
-        Cblas::scal(data_size_, v, data(), 1);
+        Cblas::scal(data_size(), v, data(), 1);
     }
 }
 
@@ -789,11 +789,11 @@ void Matrix::scaleCol(real v, int c)
     }
     if (inGPU())
     {
-        cuda()->cublas_->scal(row_, v, getDataPointer(0, c), 1);
+        cuda()->cublas_->scal(row(), v, getDataPointer(0, c), 1);
     }
     else
     {
-        Cblas::scal(row_, v, getDataPointer(0, c), 1);
+        Cblas::scal(row(), v, getDataPointer(0, c), 1);
     }
 }
 
@@ -801,14 +801,14 @@ void Matrix::scaleCol(real v, int c)
 void Matrix::mul(const Matrix& A, const Matrix& B, Matrix& R, real a, real r, MatrixTransType ta, MatrixTransType tb)
 {
     assert(checkMatrixDevice({ &A, &B, &R }));
-    int m = R.row_;
-    int n = R.number_;
-    int lda = A.row_;
-    int k = A.number_;
-    int ldb = B.row_;
+    int m = R.row();
+    int n = R.number();
+    int lda = A.row();
+    int k = A.number();
+    int ldb = B.row();
     if (ta == MATRIX_TRANS)
     {
-        k = A.row_;
+        k = A.row();
     }
     if (R.inGPU())
     {
@@ -825,15 +825,15 @@ void Matrix::mul(const Matrix& A, const Matrix& B, Matrix& R, real a, real r, Ma
 void Matrix::mulVector(Matrix& A, Matrix& B, Matrix& R, real a, real r, MatrixTransType ta)
 {
     assert(checkMatrixDevice({ &A, &B, &R }));
-    int m = A.row_, n = A.number_;
+    int m = A.row(), n = A.number();
 
     if (R.inGPU())
     {
-        R.cuda()->cublas_->gemv(ta, m, n, a, A.data(), A.row_, B.data(), 1, r, R.data(), 1);
+        R.cuda()->cublas_->gemv(ta, m, n, a, A.data(), A.row(), B.data(), 1, r, R.data(), 1);
     }
     else
     {
-        Cblas::gemv(ta, m, n, a, A.data(), A.row_, B.data(), 1, r, R.data(), 1);
+        Cblas::gemv(ta, m, n, a, A.data(), A.row(), B.data(), 1, r, R.data(), 1);
     }
 }
 
@@ -841,7 +841,7 @@ void Matrix::mulVector(Matrix& A, Matrix& B, Matrix& R, real a, real r, MatrixTr
 void Matrix::mulVector2(Matrix& A, Matrix& B, Matrix& R, real a, real r, MatrixTransType ta)
 {
     assert(checkMatrixDevice({ &A, &B, &R }));
-    int m = A.row_, n = A.number_;
+    int m = A.row(), n = A.number();
     if (ta == MATRIX_TRANS)
     {
         std::swap(m, n);
@@ -849,16 +849,16 @@ void Matrix::mulVector2(Matrix& A, Matrix& B, Matrix& R, real a, real r, MatrixT
 
     if (R.inGPU())
     {
-        for (int i = 0; i <= R.number_; i++)
+        for (int i = 0; i <= R.number(); i++)
         {
-            R.cuda()->cublas_->gemv(ta, m, n, a, A.data(), A.row_, B.data(), 1, r, R.getDataPointer(0, i), 1);
+            R.cuda()->cublas_->gemv(ta, m, n, a, A.data(), A.row(), B.data(), 1, r, R.getDataPointer(0, i), 1);
         }
     }
     else
     {
-        for (int i = 0; i <= R.number_; i++)
+        for (int i = 0; i <= R.number(); i++)
         {
-            Cblas::gemv(ta, m, n, a, A.data(), A.row_, B.data(), 1, r, R.getDataPointer(0, i), 1);
+            Cblas::gemv(ta, m, n, a, A.data(), A.row(), B.data(), 1, r, R.getDataPointer(0, i), 1);
         }
     }
 }
@@ -884,7 +884,7 @@ void Matrix::elementMul(const Matrix& A, const Matrix& B, Matrix& R, real a, rea
     }
     else
     {
-        for (int i = 0; i < A.data_size_; i++)
+        for (int i = 0; i < A.data_size(); i++)
         {
             R.data()[i] = A.data()[i] * B.data()[i] * a + R.data()[i] * r;
         }
@@ -918,7 +918,7 @@ void Matrix::add(const Matrix& A, const Matrix& B, Matrix& R, realc a, realc b, 
     }
     else
     {
-        for (int i = 0; i < R.data_size_; i++)
+        for (int i = 0; i < R.data_size(); i++)
         {
             R.data()[i] = a * A.data()[i] + b * B.data()[i] + r * R.data()[i];
         }
@@ -931,11 +931,11 @@ woco::realc Matrix::dot(const Matrix& A, const Matrix& B)
     assert(checkMatrixDevice({ &A, &B }));
     if (A.inGPU())
     {
-        return A.cuda()->cublas_->dot(A.data_size_, A.getDataPointer(), 1, B.getDataPointer(), 1);
+        return A.cuda()->cublas_->dot(A.data_size(), A.getDataPointer(), 1, B.getDataPointer(), 1);
     }
     else
     {
-        return Cblas::dot(A.data_size_, A.getDataPointer(), 1, B.getDataPointer(), 1);
+        return Cblas::dot(A.data_size(), A.getDataPointer(), 1, B.getDataPointer(), 1);
     }
 }
 
@@ -945,11 +945,11 @@ woco::realc Matrix::dotCol(const Matrix& A, int cA, const Matrix& B, int cB)
     assert(checkMatrixDevice({ &A, &B }));
     if (A.inGPU())
     {
-        return A.cuda()->cublas_->dot(A.row_, A.getDataPointer(0, cA), 1, B.getDataPointer(0, cA), 1);
+        return A.cuda()->cublas_->dot(A.row(), A.getDataPointer(0, cA), 1, B.getDataPointer(0, cA), 1);
     }
     else
     {
-        return Cblas::dot(A.row_, A.getDataPointer(0, cA), 1, B.getDataPointer(0, cA), 1);
+        return Cblas::dot(A.row(), A.getDataPointer(0, cA), 1, B.getDataPointer(0, cA), 1);
     }
 }
 
@@ -971,11 +971,11 @@ realc Matrix::dotSelf() const
 {
     if (inGPU())
     {
-        return cuda()->cublas_->dot(data_size_, data(), 1, data(), 1);
+        return cuda()->cublas_->dot(data_size(), data(), 1, data(), 1);
     }
     else
     {
-        return Cblas::dot(data_size_, data(), 1, data(), 1);
+        return Cblas::dot(data_size(), data(), 1, data(), 1);
     }
 }
 
@@ -984,11 +984,11 @@ void Matrix::sign(Matrix& A, Matrix& R, real v, real section)
 {
     if (A.inGPU())
     {
-        cuda_sign(A.data(), R.data(), A.data_size_, v, section);
+        cuda_sign(A.data(), R.data(), A.data_size(), v, section);
     }
     else
     {
-        for (int i = 0; i < A.data_size_; i++)
+        for (int i = 0; i < A.data_size(); i++)
         {
             if (A.data()[i] > section)
             {
@@ -1023,11 +1023,11 @@ void Matrix::reciprocal(real scale)
 {
     if (inGPU())
     {
-        cuda_reciprocal(data(), data(), data_size_, scale, 0.0);
+        cuda_reciprocal(data(), data(), data_size(), scale, 0.0);
     }
     else
     {
-        for (int i = 0; i < data_size_; i++)
+        for (int i = 0; i < data_size(); i++)
         {
             data()[i] = scale / data()[i];
         }
@@ -1039,11 +1039,11 @@ void Matrix::addNumber(real v, real scale)
 {
     if (inGPU())
     {
-        cuda_addnumber(data(), data(), data_size_, v, scale);
+        cuda_addnumber(data(), data(), data_size(), v, scale);
     }
     else
     {
-        for (int i = 0; i < data_size_; i++)
+        for (int i = 0; i < data_size(); i++)
         {
             data()[i] = v + scale * data()[i];
         }
@@ -1055,11 +1055,11 @@ void Matrix::addNumber(const Matrix& A, Matrix& R, real v, real scale)
     assert(checkMatrixDevice({ &A, &R }));
     if (A.inGPU())
     {
-        cuda_addnumber(A.data(), R.data(), A.data_size_, v, scale);
+        cuda_addnumber(A.data(), R.data(), A.data_size(), v, scale);
     }
     else
     {
-        for (int i = 0; i < A.data_size_; i++)
+        for (int i = 0; i < A.data_size(); i++)
         {
             R.data()[i] = v + scale * A.data()[i];
         }
@@ -1070,11 +1070,11 @@ void Matrix::addNumberCol(real v, real scale, int c)
 {
     if (inGPU())
     {
-        cuda_addnumber(getDataPointer(0, c), getDataPointer(0, c), getRow(), v, scale);
+        cuda_addnumber(getDataPointer(0, c), getDataPointer(0, c), row(), v, scale);
     }
     else
     {
-        for (int i = 0; i < getRow(); i++)
+        for (int i = 0; i < row(); i++)
         {
             getData(i, c) = v + scale * getData(i, c);
         }
@@ -1086,11 +1086,11 @@ void Matrix::elementPow(const Matrix& A, Matrix& R, real e, real bias)
     assert(checkMatrixDevice({ &A, &R }));
     if (A.inGPU())
     {
-        cuda_pow(A.data(), R.data(), A.data_size_, e, bias);
+        cuda_pow(A.data(), R.data(), A.data_size(), e, bias);
     }
     else
     {
-        for (int i = 0; i < A.data_size_; i++)
+        for (int i = 0; i < A.data_size(); i++)
         {
             R.data()[i] = pow(bias + A.data()[i], e);
         }
@@ -1102,11 +1102,11 @@ void Matrix::elementDiv(const Matrix& A, const Matrix& B, Matrix& R, real a, rea
     assert(checkMatrixDevice({ &A, &B, &R }));
     if (A.inGPU())
     {
-        cuda_div(A.data(), B.data(), R.data(), A.data_size_, a, b, scale);
+        cuda_div(A.data(), B.data(), R.data(), A.data_size(), a, b, scale);
     }
     else
     {
-        for (int i = 0; i < A.data_size_; i++)
+        for (int i = 0; i < A.data_size(); i++)
         {
             R.data()[i] = scale * (A.data()[i] + a) / (B.data()[i] + b);
         }
@@ -1118,11 +1118,11 @@ void Matrix::crossEntropy(const Matrix& A, const Matrix& Y, Matrix& R, real a, r
     assert(checkMatrixDevice({ &A, &Y, &R }));
     if (A.inGPU())
     {
-        cuda_cross_entropy(A.data(), Y.data(), R.data(), A.data_size_, a, scale);
+        cuda_cross_entropy(A.data(), Y.data(), R.data(), A.data_size(), a, scale);
     }
     else
     {
-        for (int i = 0; i < A.data_size_; i++)
+        for (int i = 0; i < A.data_size(); i++)
         {
             R.data()[i] = Y.data()[i] * log(A.data()[i] + a);
             R.data()[i] *= -scale;
@@ -1135,11 +1135,11 @@ void Matrix::crossEntropy2(const Matrix& A, const Matrix& Y, Matrix& R, real a, 
     assert(checkMatrixDevice({ &A, &Y, &R }));
     if (A.inGPU())
     {
-        cuda_cross_entropy2(A.data(), Y.data(), R.data(), A.data_size_, a, scale);
+        cuda_cross_entropy2(A.data(), Y.data(), R.data(), A.data_size(), a, scale);
     }
     else
     {
-        for (int i = 0; i < A.data_size_; i++)
+        for (int i = 0; i < A.data_size(); i++)
         {
             R.data()[i] = Y.data()[i] * log(A.data()[i] + a) + (1 - Y.data()[i]) * log(1 - A.data()[i] + a);
             R.data()[i] *= -scale;
@@ -1158,7 +1158,7 @@ bool Matrix::checkMatrixDevice(const std::vector<const Matrix*>& v)
         const CudaControl* cuda = nullptr;
         for (int i = 0; i < v.size(); i++)
         {
-            if (v[i]->data_size_ > 0)
+            if (v[i]->data_size() > 0)
             {
                 cuda = v[i]->cuda();
                 break;
@@ -1166,7 +1166,7 @@ bool Matrix::checkMatrixDevice(const std::vector<const Matrix*>& v)
         }
         for (int i = 0; i < v.size(); i++)
         {
-            if (v[i]->data_size_ > 0 && cuda != v[i]->cuda())
+            if (v[i]->data_size() > 0 && cuda != v[i]->cuda())
             {
                 fprintf(stderr, "Matrices are not in the same device!\n");
                 return false;

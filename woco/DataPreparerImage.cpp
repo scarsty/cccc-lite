@@ -70,16 +70,16 @@ void DataPreparerImage::transOne(Matrix& X1, Matrix& Y1)
         need_limit = true;
         auto b = d_brightness_[0] + (d_brightness_[1] - d_brightness_[0]) * rand_.rand();    //亮度
         auto c = 1 + d_contrast_[0] + (d_contrast_[1] - d_contrast_[0]) * rand_.rand();      //对比度
-        for (int ic = 0; ic < X1.getChannel(); ic++)
+        for (int ic = 0; ic < X1.channel(); ic++)
         {
             if (d_channel_)
             {
                 b = d_brightness_[0] + (d_brightness_[1] - d_brightness_[0]) * rand_.rand();
                 c = 1 + d_contrast_[0] + (d_contrast_[1] - d_contrast_[0]) * rand_.rand();
             }
-            for (int ih = 0; ih < X1.getHeight(); ih++)
+            for (int ih = 0; ih < X1.height(); ih++)
             {
-                for (int iw = 0; iw < X1.getWidth(); iw++)
+                for (int iw = 0; iw < X1.width(); iw++)
                 {
                     auto& v = X1.getData(iw, ih, ic, 0);
                     v = v * c + b;

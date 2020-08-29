@@ -62,8 +62,8 @@ void DataPreparer::transData(const Matrix& X0, const Matrix& Y0, Matrix& X1, Mat
                 //首先复制数据
                 if (shuffle_)
                 {
-                    Matrix::copyDataPointer(X0, X0.getDataPointer(0, fill_queue[i]), X1, X1.getDataPointer(0, i), X1.getRow());
-                    Matrix::copyDataPointer(Y0, Y0.getDataPointer(0, fill_queue[i]), Y1, Y1.getDataPointer(0, i), Y1.getRow());
+                    Matrix::copyDataPointer(X0, X0.getDataPointer(0, fill_queue[i]), X1, X1.getDataPointer(0, i), X1.row());
+                    Matrix::copyDataPointer(Y0, Y0.getDataPointer(0, fill_queue[i]), Y1, Y1.getDataPointer(0, i), Y1.row());
                 }
 #ifndef _DEBUG
                 if (trans_)
@@ -99,16 +99,16 @@ void DataPreparer::prepareData(int epoch, const std::string& info, Matrix& X_ori
 {
     int ep1 = epoch + 1;
 
-    if (train_queue_origin_.size() != X_origin.getNumber())
+    if (train_queue_origin_.size() != X_origin.number())
     {
-        train_queue_origin_.resize(X_origin.getNumber());
+        train_queue_origin_.resize(X_origin.number());
         for (int i = 0; i < train_queue_origin_.size(); i++)
         {
             train_queue_origin_[i] = i;
         }
     }
 
-    std::vector<int> train_queue_cpu(X_cpu.getNumber());
+    std::vector<int> train_queue_cpu(X_cpu.number());
     bool need_refill = false;
     //复制训练序列origin到cpu，注意这种处理方式是考虑了二者尺寸可能不同的情况
     int i = 0;
@@ -268,10 +268,10 @@ void DataPreparer::readBin(const std::string& file_bin, Matrix& data)
 void DataPreparer::writeBin(const std::string& file_bin, const Matrix& data)
 {
     std::vector<char> data_bin(16 + data.getDataSizeInByte());
-    *(int*)(data_bin.data()) = data.getWidth();
-    *(int*)(data_bin.data() + 4) = data.getHeight();
-    *(int*)(data_bin.data() + 8) = data.getChannel();
-    *(int*)(data_bin.data() + 12) = data.getNumber();
+    *(int*)(data_bin.data()) = data.width();
+    *(int*)(data_bin.data() + 4) = data.height();
+    *(int*)(data_bin.data() + 8) = data.channel();
+    *(int*)(data_bin.data() + 12) = data.number();
     memcpy(data_bin.data() + 16, data.getDataPointer(), data.getDataSizeInByte());
     File::writeFile(file_bin, data_bin.data(), data_bin.size());
 }

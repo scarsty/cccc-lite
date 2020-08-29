@@ -58,18 +58,19 @@ protected:
 
     //DeviceType getDeviceType() = DeviceType::CPU;
 
-    int64_t data_size_ = 0;
+    int64_t data_size() const { return tensor_desc_[4]; }
 
     //一列的数据作为一个或一组图像，矩阵本身是列优先
     //但是在图片处理，包含卷积核默认是行优先（遵从cudnn），也就是说图片和卷积核可以认为是转置保存的！！
-    int width_ = 0, height_ = 0, channel_ = 0, number_ = 0;
+    int& width_ref() { return tensor_desc_[11]; }
+    int& height_ref() { return tensor_desc_[10]; }
+    int& channel_ref() { return tensor_desc_[9]; }
+    int& number_ref() { return tensor_desc_[8]; } 
 
-    int row_ = 0;    //作为矩阵时的行数，列数等于number_
+    //Size dim_;    //维度
 
-    Size dim_;    //维度
-
-    //TensorDescWrapper tensor_desc_;
-    uint8_t tensor_desc_[128];    //这里太麻烦了，干脆这么糊弄吧
+    //TensorDescWrapper tensor_desc1_;
+    int tensor_desc_[32] = { 0 };    //这里太麻烦了，干脆这么糊弄吧
 
     //数据，被迫使用双重指针是因为矩阵计算返回对象，和生成计算流的需要！
     std::shared_ptr<real*> data_ = std::make_shared<real*>();
@@ -77,7 +78,7 @@ protected:
     std::shared_ptr<DataWarpper> shared_data_ = std::make_shared<DataWarpper>();
 
     //反向数据，实际上除了数据指针，其他必然跟原矩阵相同，矩阵赋值或复制之后仍然维持关联。除操作符和求解器外，禁止其他部分使用
-    mutable std::shared_ptr<std::unique_ptr<Matrix>> d_this_ = std::make_shared<std::unique_ptr<Matrix>>(nullptr);
+    mutable std::shared_ptr<Matrix> d_this_;
 
     bool need_updata_ = true;    //仅反向使用此参数，决定是否需要更新D数据，禁止本体使用
 
@@ -85,7 +86,7 @@ public:
     //Matrix& operator=(const Matrix& m);
     //Matrix(const Matrix& src);
 
-    Matrix(const Size& dim, DeviceType device_type = DeviceType::GPU);
+    Matrix(const Size& dim, DeviceType device_type = DeviceType::GPU, bool create_d = true);
     Matrix(int w, int h, int c, int n, DeviceType device_type = DeviceType::GPU);
     Matrix(int m, int n, DeviceType device_type = DeviceType::GPU);
     Matrix(const Size& dim, real* data, DeviceType device_type = DeviceType::GPU);
@@ -97,7 +98,7 @@ public:
 
 private:
     inline real* data() const { return *data_; }
-    bool haveD() const { return d_this_->get() != nullptr; }
+    bool haveD() const { return d_this_ != nullptr; }
     const CudaControl* cuda() const { return shared_data_->cuda_; }
     cudnnTensorDescriptor_t getCudnnTensorDesc() const { return (cudnnTensorDescriptor_t)tensor_desc_; }
 
@@ -119,25 +120,26 @@ private:
 
 public:
     //注意有一些在矩阵模式下才能正确返回结果，有一些在4阶张量模式下使用，而实际上4阶张量模式的作用范围有限
-    int mn2i(int m, int n) const { return m + n * row_; }
-    int whcn2i(int w, int h, int c, int n) const { return w + h * width_ + c * width_ * height_ + n * channel_ * width_ * height_; }
+    int mn2i(int m, int n) const { return m + n * row(); }
+    int whcn2i(int w, int h, int c, int n) const { return w + h * width() + c * width() * height() + n * channel() * width() * height(); }
     int coord2i(const Size& c);
     bool haveData(int w, int h, int c, int n) const
     {
         int i = whcn2i(w, h, c, n);
-        return (i >= 0 && i < data_size_);
+        return (i >= 0 && i < data_size());
     }
 
 public:
     int getDimSize() const { return dim_.size(); }
     const std::vector<int>& getDim() const { return dim_; }
-    int getRow() const { return row_; }
-    int getCol() const { return number_; }
-    int getWidth() const { return width_; }
-    int getHeight() const { return height_; }
-    int getChannel() const { return channel_; }
-    int getNumber() const { return number_; }
-    int64_t getDataSize() const { return data_size_; }
+    int col() const { return number(); }
+    int width() const { return tensor_desc_[11]; }
+    int height() const { return tensor_desc_[10]; }
+    int channel() const { return tensor_desc_[9]; }
+    int number() const { return tensor_desc_[8]; }
+    int row() const { return tensor_desc_[16]; }
+
+    int64_t getDataSize() const { return tensor_desc_[4]; }
     int64_t getDataSizeInByte() const { return getDataSize() * sizeof(real); }
 
     //以下3个函数，注意如果数据在显存中，一般x来说是无法赋值和输出的
@@ -240,7 +242,7 @@ public:
     //取值和赋值，通常不推荐在c++中使用，仅用于python接口，故安全保护较多
     real getDataValue(int i)
     {
-        if (getDeviceType() == DeviceType::CPU && i >= 0 && i < data_size_)
+        if (getDeviceType() == DeviceType::CPU && i >= 0 && i < data_size())
         {
             return getData(i);
         }
@@ -251,7 +253,7 @@ public:
 
     void setDataValue(float v, int i)
     {
-        if (getDeviceType() == DeviceType::CPU && i >= 0 && i < data_size_)
+        if (getDeviceType() == DeviceType::CPU && i >= 0 && i < data_size())
         {
             getData(i) = v;
         }

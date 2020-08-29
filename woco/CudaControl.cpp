@@ -10,114 +10,68 @@
 
 namespace woco
 {
-//std::map<cudnnTensorDescriptor_t, int> mmm;
-//static int tensor_count = 0;
-//TensorDescWrapper::TensorDescWrapper()
+
+TensorDescWrapper::TensorDescWrapper()
+{
+    cudnnCreateTensorDescriptor(&tensor_desc_);
+}
+
+TensorDescWrapper::TensorDescWrapper(const TensorDescWrapper& o) : TensorDescWrapper()
+{
+    cudnnDataType_t t;
+    int n;
+    int d1[8];
+    int s1[8];
+    cudnnGetTensorNdDescriptor(o.tensor_desc_, 8, &t, &n, d1, s1);
+    cudnnSetTensorNdDescriptor(tensor_desc_, t, n, d1, s1);
+}
+
+TensorDescWrapper::TensorDescWrapper(TensorDescWrapper&& o)
+{
+    tensor_desc_ = o.tensor_desc_;
+    o.tensor_desc_ = nullptr;
+}
+
+TensorDescWrapper& TensorDescWrapper::operator=(const TensorDescWrapper& o)
+{
+    if (this != &o)
+    {
+        cudnnDataType_t t;
+        int n;
+        int d1[8];
+        int s1[8];
+        cudnnGetTensorNdDescriptor(o.tensor_desc_, 8, &t, &n, d1, s1);
+        cudnnSetTensorNdDescriptor(tensor_desc_, t, n, d1, s1);
+    }
+    return *this;
+}
+
+//TensorDescWrapper& TensorDescWrapper::operator=(TensorDescWrapper o)
 //{
-//    auto r = cudnnCreateTensorDescriptor(&tensor_desc_);
-//    mmm[tensor_desc_] = 0;
-//    tensor_count++;
-//    if (r)
-//    {
-//        fprintf(stderr, "%d\n", __LINE__);
-//    }
-//}
-//
-//TensorDescWrapper::TensorDescWrapper(const TensorDescWrapper& o) : TensorDescWrapper()
-//{
-//    cudnnDataType_t t;
-//    int n;
-//    int d1[8];
-//    int s1[8];
-//    auto r = cudnnGetTensorNdDescriptor(o.tensor_desc_, 8, &t, &n, d1, s1);
-//    if (r)
-//    {
-//        fprintf(stderr, "%d\n", __LINE__);
-//    }
-//    if (n > 0)
-//    {
-//        r = cudnnSetTensorNdDescriptor(tensor_desc_, t, n, d1, s1);
-//    }
-//    if (r)
-//    {
-//        fprintf(stderr, "%d\n", __LINE__);
-//    }
-//}
-//
-//TensorDescWrapper::TensorDescWrapper(TensorDescWrapper&& o)
-//{
-//    tensor_desc_ = o.tensor_desc_;
-//    o.tensor_desc_ = nullptr;
-//}
-//
-//TensorDescWrapper& TensorDescWrapper::operator=(const TensorDescWrapper& o)
-//{
-//    if (this != &o)
-//    {
-//        cudnnDataType_t t;
-//        int n;
-//        int d1[8];
-//        int s1[8];
-//        auto r = cudnnGetTensorNdDescriptor(o.tensor_desc_, 8, &t, &n, d1, s1);
-//        if (r)
-//        {
-//            fprintf(stderr, "%d\n", __LINE__);
-//        }
-//        if (n > 0)
-//        {
-//            r = cudnnSetTensorNdDescriptor(tensor_desc_, t, n, d1, s1);
-//        }
-//        if (r)
-//        {
-//            fprintf(stderr, "%d\n", __LINE__);
-//        }
-//    }
+//    std::swap(tensor_desc_, o.tensor_desc_);
 //    return *this;
 //}
-//
-////TensorDescWrapper& TensorDescWrapper::operator=(TensorDescWrapper o)
-////{
-////    std::swap(tensor_desc_, o.tensor_desc_);
-////    return *this;
-////}
-//
-//TensorDescWrapper& TensorDescWrapper::operator=(TensorDescWrapper&& o)
-//{
-//    if (this != &o)
-//    {
-//        std::swap(tensor_desc_, o.tensor_desc_);
-//    }
-//    else
-//    {
-//        //o.tensor_desc_ = nullptr;
-//    }
-//    return *this;
-//}
-//
-//TensorDescWrapper::~TensorDescWrapper()
-//{
-//    if (tensor_desc_)
-//    {
-//        mmm[tensor_desc_]++;
-//        cudnnDataType_t t;
-//        int n;
-//        int d1[8];
-//        int s1[8];
-//        auto r = cudnnGetTensorNdDescriptor(tensor_desc_, 8, &t, &n, d1, s1);
-//        if (r)
-//        {
-//            fprintf(stderr, "%d\n", __LINE__);
-//        }
-//        r = cudnnDestroyTensorDescriptor(tensor_desc_);
-//        if (r)
-//        {
-//            fprintf(stderr, "%d\n", __LINE__);
-//        }
-//
-//        tensor_count--;
-//    }
-//    printf("%d tensors\n", int(tensor_count));
-//}
+
+TensorDescWrapper& TensorDescWrapper::operator=(TensorDescWrapper&& o)
+{
+    if (this != &o)
+    {
+        std::swap(tensor_desc_, o.tensor_desc_);
+    }
+    else
+    {
+        //o.tensor_desc_ = nullptr;
+    }
+    return *this;
+}
+
+TensorDescWrapper::~TensorDescWrapper()
+{
+    if (tensor_desc_)
+    {
+        cudnnDestroyTensorDescriptor(tensor_desc_);
+    }
+}
 
 int CudaControl::device_count_ = -1;    //-1表示没有初始化，该值正常的值应为非负
 std::vector<CudaControl*> CudaControl::cuda_toolkit_vector_;
@@ -371,12 +325,12 @@ int CudaControl::getBestDevice(int i /*= 0*/)
 
 void CudaControl::setTensorDesc4D(cudnnTensorDescriptor_t tensor, int w, int h, int c, int n)
 {
-    if (tensor && n * c * h * w > 0)
+    if (tensor)
     {
         auto r = cudnnSetTensor4dDescriptor(tensor, CUDNN_TENSOR_NCHW, MYCUDNN_DATA_REAL, n, c, h, w);
         if (r)
         {
-            fprintf(stderr, "Set tensor failed!\n");
+            //fprintf(stderr, "Set tensor failed!\n");
         }
     }
 }

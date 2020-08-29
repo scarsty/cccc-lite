@@ -68,7 +68,7 @@
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalLibraryDirectories>$(OutDir);$(CUDA_PATH)/lib/x64;$(VCPKG_LIB_PATH)\x64-windows\lib;../lib/x64;</AdditionalLibraryDirectories>
-      <AdditionalDependencies>woco-cuda.lib;cudart.lib;cublas.lib;cudnn.lib;openblas.lib;nvml.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>woco-cuda.lib;cudart.lib;cublas.lib;openblas.lib;nvml.lib;cudnn_adv_infer.lib;cudnn_adv_train.lib;cudnn_cnn_infer.lib;cudnn_cnn_train.lib;cudnn_ops_infer.lib;cudnn_ops_train.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <ForceSymbolReferences>%(ForceSymbolReferences)</ForceSymbolReferences>
       <Profile>true</Profile>
     </Link>
