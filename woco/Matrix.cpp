@@ -115,7 +115,7 @@ Matrix::Matrix(DeviceType device_type) : Matrix(Size{ 0, 0 }, device_type)
 
 Matrix Matrix::clone(DeviceType device_type) const
 {
-    Matrix M(this->dim_, device_type);
+    Matrix M(this->getDim(), device_type);
     copyData(*this, M);
     return M;
 }
@@ -138,7 +138,8 @@ Matrix& Matrix::DMatrix() const
 {
     if (d_this_->getDataSize() == 0)
     {
-        d_this_->resize(dim_);
+        d_this_->resize(getDim());
+        printf("fdajkjfiasdjfdsifjisafhuiasdfnsdafneuifniasdfads\n");
     }
     return *d_this_;
 }
@@ -161,26 +162,26 @@ void Matrix::reMallocDData() const
 //若dim中仅有一个元素，则相当于{1,1,1,n}
 void Matrix::setDim(const Size& dim)
 {
-    dim_ = dim;
-    int dim_size = dim.size();
-    number_ref() = dim.back();
+    //dim() = dim;
+    tensor_desc_.dim_size_ = dim.size();
 
-    width_ref() = 1;
-    height_ref() = 1;
-    channel_ref() = 1;
-    data_size() = 1;
-    //row_ref() = 1;
-    for (int i = 0; i < dim_size; i++)
+    tensor_desc_.number_ = dim.back();
+    tensor_desc_.width_ = 1;
+    tensor_desc_.height_ = 1;
+    tensor_desc_.channel_ = 1;
+    tensor_desc_.data_size_ = 1;
+    tensor_desc_.row_ = 1;
+    for (int i = 0; i < tensor_desc_.dim_size_; i++)
     {
-        data_size() *= int64_t(dim[i]);
-        //if (i < dim_size - 1) { row() *= dim[i]; }
-        if (i < dim_size - 3) { width_ref() *= dim[i]; }
-        if (i == dim_size - 3) { height_ref() = dim[i]; }
-        if (i == dim_size - 2) { channel_ref() = dim[i]; }
+        tensor_desc_.data_size_ *= int64_t(dim[i]);
+        if (i < tensor_desc_.dim_size_ - 1) { tensor_desc_.row_ *= dim[i]; }
+        if (i < tensor_desc_.dim_size_ - 3) { tensor_desc_.width_ *= dim[i]; }
+        if (i == tensor_desc_.dim_size_ - 3) { tensor_desc_.height_ = dim[i]; }
+        if (i == tensor_desc_.dim_size_ - 2) { tensor_desc_.channel_ = dim[i]; }
     }
     if (dim.size() <= 4)
     {
-        CudaControl::setTensorDesc4D(getCudnnTensorDesc(), width(), height(), channel(), number());
+        CudaControl::setTensorDesc4D(getCudnnTensorDesc(), tensor_desc_.width_, tensor_desc_.height_, tensor_desc_.channel_, tensor_desc_.number_);
     }
     else
     {
@@ -195,9 +196,21 @@ int Matrix::coord2i(const Size& c)
     for (int i = 0; i < c.size(); i++)
     {
         r += c[i] * s;
-        s = s * dim_[i];
+        s = s * getDim()[i];
     }
     return r;
+}
+
+Matrix::Size Matrix::getDim() const
+{
+    Size d(getDimSize());
+    int i = 0;
+    for (auto it = d.rbegin(); it != d.rend(); ++it)
+    {
+        *it = *(&tensor_desc_.number_  + i);
+        i++;
+    }
+    return d;
 }
 
 int Matrix::resize(int m, int n, bool reserve_data, bool force)
@@ -212,7 +225,7 @@ int Matrix::resize(int w, int h, int c, int n, bool reserve_data, bool force)
 
 int Matrix::resize(const Matrix& X, bool reserve_data, bool force)
 {
-    return resize(X.dim_, reserve_data, force);
+    return resize(X.getDim(), reserve_data, force);
 }
 
 int Matrix::resize(const Size& dim, bool reserve_data, bool force)
@@ -235,8 +248,8 @@ int Matrix::resize(const Size& dim, bool reserve_data, bool force)
 
 int Matrix::resizeNumber(int n, bool reserve_data, bool force)
 {
-    dim_.back() = n;
-    return resize(dim_, reserve_data, force);
+    getDim().back() = n;
+    return resize(getDim(), reserve_data, force);
 }
 
 int Matrix::resizeAndNumber(const Size& dim, int n, bool reserve_data, bool force)
@@ -1182,7 +1195,7 @@ void Matrix::message(const std::string& info) const
     //int w, h, c, n, t;
     //cudnnDataType_t tt;
     fprintf(stdout, "%s GPU = %d, dim = (", info.c_str(), int(inGPU()));
-    for (auto& i : dim_)
+    for (auto& i : getDim())
     {
         fprintf(stdout, "%d, ", i);
     }

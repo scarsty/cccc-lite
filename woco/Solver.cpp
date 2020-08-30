@@ -150,9 +150,7 @@ void Solver::updateWeight(int batch)
     {
         //DMatrix是包含正则化之后的
         Matrix::add(DW_, W_.DMatrix(), DW_, momentum_, 1);
-        //auto AA = DW_.clone();
-        //AA.scale(batch / sqrt(AA.dotSelf()));
-        Matrix::add(W0_, DW_, W0_, 1, -learn_rate_ / batch);
+        //Matrix::add(W0_, DW_, W0_, 1, -learn_rate_ / batch);
         if (solver_type_ == SOLVER_NAG)
         {
             Matrix::copyData(W_, W_vector_[0]);

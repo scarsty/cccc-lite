@@ -16,7 +16,7 @@ void MatrixExtend::addBias(const Matrix& A, const Matrix& bias, Matrix& R, realc
     if (A.inGPU())
     {
         auto cuda = A.cuda();
-        if (bias.dim_.size() <= 5)
+        if (bias.getDimSize() <= 5)
         {
             cudnnAddTensor(cuda->cudnn_handle_, &a, bias.getCudnnTensorDesc(), bias.data(), &b, R.getCudnnTensorDesc(), R.data());
         }
@@ -149,7 +149,7 @@ void MatrixExtend::activeBufferInit(const Matrix& A, ActiveFunctionType af, std:
     case ACTIVE_FUNCTION_DIVISIVE_NORMALIZATION:
         if (A.inGPU())
         {
-            matrix_vector = { Matrix(A.dim_), Matrix(A.dim_), Matrix(1, 1, 1, A.getDataSizeInByte() * 2) };
+            matrix_vector = { Matrix(A.getDim()), Matrix(A.getDim()), Matrix(1, 1, 1, A.getDataSizeInByte() * 2) };
         }
         break;
     case ACTIVE_FUNCTION_BATCH_NORMALIZATION:
@@ -166,7 +166,7 @@ void MatrixExtend::activeBufferInit(const Matrix& A, ActiveFunctionType af, std:
     case ACTIVE_FUNCTION_SPATIAL_TRANSFORMER:
         if (A.inGPU())
         {
-            matrix_vector = { Matrix(3, 2, 1, A.number()), Matrix(A).dim_, Matrix(3, 2, 1, A.number()), Matrix(A).dim_ };
+            matrix_vector = { Matrix(3, 2, 1, A.number()), Matrix(A).getDim(), Matrix(3, 2, 1, A.number()), Matrix(A).getDim() };
         }
         break;
     case ACTIVE_FUNCTION_RECURRENT:
@@ -174,7 +174,7 @@ void MatrixExtend::activeBufferInit(const Matrix& A, ActiveFunctionType af, std:
     case ACTIVE_FUNCTION_ZERO_CHANNEL:
     {
         //1 matrix: factor for mul
-        Matrix m(A.dim_, DeviceType::CPU);
+        Matrix m(A.getDim(), DeviceType::CPU);
         m.initData(1);
         for (int w = 0; w < A.width(); w++)
         {
@@ -878,7 +878,7 @@ void MatrixExtend::convolutionForward(const Matrix& A, const Matrix& W, Matrix& 
                     workspace.resize(1, 1, 1, memory / sizeof(real) + 2);
                     //fprintf(stdout, "resize work space %d\n", memory);
                 }
-                //fprintf(stdout, "choose %d,%d,%d\n", cfap[c].algo, cfap[c].memory, cfap[c].mathType);
+                fprintf(stdout, "conv forward choose %d,%d,%d\n", cfap[c].algo, cfap[c].memory, cfap[c].mathType);
             }
             //workspace->message();
         }
@@ -1009,7 +1009,7 @@ void MatrixExtend::convolutionBackward(Matrix& A, Matrix& W, const Matrix& R, Ma
                     workspace.resize(1, 1, 1, memory / sizeof(real) + 2);
                     //fprintf(stdout, "resize work space %d\n", memory);
                 }
-                //fprintf(stdout, "choose dx %d,%d,%d\n", cbdap[c].algo, cbdap[c].memory, cbdap[c].mathType);
+                fprintf(stdout, "conv backward R choose dx %d,%d,%d\n", cbdap[c].algo, cbdap[c].memory, cbdap[c].mathType);
                 //workspace->message();
             }
             auto cbda = cudnnConvolutionBwdDataAlgo_t(method_dx % conv_method_count);
@@ -1046,7 +1046,7 @@ void MatrixExtend::convolutionBackward(Matrix& A, Matrix& W, const Matrix& R, Ma
                     workspace.resize(1, 1, 1, memory / sizeof(real) + 2);
                     //fprintf(stdout, "resize work space %d\n", memory);
                 }
-                //fprintf(stdout, "choose dw %d,%d,%d\n", cbfap[c].algo, cbfap[c].memory, cbfap[c].mathType);
+                fprintf(stdout, "conv backward W choose dw %d,%d,%d\n", cbfap[c].algo, cbfap[c].memory, cbfap[c].mathType);
                 //workspace->message();
             }
             auto cbfa = cudnnConvolutionBwdFilterAlgo_t(method_dw % conv_method_count);

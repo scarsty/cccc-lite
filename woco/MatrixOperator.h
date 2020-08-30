@@ -55,6 +55,7 @@ private:
     std::vector<real> para_real_;
     std::vector<Matrix> para_matrix_;
     std::vector<std::vector<int>> para_int2_;
+    real data_weight_ = 0, weight_weight_ = 0;
 
 public:
     MatrixOperator() = default;
@@ -76,7 +77,8 @@ public:
 
     static Queue& getQueue();
     static void forward(Queue& op_queue);
-    static void backward(Queue& op_queue, Queue& loss, Matrix& workspace);
+    static void backward(Queue& op_queue);
+    static void calloss(Queue& loss);
     void forward();
     void backward();
 

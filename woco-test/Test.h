@@ -15,6 +15,7 @@ private:
     double testMatrix();
     double testNet();
     double testActive();
+    double testConv();
 };
 
 }    // namespace woco

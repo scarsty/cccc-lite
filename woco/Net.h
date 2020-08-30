@@ -44,6 +44,7 @@ public:
     virtual void structure();
     void forward();
     void backward();
+    void calloss();
 
 public:
     void setXYA(const Matrix& X, const Matrix& Y, const Matrix& A);
