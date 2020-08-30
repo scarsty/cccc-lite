@@ -34,7 +34,7 @@ void Test::test2(int mode)
         Log::LOG("CPU\n");
         t_cpu = testAll();
     }
-    Log::LOG("Time GPU = %g, Time CPU = %g, CPU slow with %g times.\n", t_gpu, t_cpu, t_cpu / t_gpu);
+    Log::LOG("Time GPU = %f, Time CPU = %f, CPU slow with %g times.\n", t_gpu, t_cpu, t_cpu / t_gpu);
 }
 
 double Test::testAll()
@@ -43,9 +43,10 @@ double Test::testAll()
     {
         //testMatrix(),
         //testNet(),
-        testActive(),
+        //testActive(),
+        testConv()
     };
-    double t = std::accumulate(total.begin(), total.end(), 0);
+    double t = std::accumulate(total.begin(), total.end(), 0.0);
     return t;
 }
 
@@ -120,11 +121,33 @@ double Test::testActive()
     return t.getElapsedTime();
 }
 
+double Test::testConv()
+{
+    Timer t;
+    auto batch = 100;
+    auto X = Matrix(28, 28, 1, batch);
+    auto W1 = Matrix(5, 5, 1, 50);
+    auto R = Matrix(24,24,50,batch);
+
+    Matrix work;
+    int me=-1;
+    //work.resize(1, 868);
+    //me = 6401;
+    MatrixExtend::convolutionForward(X, W1, R, work, me, { 1, 1 }, { 0, 0 });
+     printf("%d,%d\n",work.getDataSize(), me);
+    t.start();
+    for (int i = 0; i < 100000; i++)
+    {
+        MatrixExtend::convolutionForward(X, W1, R, work, me, { 1, 1 }, { 0, 0 });
+    }
+    return t.getElapsedTime();
+}
+
 }    // namespace woco
 
 int main(int argc, char* argv[])
 {
     woco::Test t;
-    t.test2(0);
+    t.test2(1);
     return 0;
 }

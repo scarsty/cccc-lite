@@ -177,9 +177,9 @@ int NetCifa::registerFunctions()
             auto padding = getVector(v, 3);
             return registerMatrix(maxpool(map_matrix_[v[0]], window, stride, padding));
         });
-    cifa_.register_function("getRow", [this](cifa::ObjectVector& v)
+    cifa_.register_function("row", [this](cifa::ObjectVector& v)
         { return cifa::Object(map_matrix_[v[0]].row()); });
-    cifa_.register_function("getChannel", [this](cifa::ObjectVector& v)
+    cifa_.register_function("channel", [this](cifa::ObjectVector& v)
         { return cifa::Object(map_matrix_[v[0]].channel()); });
     cifa_.register_function("reshape", [this](cifa::ObjectVector& v)
         {

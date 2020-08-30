@@ -31,25 +31,33 @@ void MatrixOperator::forward(MatrixOperator::Queue& op_queue)
     }
 }
 
-void MatrixOperator::backward(MatrixOperator::Queue& op_queue, MatrixOperator::Queue& loss, Matrix& workspace)
+void MatrixOperator::backward(MatrixOperator::Queue& op_queue)
 {
     //使用一个workspace减少调用次数
     /*
     if (workspace.getDataSize() == 0)
     {
-        std::map<Matrix*, int> map_size;
+        std::map<Matrix*, int64_t> map_size;
         for (auto& op : op_queue)
         {
             for (auto& m : op.matrix_in_)
             {
-                map_size[&m.DMatrix()] = m.getDataSize();
+                map_size[&m.DMatrix()] =std::max( map_size[&m.DMatrix()], m.getDataSize());
+            }
+            for (auto& m : op.matrix_out_)
+            {
+                map_size[&m.DMatrix()] = std::max(map_size[&m.DMatrix()], m.getDataSize());
             }
         }
         for (auto& op : loss)
         {
             for (auto& m : op.matrix_in_)
             {
-                map_size[&m.DMatrix()] = m.getDataSize();
+                map_size[&m.DMatrix()] =std::max( map_size[&m.DMatrix()], m.getDataSize());
+            }
+            for (auto& m : op.matrix_out_)
+            {
+                map_size[&m.DMatrix()] = std::max(map_size[&m.DMatrix()], m.getDataSize());
             }
         }
         int total_size = 0;
@@ -61,30 +69,17 @@ void MatrixOperator::backward(MatrixOperator::Queue& op_queue, MatrixOperator::Q
         total_size = 0;
         for (auto m : map_size)
         {
-            m.first->shareData(workspace, 0, total_size);
+            m.first->shareData(workspace, 0, 0, 0, total_size);
             total_size += m.second;
         }
     }
     workspace.initData(0);    //这个好像比较慢，采用操作模式无法避免，与层模式相比属于性能瓶颈之一
+    //上面这个合并应该是不对，但是哪里不对还不知道
     */
+
     for (auto& op : op_queue)
     {
-        for (auto& m : op.matrix_in_)
-        {
-            m.DMatrix().initData(0);
-        }
-    }
-    for (auto& op : loss)
-    {
-        for (auto& m : op.matrix_in_)
-        {
-            m.DMatrix().initData(0);
-        }
-    }
-
-    for (auto& op : loss)
-    {
-        op.backward();
+        op.data_weight_ = 0;
     }
 
     //用迭代器貌似会快
@@ -94,34 +89,52 @@ void MatrixOperator::backward(MatrixOperator::Queue& op_queue, MatrixOperator::Q
     }
 }
 
+void MatrixOperator::calloss(Queue& loss)
+{
+    for (auto& op : loss)
+    {
+        op.data_weight_ = 0;
+    }
+    for (auto& op : loss)
+    {
+        op.backward();
+    }
+}
+
+//此处的宏在其后很快解除定义了
+#define A (matrix_in_[0])
+#define B (matrix_in_[1])
+#define bias (matrix_in_[1])
+#define R (matrix_out_[0])
+#define W (matrix_in_[1])
 void MatrixOperator::forward()
 {
     switch (type_)
     {
     case MatrixOpType::ADD:
-        Matrix::add(matrix_in_[0], matrix_in_[1], matrix_out_[0], para_real_[0], para_real_[1]);
+        Matrix::add(A, B, R, para_real_[0], para_real_[1]);
         break;
     case MatrixOpType::MUL:
-        Matrix::mul(matrix_in_[0], matrix_in_[1], matrix_out_[0], para_real_[0]);
+        Matrix::mul(A, B, R, para_real_[0]);
         break;
     case MatrixOpType::ELE_MUL:
-        Matrix::elementMul(matrix_in_[0], matrix_in_[1], matrix_out_[0], para_real_[0]);
+        Matrix::elementMul(A, B, R, para_real_[0]);
         break;
     case MatrixOpType::ADD_BIAS:
-        MatrixExtend::addBias(matrix_in_[0], matrix_in_[1], matrix_out_[0], para_real_[0], para_real_[1]);
+        MatrixExtend::addBias(A, bias, R, para_real_[0], para_real_[1]);
         break;
     case MatrixOpType::CONCAT:
-        MatrixExtend::concatByChannel(matrix_in_, matrix_out_[0]);
+        MatrixExtend::concatByChannel(matrix_in_, R);
         break;
     case MatrixOpType::ACTIVE:
-        MatrixExtend::activeForward2(matrix_in_[0], matrix_out_[0], ActiveFunctionType(para_int_.back()), para_int_, para_real_, para_matrix_);
+        MatrixExtend::activeForward2(A, R, ActiveFunctionType(para_int_.back()), para_int_, para_real_, para_matrix_);
         break;
     case MatrixOpType::POOL:
-        MatrixExtend::poolingForward(matrix_in_[0], matrix_out_[0], PoolingType(para_int_.back()),
+        MatrixExtend::poolingForward(A, R, PoolingType(para_int_.back()),
             para_int2_[0], para_int2_[1], para_int2_[2], para_real_[0]);
         break;
     case MatrixOpType::CONV:
-        MatrixExtend::convolutionForward(matrix_in_[0], matrix_in_[1], matrix_out_[0],
+        MatrixExtend::convolutionForward(A, W, R,
             para_matrix_[0], para_int_[1], para_int2_[0], para_int2_[1], para_real_[0]);
         break;
     }
@@ -133,57 +146,61 @@ void MatrixOperator::backward()
     switch (type_)
     {
     case MatrixOpType::ADD:
-        if (matrix_in_[0].needReverse()) { Matrix::add(matrix_in_[0].DMatrix(), matrix_out_[0].DMatrix(), matrix_in_[0].DMatrix(), 1, para_real_[0]); }
-        if (matrix_in_[1].needReverse()) { Matrix::add(matrix_in_[1].DMatrix(), matrix_out_[0].DMatrix(), matrix_in_[1].DMatrix(), 1, para_real_[1]); }
+        if (A.needReverse()) { Matrix::add(A.DMatrix(), R.DMatrix(), A.DMatrix(), data_weight_, para_real_[0]); }
+        if (B.needReverse()) { Matrix::add(B.DMatrix(), R.DMatrix(), B.DMatrix(), data_weight_, para_real_[1]); }
         break;
     case MatrixOpType::MUL:
-        if (matrix_in_[0].needReverse()) { Matrix::mul(matrix_out_[0].DMatrix(), matrix_in_[1], matrix_in_[0].DMatrix(), para_real_[0], 1, MATRIX_NO_TRANS, MATRIX_TRANS); }
-        if (matrix_in_[1].needReverse()) { Matrix::mul(matrix_in_[0], matrix_out_[0].DMatrix(), matrix_in_[1].DMatrix(), para_real_[0], 1, MATRIX_TRANS, MATRIX_NO_TRANS); }
+        if (A.needReverse()) { Matrix::mul(R.DMatrix(), B, A.DMatrix(), para_real_[0], data_weight_, MATRIX_NO_TRANS, MATRIX_TRANS); }
+        if (B.needReverse()) { Matrix::mul(A, R.DMatrix(), B.DMatrix(), para_real_[0], data_weight_, MATRIX_TRANS, MATRIX_NO_TRANS); }
         break;
     case MatrixOpType::ELE_MUL:
-        if (matrix_in_[0].needReverse()) { Matrix::elementMul(matrix_out_[0].DMatrix(), matrix_in_[1], matrix_in_[0].DMatrix(), para_real_[0], 1); }
-        if (matrix_in_[1].needReverse()) { Matrix::elementMul(matrix_out_[0].DMatrix(), matrix_in_[0], matrix_in_[1].DMatrix(), para_real_[0], 1); }
+        if (A.needReverse()) { Matrix::elementMul(R.DMatrix(), B, A.DMatrix(), para_real_[0], data_weight_); }
+        if (B.needReverse()) { Matrix::elementMul(R.DMatrix(), A, B.DMatrix(), para_real_[0], data_weight_); }
         break;
     case MatrixOpType::ADD_BIAS:
-        //Matrix::add(matrix_[0].DMatrix(), matrix_[2].DMatrix(), matrix_[0].DMatrix(), 1, para_real_[0]);
-        //Matrix::mulVector(matrix_[2].DMatrix(), para_matrix_[0], matrix_[1].DMatrix(), para_real_[0], 1);
-        MatrixExtend::addBiasBackward(matrix_in_[0], matrix_in_[1], matrix_out_[0], para_real_[0], para_real_[1]);
+        MatrixExtend::addBiasBackward(A, bias, R, para_real_[0], para_real_[1] * data_weight_);
         break;
     case MatrixOpType::CONCAT:
-        MatrixExtend::concatByChannelBackward(matrix_in_, matrix_out_[0]);
+        MatrixExtend::concatByChannelBackward(matrix_in_, R);
         break;
     case MatrixOpType::ACTIVE:
-        if (matrix_in_[0].needReverse())
+        if (A.needReverse())
         {
-            MatrixExtend::activeBackward2(matrix_in_[0], matrix_out_[0], ActiveFunctionType(para_int_.back()), para_int_, para_real_, para_matrix_);
+            MatrixExtend::activeBackward2(A, R, ActiveFunctionType(para_int_.back()), para_int_, para_real_, para_matrix_);
         }
         break;
     case MatrixOpType::POOL:
-        if (matrix_in_[0].needReverse())
+        if (A.needReverse())
         {
-            MatrixExtend::poolingBackward(matrix_in_[0], matrix_out_[0], PoolingType(para_int_.back()),
-                para_int2_[0], para_int2_[1], para_int2_[2], para_real_[0], 1);
+            MatrixExtend::poolingBackward(A, R, PoolingType(para_int_.back()),
+                para_int2_[0], para_int2_[1], para_int2_[2], para_real_[0], data_weight_);
         }
         break;
     case MatrixOpType::CONV:
-        MatrixExtend::convolutionBackward(matrix_in_[0], matrix_in_[1], matrix_out_[0],
-            para_matrix_[1], para_int_[2], para_int_[3], para_int2_[0], para_int2_[1], para_real_[0], 1);
+        MatrixExtend::convolutionBackward(A, W, R,
+            para_matrix_[1], para_int_[2], para_int_[3], para_int2_[0], para_int2_[1], para_real_[0], data_weight_);
         break;
     case MatrixOpType::LOSS:
         if (scale_ != 0)
         {
             //此处直接相减，表示欧氏距离平方，若配合前一层的softmax_ce或sigmoid_ce则表示交叉熵
-            Matrix::add(matrix_in_[0], matrix_in_[1], matrix_in_[0].DMatrix(), scale_, -scale_, 1);
+            Matrix::add(A, B, A.DMatrix(), scale_, -scale_, data_weight_);
         }
         break;
     case MatrixOpType::L2:
         if (scale_ != 0)
         {
-            Matrix::add(matrix_in_[0].DMatrix(), matrix_in_[0], matrix_in_[0].DMatrix(), 1, scale_);
+            Matrix::add(A.DMatrix(), A, A.DMatrix(), data_weight_, scale_);
         }
         break;
     }
+    weight_weight_ = 1;
 }
+#undef A
+#undef B
+#undef bias
+#undef R
+#undef W
 
 void MatrixOperator::print(const MatrixOperator::Queue& op_queue)
 {

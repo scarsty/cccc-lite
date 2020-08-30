@@ -32,6 +32,18 @@ public:
     using Size = std::vector<int>;
 
 private:
+    //这个结构实际上是直接用cudnn的desc，属实验性质
+    struct TensorDesc
+    {
+        int64_t unknown_ = 0;
+        int64_t dim_size_ = 0;
+        int64_t data_size_ = 0;
+        int64_t data_size1_ = 0;
+        int number_ = 0, channel_ = 0, height_ = 0, width_ = 0;
+        int c3[4] = { 0 };
+        int row_ = 0;
+        int c4[15] = { 0 };
+    };
     //因存在多设备可能，数据须同时保存其设备指针，需以共享指针使用此类
     struct DataWarpper
     {
@@ -56,21 +68,13 @@ protected:
     static const realc const_real_1;
     static const realc const_real_0;
 
-    //DeviceType getDeviceType() = DeviceType::CPU;
-
-    int64_t data_size() const { return tensor_desc_[4]; }
+    int64_t data_size() const { return tensor_desc_.data_size_; }
 
     //一列的数据作为一个或一组图像，矩阵本身是列优先
     //但是在图片处理，包含卷积核默认是行优先（遵从cudnn），也就是说图片和卷积核可以认为是转置保存的！！
-    int& width_ref() { return tensor_desc_[11]; }
-    int& height_ref() { return tensor_desc_[10]; }
-    int& channel_ref() { return tensor_desc_[9]; }
-    int& number_ref() { return tensor_desc_[8]; } 
-
-    //Size dim_;    //维度
 
     //TensorDescWrapper tensor_desc1_;
-    int tensor_desc_[32] = { 0 };    //这里太麻烦了，干脆这么糊弄吧
+    TensorDesc tensor_desc_;    //这里太麻烦了，干脆这么糊弄吧
 
     //数据，被迫使用双重指针是因为矩阵计算返回对象，和生成计算流的需要！
     std::shared_ptr<real*> data_ = std::make_shared<real*>();
@@ -81,6 +85,7 @@ protected:
     mutable std::shared_ptr<Matrix> d_this_;
 
     bool need_updata_ = true;    //仅反向使用此参数，决定是否需要更新D数据，禁止本体使用
+    //real prev_weight_ = 0;
 
 public:
     //Matrix& operator=(const Matrix& m);
@@ -100,7 +105,7 @@ private:
     inline real* data() const { return *data_; }
     bool haveD() const { return d_this_ != nullptr; }
     const CudaControl* cuda() const { return shared_data_->cuda_; }
-    cudnnTensorDescriptor_t getCudnnTensorDesc() const { return (cudnnTensorDescriptor_t)tensor_desc_; }
+    cudnnTensorDescriptor_t getCudnnTensorDesc() const { return (cudnnTensorDescriptor_t)&tensor_desc_; }
 
 public:
     DeviceType getDeviceType() const { return shared_data_->cuda_ == nullptr ? DeviceType::CPU : DeviceType::GPU; }
@@ -130,16 +135,16 @@ public:
     }
 
 public:
-    int getDimSize() const { return dim_.size(); }
-    const std::vector<int>& getDim() const { return dim_; }
+    int getDimSize() const { return tensor_desc_.dim_size_; }
+    Size getDim() const;    //维度
     int col() const { return number(); }
-    int width() const { return tensor_desc_[11]; }
-    int height() const { return tensor_desc_[10]; }
-    int channel() const { return tensor_desc_[9]; }
-    int number() const { return tensor_desc_[8]; }
-    int row() const { return tensor_desc_[16]; }
+    int width() const { return tensor_desc_.width_; }
+    int height() const { return tensor_desc_.height_; }
+    int channel() const { return tensor_desc_.channel_; }
+    int number() const { return tensor_desc_.number_; }
+    int row() const { return tensor_desc_.row_; }
 
-    int64_t getDataSize() const { return tensor_desc_[4]; }
+    int64_t getDataSize() const { return tensor_desc_.data_size_; }
     int64_t getDataSizeInByte() const { return getDataSize() * sizeof(real); }
 
     //以下3个函数，注意如果数据在显存中，一般x来说是无法赋值和输出的
@@ -276,6 +281,11 @@ public:
     static void elementDiv(const Matrix& A, const Matrix& B, Matrix& R, real a = 0, real b = 0, real scale = 1);
     static void crossEntropy(const Matrix& A, const Matrix& Y, Matrix& R, real a = 0, real scale = 1);
     static void crossEntropy2(const Matrix& A, const Matrix& Y, Matrix& R, real a = 0, real scale = 1);    //二分类时仅用一个结果时的交叉熵
+
+public:
+    //void setPrevWeight(real r) { prev_weight_ = r; }
+    //void clearWeight() { prev_weight_ = 0; }
+    //real getPrevWeight() { return prev_weight_; }
 
 public:
     static bool checkMatrixDevice(const std::vector<const Matrix*>& v);    //此处用对象会有效率问题
