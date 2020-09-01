@@ -28,6 +28,8 @@ protected:
 
     std::vector<Solver> solvers_;    //应等于weight的size
 
+    Solver solver_;
+
     std::string message_;
 
 public:
