@@ -139,7 +139,6 @@ Matrix& Matrix::DMatrix() const
     if (d_this_->getDataSize() == 0)
     {
         d_this_->resize(getDim());
-        printf("fdajkjfiasdjfdsifjisafhuiasdfnsdafneuifniasdfads\n");
     }
     return *d_this_;
 }

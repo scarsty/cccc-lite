@@ -12,7 +12,7 @@ void MatrixExtend::addBias(const Matrix& A, const Matrix& bias, Matrix& R, realc
 {
     assert(checkMatrixDevice({ &A, &bias, &R }));
     assert(bias.getDataSize() == bias.channel() || bias.number() == 1);
-    copyData(A, R);
+    //copyData(A, R);
     if (A.inGPU())
     {
         auto cuda = A.cuda();
@@ -53,7 +53,7 @@ void MatrixExtend::addBiasBackward(Matrix& A, Matrix& bias, const Matrix& R, rea
     assert(checkMatrixDevice({ &A, &bias, &R }));
     if (A.needReverse())
     {
-        Matrix::add(A.DMatrix(), R.DMatrix(), A.DMatrix(), 1, a);
+        //Matrix::add(A.DMatrix(), R.DMatrix(), A.DMatrix(), 1, a);
     }
     if (bias.needReverse())
     {
