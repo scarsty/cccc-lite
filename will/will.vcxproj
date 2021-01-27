@@ -124,7 +124,6 @@
     <ClCompile Include="DataPreparerTxt.cpp" />
     <ClCompile Include="..\..\common\File.cpp" />
     <ClCompile Include="DataPreparer.cpp" />
-    <ClCompile Include="Layer.cpp" />
     <ClCompile Include="Log.cpp" />
     <ClCompile Include="Matrix.cpp" />
     <ClCompile Include="MatrixData.cpp" />
@@ -155,7 +154,6 @@
     <ClInclude Include="..\..\common\DynamicLibrary.h" />
     <ClInclude Include="..\..\common\File.h" />
     <ClInclude Include="DataPreparer.h" />
-    <ClInclude Include="Layer.h" />
     <ClInclude Include="Log.h" />
     <ClInclude Include="cuda_half_hack.h" />
     <ClInclude Include="MatrixData.h" />

@@ -30,10 +30,6 @@
       <UniqueIdentifier>{2a3933f8-115f-45e7-834d-0367a65f965c}</UniqueIdentifier>
       <Extensions>Data*.*</Extensions>
     </Filter>
-    <Filter Include="layer">
-      <UniqueIdentifier>{6625ebba-819f-41bf-8501-72e44f10b3a5}</UniqueIdentifier>
-      <Extensions>Layer*.*</Extensions>
-    </Filter>
     <Filter Include="math">
       <UniqueIdentifier>{b1000c3a-726a-497c-b4f3-7bde70c0545f}</UniqueIdentifier>
     </Filter>
@@ -117,9 +113,6 @@
     </ClCompile>
     <ClCompile Include="CudaControl.cpp">
       <Filter>cuda</Filter>
-    </ClCompile>
-    <ClCompile Include="Layer.cpp">
-      <Filter>layer</Filter>
     </ClCompile>
     <ClCompile Include="MatrixOp.cpp">
       <Filter>matrix</Filter>
@@ -227,9 +220,6 @@
     </ClInclude>
     <ClInclude Include="CudaControl.h">
       <Filter>cuda</Filter>
-    </ClInclude>
-    <ClInclude Include="Layer.h">
-      <Filter>layer</Filter>
     </ClInclude>
     <ClInclude Include="MatrixOp.h">
       <Filter>matrix</Filter>
