@@ -19,6 +19,7 @@ WILL的设计同时支持动态图和静态图，目前只有静态图形式，�
 - 下载cuDNN的开发包，将h文件，lib文件和dll文件复制到cuda工具箱目录中的include，lib/x64和bin目录。或者复制到自己指定的某个目录也可以，但是可能需要自己设置环境变量。
 - 检查环境变量CUDA_PATH的值，通常应该是“C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v10.0”（后面的数字为版本号，有可能不同）。
 - 需要安装线性代数库OpenBLAS（推荐使用vcpkg或者msys2），将其库文件置于链接器可以找到的位置。
+- 需安装libfmt。
 - 需要nvml库和nvml.dll，请使用显卡驱动中自带的，通常dll文件位于“C:\Program Files\NVIDIA Corporation\NVSMI”或者“C:\Windows\system32”，该目录有可能不在环境变量中，请自行设置或将dll文件复制出来。
 - 一些dll文件默认情况并不在PATH环境变量中，应手动复制到work目录或者PATH环境变量中的目录，包括：openblas.dll，nvml.dll等。
 - 下载MNIST的文件解压后，放入work/mnist目录，文件名应为：t10k-images.idx3-ubyte，t10k-labels.idx1-ubyte，train-images.idx3-ubyte，train-labels.idx1-ubyte。某些解压软件可能解压后中间的.会变成-，请自行修改。
@@ -41,7 +42,7 @@ WILL的设计同时支持动态图和静态图，目前只有静态图形式，�
 ### Linux下编译
 
 #### x86_64
-- 请自行安装和配置CUDA和OpenBLAS，尽量使用系统提供的包管理器自动安装的版本。随安装的版本不同，有可能需要修改cmake文件。
+- 请自行安装和配置libfmt、CUDA和OpenBLAS，尽量使用系统提供的包管理器自动安装的版本。随安装的版本不同，有可能需要修改cmake文件。
 - CUDA的默认安装文件夹应该是/usr/local/cuda，但是一些Linux发行版可能会安装至其他目录，这时需要修改CMakeLists.txt中的包含目录和链接目录。其中包含有stubs的是nvidia-ml的目录，通常不包含在默认的库目录中，可能需要自行修改。
 - 下载cuDNN，放到/usr/local/cuda，注意lib的目录有可能含有64。
 - 在neural目录下执行```cmake .```生成Makefile。
