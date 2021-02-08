@@ -6,7 +6,7 @@
 #include <string>
 #include <typeinfo>
 
-namespace will
+namespace cccc
 {
 
 //该类用于读取配置文件，并转换其中的字串设置为枚举
@@ -128,4 +128,4 @@ public:
 
 //#define OPTION_GET_VALUE_INT(op, v, default_v) v = op->getInt("", #v, default_v)
 
-}    // namespace will
+}    // namespace cccc

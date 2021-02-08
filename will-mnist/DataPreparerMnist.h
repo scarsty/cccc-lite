@@ -2,7 +2,7 @@
 #include "DataPreparerImage.h"
 #include "Random.h"
 
-namespace will
+namespace cccc
 {
 
 class DataPreparerMnist : public DataPreparerImage
@@ -23,4 +23,4 @@ public:
     void transOne(Matrix& X1, Matrix& Y1) override;
 };
 
-}    // namespace will
+}    // namespace cccc

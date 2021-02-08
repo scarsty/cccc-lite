@@ -1,6 +1,6 @@
 #include "Log.h"
 
-namespace will
+namespace cccc
 {
 
 Log::Log()
@@ -11,4 +11,4 @@ Log::~Log()
 {
 }
 
-}    // namespace will
+}    // namespace cccc

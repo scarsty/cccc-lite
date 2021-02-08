@@ -2,7 +2,7 @@
 #include "DataPreparer.h"
 #include <string>
 
-namespace will
+namespace cccc
 {
 
 class DataPreparerTxt : public DataPreparer
@@ -23,4 +23,4 @@ private:
     float getContent(int i);
 };
 
-}    // namespace will
+}    // namespace cccc

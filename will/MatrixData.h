@@ -3,7 +3,7 @@
 #include "types.h"
 #include <memory>
 
-namespace will
+namespace cccc
 {
 
 //因存在多设备可能，数据须同时保存其设备指针，需以共享指针使用此类
@@ -56,4 +56,4 @@ public:
     }
 };
 
-}    // namespace will
+}    // namespace cccc

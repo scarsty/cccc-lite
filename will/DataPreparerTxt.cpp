@@ -2,7 +2,7 @@
 #include "File.h"
 #include "VectorMath.h"
 
-namespace will
+namespace cccc
 {
 
 DataPreparerTxt::DataPreparerTxt()
@@ -45,4 +45,4 @@ float DataPreparerTxt::getContent(int i)
     return (*p) / 65536.0;
 }
 
-}    // namespace will
+}    // namespace cccc

@@ -1,7 +1,7 @@
 #include "AdditionalCost.h"
 #include "MatrixEx.h"
 
-namespace will
+namespace cccc
 {
 
 AdditionalCost::AdditionalCost()
@@ -89,4 +89,4 @@ void AdditionalCost::modifyDA(Matrix& A, Matrix& dA)
     }
 }
 
-}    // namespace will
+}    // namespace cccc

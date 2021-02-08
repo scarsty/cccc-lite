@@ -9,7 +9,7 @@
 #include <nvml.h>
 #endif
 
-namespace will
+namespace cccc
 {
 
 int CudaControl::device_count_ = -1;    //-1表示没有初始化，该值正常的值应为非负
@@ -184,7 +184,7 @@ void CudaControl::destroyAll()
     device_count_ = -1;
 }
 
-will::DeviceType CudaControl::getGlobalCudaType()
+cccc::DeviceType CudaControl::getGlobalCudaType()
 {
     return global_device_type_;
 }
@@ -434,4 +434,4 @@ void CudaControl::findBestDevice()
     }
 }
 
-}    // namespace will
+}    // namespace cccc

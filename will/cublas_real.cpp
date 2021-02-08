@@ -1,6 +1,6 @@
 #include "cublas_real.h"
 
-namespace will
+namespace cccc
 {
 
 #ifndef _NO_CUDA
@@ -9,4 +9,4 @@ cublasHandle_t Cublas::handle_;
 #endif
 #endif
 
-}    // namespace will
+}    // namespace cccc

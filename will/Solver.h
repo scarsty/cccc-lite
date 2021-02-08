@@ -3,7 +3,7 @@
 #include "Neural.h"
 #include "Option.h"
 
-namespace will
+namespace cccc
 {
 
 //更新参数的策略
@@ -76,4 +76,4 @@ private:
     real scale_inter(int x, int x1, int x2, real y1, real y2);
 };
 
-}    // namespace will
+}    // namespace cccc

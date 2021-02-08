@@ -5,7 +5,7 @@
 #include "Option.h"
 #include "Random.h"
 
-namespace will
+namespace cccc
 {
 
 class Activer : public Neural
@@ -59,4 +59,4 @@ private:
     bool needSave(int i);
 };
 
-}    // namespace will
+}    // namespace cccc

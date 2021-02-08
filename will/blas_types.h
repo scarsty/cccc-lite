@@ -1,6 +1,6 @@
 #pragma once
 
-namespace will
+namespace cccc
 {
 
 //base class of blas
@@ -117,4 +117,4 @@ class Blas
 };
 #endif
 
-}    // namespace will
+}    // namespace cccc

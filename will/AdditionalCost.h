@@ -3,7 +3,7 @@
 #include "Neural.h"
 #include "Option.h"
 
-namespace will
+namespace cccc
 {
 
 class AdditionalCost : public Neural
@@ -40,4 +40,4 @@ public:
     void modifyDA(Matrix& A, Matrix& dA);
 };
 
-}    // namespace will
+}    // namespace cccc

@@ -5,7 +5,7 @@
 //#include "curand.h"
 #include <vector>
 
-namespace will
+namespace cccc
 {
 
 //数据是否存储于CUDA设备

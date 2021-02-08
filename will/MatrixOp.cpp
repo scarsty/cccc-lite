@@ -2,7 +2,7 @@
 #include "VectorMath.h"
 #include <map>
 
-namespace will
+namespace cccc
 {
 
 void MatrixOp::forward(std::vector<MatrixOp>& op_queue)
@@ -497,4 +497,4 @@ std::vector<MatrixOp> L2(const std::vector<MatrixSP>& v)
     return q;
 }
 
-}    // namespace will
+}    // namespace cccc

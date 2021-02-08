@@ -6,7 +6,7 @@
 #define _USE_MATH_DEFINES
 #include <cmath>
 
-namespace will
+namespace cccc
 {
 
 DataPreparerMnist::DataPreparerMnist()
@@ -116,4 +116,4 @@ void DataPreparerMnist::transOne(Matrix& X1, Matrix& Y1)
     
     在不同操作系统中，全局变量的链接行为也可能存在区别，请参考相关的文档
 */
-}    // namespace will
+}    // namespace cccc

@@ -1,7 +1,7 @@
 #include "Solver.h"
 #include "MatrixEx.h"
 
-namespace will
+namespace cccc
 {
 
 Solver::Solver()
@@ -306,4 +306,4 @@ real Solver::scale_inter(int x, int x1, int x2, real y1, real y2)
     return y;
 }
 
-}    // namespace will
+}    // namespace cccc

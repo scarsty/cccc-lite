@@ -11,7 +11,7 @@
 
 #if REAL_PRECISION == 2
 
-namespace will
+namespace cccc
 {
 
 struct will_half : public __half
@@ -176,30 +176,30 @@ public:
 #define Cublas CublasHalf
 #define Cblas CblasHalf
 
-}    // namespace will
+}    // namespace cccc
 
 namespace std
 {
-inline will::will_half max(const will::will_half& lh, const double& rh)
+inline cccc::will_half max(const cccc::will_half& lh, const double& rh)
 {
-    return lh > will::will_half(rh) ? lh : will::will_half(rh);
+    return lh > cccc::will_half(rh) ? lh : cccc::will_half(rh);
 }
-inline will::will_half max(const will::will_half& lh, const will::will_half& rh)
+inline cccc::will_half max(const cccc::will_half& lh, const cccc::will_half& rh)
 {
     return lh > rh ? lh : rh;
 }
 }    // namespace std
 
 template <>
-class Random<will::will_half> : public Random<float>
+class Random<cccc::will_half> : public Random<float>
 {
 public:
-    void set_parameter(will::will_half a, will::will_half b)
+    void set_parameter(cccc::will_half a, cccc::will_half b)
     {
         uniform_dist_.param(decltype(uniform_dist_.param())(__half2float(a), __half2float(b)));
         normal_dist_.param(decltype(normal_dist_.param())(__half2float(a), __half2float(b)));
     }
-    will::will_half rand()
+    cccc::will_half rand()
     {
         if (type_ == RANDOM_UNIFORM)
         {

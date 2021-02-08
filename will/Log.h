@@ -3,7 +3,7 @@
 #include "fmt/format.h"
 #include "fmt/ranges.h"
 
-namespace will
+namespace cccc
 {
 
 class Log
@@ -39,4 +39,4 @@ public:
     static void setLog(int log) { log_state() = log; }
 };
 
-}    // namespace will
+}    // namespace cccc

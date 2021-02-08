@@ -1,7 +1,7 @@
 #include "Cifar10Reader.h"
 #include "File.h"
 
-namespace will
+namespace cccc
 {
 
 Cifar10Reader::Cifar10Reader()
@@ -90,4 +90,4 @@ void Cifar10Reader::load(Matrix& X, Matrix& Y, std::string path /*= "cifa10"*/, 
     //Y.message();
 }
 
-}    // namespace will
+}    // namespace cccc

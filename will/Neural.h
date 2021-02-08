@@ -2,7 +2,7 @@
 #include "Log.h"
 #include "Util.h"
 
-namespace will
+namespace cccc
 {
 
 //神经基类，其子类的用于构造神经网
@@ -20,4 +20,4 @@ private:
 
 };
 
-}    // namespace will
+}    // namespace cccc

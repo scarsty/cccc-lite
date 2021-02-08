@@ -1,9 +1,9 @@
 #pragma once
-#include "Layer.h"
 #include "MatrixOp.h"
 #include "Neural.h"
+#include "Solver.h"
 
-namespace will
+namespace cccc
 {
 
 class Net : public Neural
@@ -81,4 +81,4 @@ public:
     //Net* clone(int clone_data = 0);
 };
 
-}    // namespace will
+}    // namespace cccc

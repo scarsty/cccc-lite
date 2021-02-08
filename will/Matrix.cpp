@@ -3,7 +3,7 @@
 #include "VectorMath.h"
 #include <cassert>
 
-namespace will
+namespace cccc
 {
 
 //const realc Matrix::const_real_1 = 1;
@@ -853,7 +853,7 @@ void Matrix::add(const Matrix& A, const Matrix& B, Matrix& R, realc a, realc b, 
 }
 
 //整个矩阵点乘
-will::realc Matrix::dot(const Matrix& A, const Matrix& B)
+cccc::realc Matrix::dot(const Matrix& A, const Matrix& B)
 {
     assert(checkMatrixDevice({ &A, &B }));
     if (A.inGPU())
@@ -867,7 +867,7 @@ will::realc Matrix::dot(const Matrix& A, const Matrix& B)
 }
 
 //选择矩阵的某列点乘
-will::realc Matrix::dotCol(const Matrix& A, int cA, const Matrix& B, int cB)
+cccc::realc Matrix::dotCol(const Matrix& A, int cA, const Matrix& B, int cB)
 {
     assert(checkMatrixDevice({ &A, &B }));
     if (A.inGPU())
@@ -1136,6 +1136,6 @@ void Matrix::message(const std::string& info) const
     //    fmt::print(stdout, "%d %d\n", d1[i], s1[i]);
     //}
     //cudnnSetTensorNdDescriptor(tensor_desc_, t, n, d1, s1);
-}    // namespace will
+}    // namespace cccc
 
-}    // namespace will
+}    // namespace cccc

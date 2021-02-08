@@ -16,7 +16,7 @@
 
 #define MATRIX_OPERATOR
 
-namespace will
+namespace cccc
 {
 
 //矩阵类
@@ -319,4 +319,4 @@ inline Matrix operator*(const Matrix& A, real r)
     return R;
 }
 
-}    // namespace will
+}    // namespace cccc

@@ -1,7 +1,7 @@
 #pragma once
 #include "DataPreparer.h"
 
-namespace will
+namespace cccc
 {
 
 class DataPreparerFactory : DataPreparer
@@ -15,4 +15,4 @@ public:
     static void destroy(DataPreparer*& dp);
 };
 
-}    // namespace will
+}    // namespace cccc
