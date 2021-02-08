@@ -1,7 +1,7 @@
 #include "MatrixData.h"
 #include "Matrix.h"
 
-namespace will
+namespace cccc
 {
 //此处有问题，目前来看只能在同设备中resize
 real* MatrixData::resize(int64_t size, bool reserve_data, bool force)
@@ -85,4 +85,4 @@ void MatrixData::free()
     data_ = nullptr;
 }
 
-}    // namespace will
+}    // namespace cccc

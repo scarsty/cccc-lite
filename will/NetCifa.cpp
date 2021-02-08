@@ -2,7 +2,7 @@
 #include "Log.h"
 #include "Option.h"
 
-namespace will
+namespace cccc
 {
 
 NetCifa::NetCifa()
@@ -381,4 +381,4 @@ int NetCifa::registerFunctions()
     return 0;
 }
 
-}    // namespace will
+}    // namespace cccc

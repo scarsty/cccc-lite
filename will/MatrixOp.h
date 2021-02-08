@@ -2,7 +2,7 @@
 #include "Matrix.h"
 #include "MatrixEx.h"
 
-namespace will
+namespace cccc
 {
 
 //矩阵操作，规定网络前向只准使用此文件中的计算
@@ -126,4 +126,4 @@ std::vector<MatrixOp> crossEntropy(MatrixSP& A, MatrixSP& Y);
 std::vector<MatrixOp> L2(MatrixSP& A);
 std::vector<MatrixOp> L2(const std::vector<MatrixSP>& v);
 
-}    // namespace will
+}    // namespace cccc

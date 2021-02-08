@@ -3,7 +3,7 @@
 #include "blas_types.h"
 #include "cublas_v2.h"
 
-namespace will
+namespace cccc
 {
 
 #if defined(NORMAL_BLAS)
@@ -373,4 +373,4 @@ protected:
 
 #endif
 
-}    // namespace will
+}    // namespace cccc

@@ -4,7 +4,7 @@
 #include "Option.h"
 #include "Random.h"
 
-namespace will
+namespace cccc
 {
 
 class DataPreparer : public Neural
@@ -127,4 +127,4 @@ protected:
         LOG("{} = {}\n", NAME_STR(a), a); \
     } while (0)
 
-}    // namespace will
+}    // namespace cccc

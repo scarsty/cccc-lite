@@ -1,7 +1,7 @@
 #include "Option.h"
 #include <algorithm>
 
-namespace will
+namespace cccc
 {
 
 const char Option::default_section_[] = "will";
@@ -229,4 +229,4 @@ void Option::initEnums()
         });
 }
 
-}    // namespace will
+}    // namespace cccc

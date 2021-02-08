@@ -3,7 +3,7 @@
 #include "MatrixOp.h"
 #include "Net.h"
 
-namespace will
+namespace cccc
 {
 
 struct CompareObject
@@ -48,4 +48,4 @@ private:
     }
 };
 
-}    // namespace will
+}    // namespace cccc

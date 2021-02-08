@@ -2,7 +2,7 @@
 #include "File.h"
 #include <ctime>
 
-namespace will
+namespace cccc
 {
 
 DataPreparer::DataPreparer()
@@ -332,4 +332,4 @@ std::string DataPreparer::getMessage(int i)
     return "Error.";
 }
 
-}    // namespace will
+}    // namespace cccc

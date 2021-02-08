@@ -1,7 +1,7 @@
 #include "MnistReader.h"
 #include "File.h"
 
-namespace will
+namespace cccc
 {
 
 MnistReader::MnistReader()
@@ -100,4 +100,4 @@ void MnistReader::load(Matrix& X, Matrix& Y, std::string path /*= "mnist"*/, int
     fprintf(stdout, "done\n");
 }
 
-}    // namespace will
+}    // namespace cccc

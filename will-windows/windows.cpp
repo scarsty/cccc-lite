@@ -22,7 +22,7 @@ int main(int argc, char* argv[])
 
     if (cmd.exist("config"))
     {
-        will::Application app;
+        cccc::Application app;
         app.setIniFile(cmd.get<std::string>("config"));
         app.setIniString(cmd.get<std::string>("add-config"));
         app.run();
@@ -30,8 +30,8 @@ int main(int argc, char* argv[])
     else if (cmd.exist("version"))
     {
         fprintf(stdout, "LIBWILL (A Deep Neural Net library) command line interface\n");
-        fprintf(stdout, "Float precision is %d (", will::Application::getFloatPresicion() * 8);
-        switch (will::Application::getFloatPresicion())
+        fprintf(stdout, "Float precision is %d (", cccc::Application::getFloatPresicion() * 8);
+        switch (cccc::Application::getFloatPresicion())
         {
         case 2:
             fprintf(stdout, "half");

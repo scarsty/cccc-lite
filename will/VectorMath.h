@@ -2,7 +2,7 @@
 #include <cmath>
 #include <cstring>
 
-namespace will
+namespace cccc
 {
 
 namespace VectorMath
@@ -223,4 +223,4 @@ public:
 };
 */
 
-}    // namespace will
+}    // namespace cccc

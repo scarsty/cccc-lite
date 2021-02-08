@@ -1,12 +1,12 @@
 #include "Net.h"
 #include "ConsoleControl.h"
 #include "File.h"
-#include "Layer.h"
+//#include "Layer.h"
 #include "Timer.h"
 #include "VectorMath.h"
 #include <algorithm>
 
-namespace will
+namespace cccc
 {
 
 Net::Net()
@@ -650,4 +650,4 @@ void Net::groupAttack(Matrix* X, Matrix* Y, int attack_times)
 //    return net;
 //}
 
-}    // namespace will
+}    // namespace cccc

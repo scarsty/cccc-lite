@@ -3,7 +3,7 @@
 #include "DataPreparerTxt.h"
 #include "DynamicLibrary.h"
 
-namespace will
+namespace cccc
 {
 
 DataPreparer* DataPreparerFactory::create(Option* op, const std::string& section, const std::vector<int>& dim0, const std::vector<int>& dim1)
@@ -102,4 +102,4 @@ void DataPreparerFactory::destroy(DataPreparer*& dp)
     }
 }
 
-}    // namespace will
+}    // namespace cccc

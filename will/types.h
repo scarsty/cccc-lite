@@ -39,7 +39,7 @@
 #include "fmt/format.h"
 #include "fmt/ranges.h"
 
-namespace will
+namespace cccc
 {
 
 //realc的作用：某些半精度函数需要单精度的常数参数，例如池化和卷积
@@ -227,4 +227,4 @@ enum PruneType
     PRUNE_WEIGHT,
 };
 
-}    // namespace will
+}    // namespace cccc

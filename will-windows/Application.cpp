@@ -2,7 +2,7 @@
 #include "Brain.h"
 #include "File.h"
 
-namespace will
+namespace cccc
 {
 
 Application::Application()
@@ -76,4 +76,4 @@ void Application::callback(void* net_pointer)
 {
 }
 
-}    // namespace will
+}    // namespace cccc

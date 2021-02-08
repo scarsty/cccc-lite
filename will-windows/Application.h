@@ -1,7 +1,7 @@
 #pragma once
 #include <string>
 
-namespace will
+namespace cccc
 {
 
 class Application
@@ -29,4 +29,4 @@ public:
     static int getFloatPresicion();
 };
 
-}    // namespace will
+}    // namespace cccc

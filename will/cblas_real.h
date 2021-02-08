@@ -2,7 +2,7 @@
 #include "blas_types.h"
 #include "cblas.h"
 
-namespace will
+namespace cccc
 {
 
 //Class of blas, overload functions with the same name for float and double.
@@ -317,4 +317,4 @@ public:
     }
 };
 
-}    // namespace will
+}    // namespace cccc

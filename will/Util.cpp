@@ -1,6 +1,6 @@
 #include "Util.h"
 
-namespace will
+namespace cccc
 {
 
 Util::Util()
@@ -11,4 +11,4 @@ Util::~Util()
 {
 }
 
-}    // namespace will
+}    // namespace cccc

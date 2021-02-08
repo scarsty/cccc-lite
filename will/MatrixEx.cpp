@@ -7,7 +7,7 @@
 #define M_PI 3.1415926535897932
 #endif
 
-namespace will
+namespace cccc
 {
 
 //若bias某一维度为1，则视为对X的对应维度加上同样的值，cudnn的文档中指出最高支持到5维
@@ -1233,4 +1233,4 @@ void MatrixEx::leaky_relub(Matrix& X, const Matrix& Y, real l, real a /*= 1*/, r
     }
 }
 
-}    // namespace will
+}    // namespace cccc

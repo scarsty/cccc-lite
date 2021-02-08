@@ -9,7 +9,7 @@
 #define _USE_MATH_DEFINES
 #include <cmath>
 
-namespace will
+namespace cccc
 {
 
 DataPreparerImage::DataPreparerImage()
@@ -109,4 +109,4 @@ void DataPreparerImage::transOne(Matrix& X1, Matrix& Y1)
     }
 }
 
-}    // namespace will
+}    // namespace cccc

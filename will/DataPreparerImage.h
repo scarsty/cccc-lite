@@ -1,7 +1,7 @@
 #pragma once
 #include "DataPreparer.h"
 
-namespace will
+namespace cccc
 {
 
 class DataPreparerImage : public DataPreparer
@@ -22,4 +22,4 @@ public:
     void transOne(Matrix& X1, Matrix& Y1) override;
 };
 
-}    // namespace will
+}    // namespace cccc

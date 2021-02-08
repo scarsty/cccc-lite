@@ -1,6 +1,6 @@
 #include "Neural.h"
 
-namespace will
+namespace cccc
 {
 
 Neural::Neural()
@@ -11,4 +11,4 @@ Neural::~Neural()
 {
 }
 
-}    // namespace will
+}    // namespace cccc

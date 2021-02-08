@@ -1,6 +1,6 @@
 #include "Activer.h"
 
-namespace will
+namespace cccc
 {
 
 Activer::Activer()
@@ -236,4 +236,4 @@ bool Activer::needSave(int i)
         || active_function_ == ACTIVE_FUNCTION_SPATIAL_TRANSFORMER;
 }
 
-}    // namespace will
+}    // namespace cccc

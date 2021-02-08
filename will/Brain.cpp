@@ -6,7 +6,7 @@
 #include "convert.h"
 #include <algorithm>
 
-namespace will
+namespace cccc
 {
 
 Brain::Brain() : X_train_{ DeviceType::CPU }, Y_train_{ DeviceType::CPU }, X_train_cpu_{ DeviceType::CPU }, Y_train_cpu_{ DeviceType::CPU }, X_test_{ DeviceType::CPU }, Y_test_{ DeviceType::CPU }, X_test_cpu_{ DeviceType::CPU }, Y_test_cpu_{ DeviceType::CPU }
@@ -624,4 +624,4 @@ int Brain::getFloatPrecision()
     return sizeof(real);
 }
 
-}    // namespace will
+}    // namespace cccc

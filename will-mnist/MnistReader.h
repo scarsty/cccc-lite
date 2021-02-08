@@ -1,7 +1,7 @@
 #pragma once
 #include "Matrix.h"
 
-namespace will
+namespace cccc
 {
 
 class MnistReader
@@ -20,4 +20,4 @@ public:
     void load(Matrix& X, Matrix& Y, std::string path = "mnist", int data_type = 1);    //data_type：1是训练集，2是测试集
 };
 
-}    // namespace will
+}    // namespace cccc

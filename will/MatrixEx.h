@@ -1,7 +1,7 @@
 #pragma once
 #include "Matrix.h"
 
-namespace will
+namespace cccc
 {
 
 //该类中均不是矩阵基本计算，全部为静态函数
@@ -82,4 +82,4 @@ public:
     static void leaky_relub(Matrix& X, const Matrix& Y, real l, real a = 1, real b = 0);
 };
 
-}    // namespace will
+}    // namespace cccc
