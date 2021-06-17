@@ -28,7 +28,6 @@ WILL的设计同时支持动态图和静态图，目前只有静态图形式，�
   will-windows -c mnist-cv.ini
   ```
 - 也可以使用FashionMNIST来测试，通过mnist_path选项可以设置不同的文件所在目录。通常测试集上准确率可以到91%左右。
-- image工程用来合并图片到程序可以读取的格式。
 
 ### Python模块
 
