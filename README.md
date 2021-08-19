@@ -1,15 +1,15 @@
-# WILL
+# CCCC
 <img src='https://raw.githubusercontent.com/scarsty/neural-demo/master/logo.png'>
 
 ## 简介
 
-WILL是同时支持第一代基于层和第二代基于操作的神经网络工具包，但是安装和使用远比同类工具简单。
+CCCC是同时支持第一代基于层和第二代基于操作的神经网络工具包，但是安装和使用远比同类工具简单。
 
-除Linux之外，WILL正式支持Windows，且以Windows为主要开发平台。
+除Linux之外，CCCC正式支持Windows，且以Windows为主要开发平台。
 
-WILL的功能并不及其他的开源平台，其特色是简单的配置和单机下的速度，请酌情使用。
+CCCC的功能并不及其他的开源平台，其特色是简单的配置和单机下的速度，请酌情使用。
 
-WILL的设计同时支持动态图和静态图，目前只有静态图形式，动态图需少量修改代码。
+CCCC的设计同时支持动态图和静态图，目前只有静态图形式，动态图需少量修改代码。
 
 ## 编译说明
 
