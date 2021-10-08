@@ -92,26 +92,9 @@ void Option::initEnums()
             { "softmax", ACTIVE_FUNCTION_SOFTMAX },
             { "softmax_fast", ACTIVE_FUNCTION_SOFTMAX_FAST },
             { "softmax_log", ACTIVE_FUNCTION_SOFTMAX_LOG },
-            { "dropout", ACTIVE_FUNCTION_DROPOUT },
-            { "recurrent", ACTIVE_FUNCTION_RECURRENT },
-            { "softplus", ACTIVE_FUNCTION_SOFTPLUS },
-            { "local_response_normalization", ACTIVE_FUNCTION_LOCAL_RESPONSE_NORMALIZATION },
-            { "lrn", ACTIVE_FUNCTION_LOCAL_RESPONSE_NORMALIZATION },
-            { "local_constrast_normalization", ACTIVE_FUNCTION_LOCAL_CONSTRAST_NORMALIZATION },
-            { "lcn", ACTIVE_FUNCTION_LOCAL_CONSTRAST_NORMALIZATION },
-            { "divisive_normalization", ACTIVE_FUNCTION_DIVISIVE_NORMALIZATION },
-            { "dn", ACTIVE_FUNCTION_DIVISIVE_NORMALIZATION },
-            { "batch_normalization", ACTIVE_FUNCTION_BATCH_NORMALIZATION },
-            { "bn", ACTIVE_FUNCTION_BATCH_NORMALIZATION },
-            { "spatial_transformer", ACTIVE_FUNCTION_SPATIAL_TRANSFORMER },
-            { "sum_max", ACTIVE_FUNCTION_SUMMAX },
-            { "zero_channel", ACTIVE_FUNCTION_ZERO_CHANNEL },
             { "sigmoid_ce", ACTIVE_FUNCTION_SIGMOID_CE },
             { "softmax_ce", ACTIVE_FUNCTION_SOFTMAX_CE },
             { "softmax_fast_ce", ACTIVE_FUNCTION_SOFTMAX_FAST_CE },
-            { "sin", ACTIVE_FUNCTION_SIN },
-            { "zigzag", ACTIVE_FUNCTION_ZIGZAG },
-            { "leaky_relu", ACTIVE_FUNCTION_LEAKY_RELU },
         });
 
     registerEnum<LayerConnectionType>(
@@ -125,16 +108,6 @@ void Option::initEnums()
             { "conv", LAYER_CONNECTION_CONVOLUTION },
             { "pooling", LAYER_CONNECTION_POOLING },
             { "pool", LAYER_CONNECTION_POOLING },
-            { "direct", LAYER_CONNECTION_DIRECT },
-            { "correlation", LAYER_CONNECTION_CORRELATION },
-            { "corr", LAYER_CONNECTION_CORRELATION },
-            { "conv2", LAYER_CONNECTION_CORRELATION },
-            { "combine", LAYER_CONNECTION_COMBINE },
-            { "extract", LAYER_CONNECTION_EXTRACT },
-            { "roteigen", LAYER_CONNECTION_ROTATE_EIGEN },
-            { "norm2", LAYER_CONNECTION_NORM2 },
-            { "transpose", LAYER_CONNECTION_TRANSPOSE },
-            { "nac", LAYER_CONNECTION_NAC },
         });
 
     registerEnum<CostFunctionType>(

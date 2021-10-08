@@ -248,40 +248,6 @@ void MatrixEx::activeForward(const Matrix& X, Matrix& Y, ActiveFunctionType af, 
             }
         }
         break;
-    case ACTIVE_FUNCTION_SQUARE:
-        Matrix::elementMul(X, X, Y);
-        break;
-    //case ACTIVE_FUNCTION_SUMMAX:
-    //    //这个和对应的反向计算是对的但是效率低，通常不要使用
-    //    Matrix::copyData(X, A);
-    //    for (int i = 0; i < X.getCol(); i++)
-    //    {
-    //        A.scaleCol(1.0 / X.sumAbsCol(i), i);
-    //    }
-    //    break;
-    case ACTIVE_FUNCTION_SIN:
-        MatrixEx::sin(X, Y, M_PI / 2 * 128);
-        break;
-    case ACTIVE_FUNCTION_ZIGZAG:
-        MatrixEx::zigzag(X, Y);
-        //Matrix::copyData(A, R);
-        break;
-    case ACTIVE_FUNCTION_SIN_STEP:
-    {
-        //auto temp = A.clone(DeviceType::CPU);
-        //int sum = 0;
-        //for (int i = 0; i < A.getDataSize(); i++)
-        //{
-        //    if (abs(temp.getData(i)) > 1) { sum++; }
-        //}
-        //if (sum > 0)
-        //{
-        //    fmt::print(stdout, "fajdogairfjgaiorg {} / {}\n", sum, temp.getDataSize());
-        //}
-    }
-        MatrixEx::sin(X, Y, M_PI / 2 * 128);
-        MatrixEx::step(Y, Y);
-        break;
     default:
         fmt::print(stderr, "ACTIVE Parameters not enough!\n");
         break;
@@ -396,14 +362,6 @@ void MatrixEx::activeBackward(Matrix& X, const Matrix& Y, ActiveFunctionType af,
     //        dX.scaleCol(1.0 / X.sumAbsCol(i), i);
     //    }
     //    break;
-    case ACTIVE_FUNCTION_SIN:
-    case ACTIVE_FUNCTION_SIN_STEP:
-        MatrixEx::cos(X, X.d(), M_PI / 2 * 128);
-        MatrixEx::elementMul(X.d(), Y.d(), X.d(), 1);    //不严格，需改为加法
-        break;
-    case ACTIVE_FUNCTION_ZIGZAG:
-        MatrixEx::zigzagb(X, Y);
-        break;
     default:
         fmt::print(stderr, "ACTIVE parameters not enough!\n");
         break;

@@ -79,3 +79,6 @@ logo由Dr. Cheng ZD设计。
 
 旧版logo由Mr. Zou YB设计。
 
+### 关于lite版
+ 
+lite版只支持几个基本的激活函数和卷积、池化等基本连接。
