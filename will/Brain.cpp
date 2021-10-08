@@ -105,6 +105,10 @@ int Brain::testGPUDevice()
     {
         MP_count_ = 1;
     }
+    if (MP_count_ > 1)
+    {
+        MP_count_ = 1;
+    }
     return 0;
 }
 
