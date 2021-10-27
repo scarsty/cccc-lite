@@ -12,11 +12,9 @@
 #define AUTO_CUDA_VERSION
 #endif
 
-#if defined(_WIN32) && defined(AUTO_CUDA_VERSION)
-
+#ifdef NO_CUDA
 namespace cccc
 {
-#ifdef NO_CUDA
 #define IMPORT(func) \
     template <typename... Args> \
     inline int func(Args&&... args) { return 0; }
@@ -104,7 +102,6 @@ using cudnnSpatialTransformerDescriptor_t = void*;
 using cudnnStatus_t = int;
 using cudnnTensorDescriptor_t = void*;
 
-
 #define Cublas Cblas
 
 IMPORT(cudaDriverGetVersion)
@@ -147,13 +144,20 @@ IMPORT(cuda_step);
 IMPORT(cuda_leaky_relu);
 IMPORT(cuda_leaky_relub);
 
+#include "cuda_lib.inc"
+
+#undef IMPORT
+
+}    // namespace cccc
 #else
+#if defined(_WIN32) && defined(AUTO_CUDA_VERSION)
+namespace cccc
+{
 #define IMPORT(func) \
     using func##_t = decltype(&func); \
     extern func##_t func;
-#endif
 #include "cuda_lib.inc"
 #undef IMPORT
 };    // namespace cccc
-
+#endif
 #endif
