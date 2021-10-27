@@ -5,7 +5,7 @@
 #include <map>
 #include <vector>
 
-#ifdef _WIN32
+#if defined(_WIN32) && !defined(NO_CUDA)
 #include <nvml.h>
 #endif
 
@@ -13,7 +13,7 @@ namespace cccc
 {
 
 int CudaControl::device_count_ = -1;    //-1表示没有初始化，该值正常的值应为非负
-std::vector<CudaControl*> CudaControl::cuda_toolkit_vector_;
+std::vector<CudaControl> CudaControl::cuda_toolkit_vector_;
 DeviceType CudaControl::global_device_type_ = DeviceType::CPU;
 
 CudaControl::CudaControl()
@@ -22,7 +22,7 @@ CudaControl::CudaControl()
 
 CudaControl::~CudaControl()
 {
-    destroy();
+    //destroy();
 }
 
 CudaControl* CudaControl::select(int dev_id)
@@ -49,55 +49,65 @@ CudaControl* CudaControl::select(int dev_id)
 
         if (dev_id < 0 || dev_id >= device_count_)
         {
+            auto old_dev_id = dev_id;
             dev_id = getBestDevice();
             cudaDeviceProp device_prop;
-            cudaGetDeviceProperties(&device_prop, cuda_toolkit_vector_[dev_id]->cuda_id_);
-            fmt::print(stdout, "Auto choose the best device {}: \"{}\" with compute capability {}.{}\n",
-                dev_id, device_prop.name, device_prop.major, device_prop.minor);
+            cudaGetDeviceProperties(&device_prop, cuda_toolkit_vector_[dev_id].cuda_id_);
+            fmt::print(stdout, "Device {} does not exist, automatically choose device {}\n",
+                old_dev_id, dev_id);
         }
 
-        auto cuda_tk = cuda_toolkit_vector_[dev_id];
+        auto& cuda_tk = cuda_toolkit_vector_[dev_id];
 
-        if (!cuda_tk->inited_)
+        if (!cuda_tk.inited_)
         {
-            cuda_tk->init(1, dev_id);
+            cuda_tk.init(1, dev_id);
         }
-        cudaSetDevice(cuda_tk->cuda_id_);
-        return cuda_tk;
+        cudaSetDevice(cuda_tk.cuda_id_);
+        return &cuda_tk;
     }
 }
 
 //返回值为设备数
 int CudaControl::checkDevices()
 {
+#ifdef NO_CUDA
+    return 0;
+#else
     if (device_count_ >= 0)
     {
         return device_count_;
     }
+    int ver_r, ver_d;
+    cudaRuntimeGetVersion(&ver_r);
+    cudaDriverGetVersion(&ver_d);
+    fmt::print("CUDA version: Runtime {}, Driver {} (R must <= D)\n", ver_r, ver_d);
     device_count_ = 0;
     if (cudaGetDeviceCount(&device_count_) != cudaSuccess || device_count_ <= 0)
     {
         return 0;
     }
     cuda_toolkit_vector_.clear();
-    for (int i = 0; i < device_count_; i++)
-    {
-        cuda_toolkit_vector_.push_back(new CudaControl());
-    }
+    //for (int i = 0; i < device_count_; i++)
+    //{
+    //    cuda_toolkit_vector_.push_back(new CudaControl());
+    //}
+    cuda_toolkit_vector_.resize(device_count_);
 
     for (int i = 0; i < device_count_; i++)
     {
-        cuda_toolkit_vector_[i]->cuda_id_ = i;
+        cuda_toolkit_vector_[i].cuda_id_ = i;
     }
 
-    findBestDevice();
+    evaluateDevices();
     return device_count_;
+#endif
 }
 
 //返回0正常，其他情况都有问题
 int CudaControl::init(int use_cuda, int dev_id /*= -1*/)
 {
-    //cblas_ = new Cblas();
+#ifndef NO_CUDA
     cudnnCreateTensorDescriptor(&tensor_desc_);
     cudnnCreateTensorDescriptor(&tensor_desc2_);
     cudnnCreateActivationDescriptor(&activation_desc_);
@@ -110,7 +120,7 @@ int CudaControl::init(int use_cuda, int dev_id /*= -1*/)
     cudnnCreateSpatialTransformerDescriptor(&spatial_transformer_desc_);
     cudnnCreateLRNDescriptor(&lrn_desc_);
 
-    cudaSetDevice(cuda_toolkit_vector_[dev_id]->cuda_id_);
+    cudaSetDevice(cuda_toolkit_vector_[dev_id].cuda_id_);
     cublas_ = new Cublas();
     if (cublas_->init() != CUBLAS_STATUS_SUCCESS)
     {
@@ -137,8 +147,9 @@ int CudaControl::init(int use_cuda, int dev_id /*= -1*/)
     global_device_type_ = DeviceType::GPU;
 
     cudaDeviceProp device_prop;
-    cudaGetDeviceProperties(&device_prop, cuda_toolkit_vector_[dev_id]->cuda_id_);
+    cudaGetDeviceProperties(&device_prop, cuda_toolkit_vector_[dev_id].cuda_id_);
     micro_arch_ = MicroArchitectureType(device_prop.major);
+#endif
 
     return 0;
 }
@@ -147,7 +158,7 @@ int CudaControl::init(int use_cuda, int dev_id /*= -1*/)
 //请清楚你在做什么！
 void CudaControl::destroy()
 {
-#ifndef _NO_CUDA
+#ifndef NO_CUDA
     cudnnDestroyTensorDescriptor(tensor_desc_);
     cudnnDestroyTensorDescriptor(tensor_desc2_);
     cudnnDestroyActivationDescriptor(activation_desc_);
@@ -159,7 +170,6 @@ void CudaControl::destroy()
     cudnnDestroyDropoutDescriptor(dropout_desc_);
     cudnnDestroySpatialTransformerDescriptor(spatial_transformer_desc_);
     cudnnDestroyLRNDescriptor(lrn_desc_);
-#endif
     if (cublas_)
     {
         cublas_->destroy();
@@ -170,15 +180,12 @@ void CudaControl::destroy()
     }
     //if (cblas_) { delete cblas_; }
     inited_ = false;
+#endif
 }
 
+//不建议主动调用这个函数，而由系统回收全局变量
 void CudaControl::destroyAll()
 {
-    auto vec = cuda_toolkit_vector_;
-    for (auto c : vec)
-    {
-        delete c;
-    }
     global_device_type_ = DeviceType::CPU;
     cuda_toolkit_vector_.clear();
     device_count_ = -1;
@@ -203,15 +210,10 @@ int CudaControl::setDevice(int dev_id)
 {
     if (dev_id >= 0 && dev_id < device_count_)
     {
-        cudaSetDevice(cuda_toolkit_vector_[dev_id]->cuda_id_);
+        cudaSetDevice(cuda_toolkit_vector_[dev_id].cuda_id_);
         return dev_id;
     }
     return -1;
-}
-
-void CudaControl::setDevice()
-{
-    setDevice(cuda_id_);
 }
 
 int CudaControl::getCurrentDevice()
@@ -220,7 +222,7 @@ int CudaControl::getCurrentDevice()
     cudaGetDevice(&device);
     for (int i = 0; i < device_count_; i++)
     {
-        if (device == cuda_toolkit_vector_[i]->cuda_id_)
+        if (device == cuda_toolkit_vector_[i].cuda_id_)
         {
             return i;
         }
@@ -242,7 +244,7 @@ int CudaControl::getBestDevice(int i /*= 0*/)
     std::vector<DeviceState> best_device(device_count_);
     for (int i = 0; i < device_count_; i++)
     {
-        best_device[i] = { i, cuda_toolkit_vector_[i]->state_score_ };
+        best_device[i] = { i, cuda_toolkit_vector_[i].state_score_ };
     }
 
     std::sort(best_device.begin(), best_device.end(), [](DeviceState& l, DeviceState& r)
@@ -314,9 +316,10 @@ void CudaControl::setActivationDesc(cudnnActivationDescriptor_t activation, cudn
     }
 }
 
-// This function returns the best GPU (with maximum GFLOPS)
-void CudaControl::findBestDevice()
+// 为每个设备评分
+void CudaControl::evaluateDevices()
 {
+#ifndef NO_CUDA
     auto getSPcores = [](cudaDeviceProp& devive_prop) -> int
     {
         int mp = devive_prop.multiProcessorCount;
@@ -384,13 +387,13 @@ void CudaControl::findBestDevice()
 #endif
     for (int i = 0; i < device_count_; i++)
     {
-        auto& state = cuda_toolkit_vector_[i]->state_score_;
+        auto& state = cuda_toolkit_vector_[i].state_score_;
         state = 0;
         pci[i] = i;
 
-        auto ct = cuda_toolkit_vector_[i];
+        auto& ct = cuda_toolkit_vector_[i];
         cudaDeviceProp device_prop;
-        cudaGetDeviceProperties(&device_prop, ct->cuda_id_);
+        cudaGetDeviceProperties(&device_prop, ct.cuda_id_);
         setDevice(i);
         if (device_prop.computeMode != cudaComputeModeProhibited)
         {
@@ -413,8 +416,8 @@ void CudaControl::findBestDevice()
             {
                 cudaMemGetInfo(&free, &total);
             }
-            fmt::print(stdout, "Device {} ({}): {}, {:7.2f} GFLOPS (single), free memory {:7.2f} MB ({:g}%)\n",
-                ct->cuda_id_, pci_info, device_prop.name, flops / 1e9, free / 1048576.0, 100.0 * free / total);
+            fmt::print(stdout, "Device {} ({}): {}, {:7.2f} GFLOPS, {:7.2f} MB ({:g}%) free\n",
+                ct.cuda_id_, pci_info, device_prop.name, flops / 1e9, free / 1048576.0, 100.0 * free / total);
             state = flops / 1e12 + free / 1e9;
             pci[i] = device_prop.pciBusID;
             if (state > best_state)
@@ -430,8 +433,9 @@ void CudaControl::findBestDevice()
     //这里需要重新计算，考虑与最好设备的距离
     for (int i = 0; i < device_count_; i++)
     {
-        cuda_toolkit_vector_[i]->state_score_ -= std::abs((pci[i] - pci[best_i])) / 50.0;
+        cuda_toolkit_vector_[i].state_score_ -= std::abs((pci[i] - pci[best_i])) / 50.0;
     }
+#endif
 }
 
 }    // namespace cccc

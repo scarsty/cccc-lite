@@ -30,20 +30,24 @@ enum MicroArchitectureType
 //此类型不能被随机创建，而仅能从已知的对象中选择一个
 class CudaControl
 {
-private:
+public:
     CudaControl();
     ~CudaControl();
 
-    CudaControl(CudaControl&) = delete;
-    CudaControl& operator=(CudaControl&) = delete;
+    //CudaControl(CudaControl&) = delete;
+    //CudaControl& operator=(CudaControl&) = delete;
 
 public:
     static CudaControl* select(int dev_id);
     static int checkDevices();
     static CudaControl* getCurrentCuda() { return select(getCurrentDevice()); }
 
-public:
+private:
     bool inited_ = false;
+    int cuda_id_;    //与vector中顺序相同
+    MicroArchitectureType micro_arch_;
+
+public:
     //cublasHandle_t cublas_handle_ = nullptr;
     Cublas* cublas_ = nullptr;
     //Cblas* cblas_ = nullptr;
@@ -64,27 +68,22 @@ public:
     cudnnSpatialTransformerDescriptor_t spatial_transformer_desc_ = nullptr;
     cudnnLRNDescriptor_t lrn_desc_ = nullptr;
 
-    int cuda_id_;    //与vector中顺序相同
-    MicroArchitectureType micro_arch_;
-
 private:
     static int device_count_;
-    static std::vector<CudaControl*> cuda_toolkit_vector_;    //排序按照nvml_id_
+    static std::vector<CudaControl> cuda_toolkit_vector_;    //排序按照nvml_id_
     static DeviceType global_device_type_;
 
     double state_score_ = 0;
 
-    static int deviceCount();
-
-public:
+private:
     int init(int use_cuda, int dev_id = -1);
     void destroy();
+
+public:
     static void destroyAll();
     static DeviceType getGlobalCudaType();
     static void setGlobalCudaType(DeviceType ct);
     static int setDevice(int dev_id);    //仅为快速切换，无错误检查！
-    int getDevice() { return cuda_id_; }
-    void setDevice();
     static int getCurrentDevice();
     static int getBestDevice(int i = 0);
 
@@ -97,8 +96,12 @@ public:
 
 private:
     //copy and modify from helper_cuda.h
-    static void findBestDevice();
+    static void evaluateDevices();
     //Blas* selectBlas(CudaType mc) { return mc == mc_NoCuda ? (Blas*)(cblas) : (Blas*)(cublas); }
+
+public:
+    const int getDeviceID() const { return cuda_id_; }
+    void setThisDevice() const { setDevice(cuda_id_); }
 };
 
-}    // namespace woco
+}    // namespace cccc

@@ -85,7 +85,7 @@
       <Optimization>MaxSpeed</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
-      <PreprocessorDefinitions>_NONO_CUDA;NDEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>NO_CUDA;NDEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>.;./layer;../include;../include/cuda;../../common;../will-cuda;$(CUDA_PATH)/include;$(USR_LOCAL)\include;$(VCPKG_LIB_PATH)\x64-windows\include</AdditionalIncludeDirectories>
       <EnableParallelCodeGeneration>true</EnableParallelCodeGeneration>
       <OpenMPSupport>true</OpenMPSupport>
@@ -118,7 +118,7 @@
     <ClCompile Include="Activer.cpp" />
     <ClCompile Include="cublas_real.cpp" />
     <ClCompile Include="CudaControl.cpp" />
-    <ClCompile Include="cuda_hack.cpp" />
+    <ClCompile Include="cuda_lib.cpp" />
     <ClCompile Include="DataPreparerFactory.cpp" />
     <ClCompile Include="DataPreparerImage.cpp" />
     <ClCompile Include="DataPreparerTxt.cpp" />
@@ -147,7 +147,7 @@
     <ClInclude Include="..\..\common\ConsoleControl.h" />
     <ClInclude Include="cublas_real.h" />
     <ClInclude Include="CudaControl.h" />
-    <ClInclude Include="cuda_hack.h" />
+    <ClInclude Include="cuda_lib.h" />
     <ClInclude Include="DataPreparerFactory.h" />
     <ClInclude Include="DataPreparerImage.h" />
     <ClInclude Include="DataPreparerTxt.h" />

@@ -2,16 +2,7 @@
 
 //包含一些类型定义
 
-#include "cublas_v2.h"
-#include "cuda_runtime.h"
-#include "cudnn.h"
-
-//#define _NO_CUDA
-#if CUDNN_VERSION < 6000 || defined(_NO_CUDA)
-#include "cuda_hack.h"
-#endif
-
-#include "cuda_functions.h"
+#include "cuda_lib.h"
 
 #define VAR_NAME(a) #a
 
