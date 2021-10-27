@@ -339,7 +339,7 @@ void Matrix::copyDataAcrossDevice(const Matrix& A, Matrix& R, int64_t size)
     int64_t size_in_byte = size * sizeof(real);
     if (R.inGPU() && A.inGPU())
     {
-        cudaError state = cudaMemcpyPeer(R.data(), R.cuda()->cuda_id_, A.data(), A.cuda()->cuda_id_, size_in_byte);
+        cudaError state = cudaMemcpyPeer(R.data(), R.cuda()->getDeviceID(), A.data(), A.cuda()->getDeviceID(), size_in_byte);
         if (state != cudaSuccess)
         {
             fmt::print(stderr, "Error: cudaMemcpyPeer failed with error code is {}, size in byte is {} ({:g})!\n", state, size_in_byte, 1.0 * size_in_byte);
@@ -367,7 +367,7 @@ void Matrix::shareData(const Matrix& A, int w, int h, int c, int n)
     assert(checkMatrixDevice({ this, &A }));
     if (cuda() != A.cuda())
     {
-        fmt::print(stderr, "Error: share data are on different device ({}, {})!\n", cuda()->cuda_id_, A.cuda()->cuda_id_);
+        fmt::print(stderr, "Error: share data are on different device ({}, {})!\n", cuda()->getDeviceID(), A.cuda()->getDeviceID());
     }
     if (getDeviceType() == A.getDeviceType())
     {
@@ -1112,7 +1112,7 @@ void Matrix::message(const std::string& info) const
     fmt::print(stdout, "{}:", info);
     if (inGPU())
     {
-        fmt::print(stdout, " GPU({}),", cuda()->cuda_id_);
+        fmt::print(stdout, " GPU({}),", cuda()->getDeviceID());
     }
     else
     {

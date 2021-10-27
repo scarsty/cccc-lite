@@ -1,5 +1,5 @@
 #pragma once
-#ifndef _NO_CUDA
+#ifndef NO_CUDA
 #include "blas_types.h"
 #include "cublas_v2.h"
 
@@ -371,6 +371,6 @@ protected:
 #endif
 };
 
-#endif
-
 }    // namespace cccc
+
+#endif

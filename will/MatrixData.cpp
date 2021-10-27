@@ -18,7 +18,7 @@ real* MatrixData::resize(int64_t size, bool reserve_data, bool force)
     }
     if (cuda_)
     {
-        cuda_->setDevice();
+        cuda_->setThisDevice();
         if (cudaMalloc((void**)&new_data, size * sizeof(real)) == cudaSuccess)
         {
             //fmt::print(stderr, "Success malloc size in byte is %lld (%g)!\n", size * sizeof(real), 1.0 * size * sizeof(real));
@@ -61,7 +61,7 @@ void MatrixData::free()
     if (cuda_)
     {
         auto current_gpu = CudaControl::getCurrentDevice();
-        if (current_gpu == cuda_->getDevice())
+        if (current_gpu == cuda_->getDeviceID())
         {
             auto status = cudaFree(data_);
             //if (status != cudaSuccess)
@@ -71,7 +71,7 @@ void MatrixData::free()
         }
         else
         {
-            cuda_->setDevice();
+            cuda_->setThisDevice();
             cudaFree(data_);
             CudaControl::setDevice(current_gpu);
             //cuda_ = CudaControl::getCurrentCuda();
