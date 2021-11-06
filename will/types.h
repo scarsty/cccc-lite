@@ -25,10 +25,6 @@
 #include "cuda_half_hack.h"
 #endif
 
-#define FMT_HEADER_ONLY
-#include "fmt/format.h"
-#include "fmt/ranges.h"
-
 namespace cccc
 {
 
