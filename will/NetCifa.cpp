@@ -117,7 +117,7 @@ int NetCifa::runScript(const std::string& script)
 {
     for (auto section : option_->getAllSections())
     {
-        for (auto key : option_->getAllOptions(section))
+        for (auto key : option_->getAllKeys(section))
         {
             cifa_.register_parameter(convert::toLowerCase(section) + "::" + convert::toLowerCase(key), cifa::Object(option_->getReal(section, key), option_->getString(section, key)));
         }
@@ -125,14 +125,14 @@ int NetCifa::runScript(const std::string& script)
 
     auto lines = convert::splitString(convert::replaceAllSubString(script, "\r", ""), "\n");
     int i = 1;
-    setLog(option_->getInt("", "output_net", 1));
+    LOG::setLevel(option_->getInt("", "output_net", 1));
     for (auto& l : lines)
     {
         LOG("{:3}\t{}\n", i++, l);
     }
     LOG("\n");
     auto o = cifa_.run_script(script);
-    setLog(1);
+    LOG::restoreLevel();
     if (o.type == "Error")
     {
         return -1;
@@ -188,7 +188,7 @@ int NetCifa::registerFunctions()
         });
     cifa_.register_function("print_message", [this](cifa::ObjectVector& v)
         {
-            fprintf(stdout, "%g\n", v[0].value);
+            LOG("{}\n", v[0].value);
             map_matrix_[v[0]]->message();
             return cifa::Object();
         });
@@ -271,7 +271,17 @@ int NetCifa::registerFunctions()
             auto padding = getIntVector(v, 3);
             MatrixOp op;
             auto o = registerMatrix(makeMatrixSP());
-            op.as_conv(map_matrix_[v[0]], map_matrix_[v[1]], map_matrix_[o], stride, padding);
+            op.as_conv(map_matrix_[v[0]], map_matrix_[v[1]], map_matrix_[o], stride, padding, 0);
+            op_queue_.push_back(op);
+            return o;
+        });
+    cifa_.register_function("corr", [this](cifa::ObjectVector& v)
+        {
+            auto stride = getIntVector(v, 2);
+            auto padding = getIntVector(v, 3);
+            MatrixOp op;
+            auto o = registerMatrix(makeMatrixSP());
+            op.as_conv(map_matrix_[v[0]], map_matrix_[v[1]], map_matrix_[o], stride, padding, 1);
             op_queue_.push_back(op);
             return o;
         });
@@ -359,7 +369,7 @@ int NetCifa::registerFunctions()
     cifa_.register_function("L2", [this](cifa::ObjectVector& v)
         { return registerLoss(L2(map_matrix_[v[0]])); });
 
-    for (int i = -1; i < 30; i++)
+    for (int i = -1; i < 100; i++)
     {
         auto str = option_->getStringFromEnum(ActiveFunctionType(i));
         if (str == "")

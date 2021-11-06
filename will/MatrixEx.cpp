@@ -1,6 +1,7 @@
 #include "MatrixEx.h"
 #include "Random.h"
 #include "VectorMath.h"
+#include "Log.h"
 #include <cassert>
 
 #if !defined(M_PI)
@@ -90,28 +91,68 @@ void MatrixEx::addBiasBackward(Matrix& X, Matrix& bias, const Matrix& Y, realc a
 
 void MatrixEx::concatByChannel(const std::vector<MatrixSP>& X_vector, Matrix& Y)
 {
-
+    for (int n = 0; n < Y.number_; n++)
+    {
+        int c_off = 0;
+        for (int i = 0; i < X_vector.size(); i++)
+        {
+            auto& tmp = *X_vector[i];
+            copyDataPointer(tmp, tmp.getDataPointer(0, 0, 0, n), Y, Y.getDataPointer(0, 0, c_off, n), tmp.row_);
+            c_off += tmp.channel_;
+        }
+    }
 }
 
 void MatrixEx::concatByChannelBackward(std::vector<MatrixSP>& X_vector, const Matrix& Y)
 {
-
+    //此处可能应该是考虑求和
+    Matrix dy(Y.getDeviceType());
+    Matrix dx(Y.getDeviceType());
+    for (int n = 0; n < Y.number_; n++)
+    {
+        int c_off = 0;
+        for (int i = 0; i < X_vector.size(); i++)
+        {
+            if (X_vector[i]->needReverse())
+            {
+                dy.shareData(Y.d(), 0, 0, c_off, n);
+                dy.resize(X_vector[i]->row_, 1);
+                dx.shareData(X_vector[i]->d(), 0, 0, 0, n);
+                dx.resize(X_vector[i]->row_, 1);
+                Matrix::add(dy, dx, dx, 1, X_vector[i]->keepWeight(), 0);    //这里写错了
+                //copyDataPointer(Y, Y.d().getDataPointer(0, 0, c_off, n), tmp, tmp.getDataPointer(0, 0, 0, n), tmp.row_);
+            }
+            c_off += X_vector[i]->channel_;
+        }
+    }
 }
 
 void MatrixEx::splitByChannel(const Matrix& X, std::vector<Matrix>& Y_vector)
 {
-
+    for (int n = 0; n < X.number_; n++)
+    {
+        int c_off = 0;
+        for (int i = 0; i < Y_vector.size(); i++)
+        {
+            auto& tmp = Y_vector[i];
+            copyDataPointer(X, X.getDataPointer(0, 0, c_off, n), tmp, tmp.getDataPointer(0, 0, 0, n), tmp.row_);
+            c_off += tmp.channel_;
+        }
+    }
 }
 
 //初始化激活需要的缓冲区
-void MatrixEx::activeBufferInit(const Matrix& X, ActiveFunctionType af, std::vector<int>& int_vector, std::vector<Matrix>& matrix_vector)
+void MatrixEx::activeBufferInit(const Matrix& X, ActiveFunctionType af, std::vector<int>& int_vector, std::vector<real>& real_vector, std::vector<Matrix>& matrix_vector)
 {
-
 }
 
 //正向激活，依据X计算A
 //此处我们定义激活操作为输入和输出矩阵（或张量）的维度完全相同
-void MatrixEx::activeForward(const Matrix& X, Matrix& Y, ActiveFunctionType af, real a /*= 1*/, real r /*= 0*/)
+//传附加参数的时候使用了C++11的初始化列表，因此效率可能较低，实际上如不考虑效率可以代替基本激活函数
+//调用时请自己保证参数数量的正确性！
+//vector参数的含义请参考Activer.cpp中的注释，以及上面函数中matrix向量的含义
+void MatrixEx::activeForward(const Matrix& X, Matrix& Y, ActiveFunctionType af,
+    std::vector<int>& int_vector, std::vector<real>& real_vector, std::vector<Matrix>& matrix_vector, real a /*= 1*/, real r /*= 0*/)
 {
     assert(checkMatrixDevice({ &X, &Y }));
     auto nan = CUDNN_NOT_PROPAGATE_NAN;
@@ -217,7 +258,7 @@ void MatrixEx::activeForward(const Matrix& X, Matrix& Y, ActiveFunctionType af, 
         }
         else
         {
-            activeForward(X, Y, ACTIVE_FUNCTION_SOFTMAX);
+            activeForward(X, Y, ACTIVE_FUNCTION_SOFTMAX, int_vector, real_vector, matrix_vector);
             VectorMath::log_v(Y.data(), Y.data(), Y.data_size_, a, r);
         }
         break;
@@ -249,15 +290,17 @@ void MatrixEx::activeForward(const Matrix& X, Matrix& Y, ActiveFunctionType af, 
         }
         break;
     default:
-        fmt::print(stderr, "ACTIVE Parameters not enough!\n");
+        LOG(stderr, "ACTIVE forward not right {}!\n", af);
         break;
     }
 }
 
+//参考activeForward2
 //反向激活，依据X，A，dA计算dX
 //softmax的cpu部分貌似不支持a，b
 //这里的系数应该是不对,unfinished
-void MatrixEx::activeBackward(Matrix& X, const Matrix& Y, ActiveFunctionType af, real a /*= 1*/, real r /*= 0*/)
+void MatrixEx::activeBackward(Matrix& X, const Matrix& Y, ActiveFunctionType af,
+    std::vector<int>& int_vector, std::vector<real>& real_vector, std::vector<Matrix>& matrix_vector, real a /*= 1*/, real r /*= 0*/)
 {
     assert(checkMatrixDevice({ &X, &Y }));
     auto nan = CUDNN_NOT_PROPAGATE_NAN;
@@ -352,53 +395,28 @@ void MatrixEx::activeBackward(Matrix& X, const Matrix& Y, ActiveFunctionType af,
     case ACTIVE_FUNCTION_ABSMAX:
         //似乎应该是返回一个常数矩阵，若考虑效率应当留空此处在外部处理
         //dX.initData(1);
-        fmt::print(stderr, "Unsupported backward of FINDMAX!\n");
+        LOG(stderr, "Unsupported backward of FINDMAX!\n");
         break;
-    //case ACTIVE_FUNCTION_SUMMAX:
-    //    Matrix::copyDataPointer(A,A.DMatrix().data(), X,X.DMatrix().data());
-    //    for (int i = 0; i < X.getCol(); i++)
-    //    {
-    //        dX.addNumberCol(-Matrix::dotCol(A, i, dA, i), 1, i);
-    //        dX.scaleCol(1.0 / X.sumAbsCol(i), i);
-    //    }
-    //    break;
     default:
-        fmt::print(stderr, "ACTIVE parameters not enough!\n");
+        LOG(stderr, "ACTIVE backward not right {}!\n", af);
         break;
     }
 }
 
-//参数更多的的激活函数，包含了前面的功能，
-//传附加参数的时候使用了C++11的初始化列表，因此效率可能较低，实际上如不考虑效率可以代替基本激活函数
-//调用时请自己保证参数数量的正确性！
-//vector参数的含义请参考Activer.cpp中的注释，以及上面函数中matrix向量的含义
-void MatrixEx::activeForward2(const Matrix& X, Matrix& Y, ActiveFunctionType af,
-    std::vector<int>& int_vector, std::vector<real>& real_vector, std::vector<Matrix>& matrix_vector, real a /*= 1*/, real r /*= 0*/)
+void MatrixEx::activeForwardSimple(const Matrix& X, Matrix& Y, ActiveFunctionType af, real a /*= 1*/, real r /*= 0*/)
 {
-    assert(checkMatrixDevice({ &X, &Y }));
-    auto nan = CUDNN_NOT_PROPAGATE_NAN;
-    auto cuda = X.cuda();
-    switch (af)
-    {
-    default:
-        activeForward(X, Y, af, a, r);
-        break;
-    }
+    std::vector<int> int_vector;
+    std::vector<real> real_vector;
+    std::vector<Matrix> matrix_vector;
+    activeForward(X, Y, af, int_vector, real_vector, matrix_vector, a, r);
 }
 
-//参考activeForward2
-void MatrixEx::activeBackward2(Matrix& X, const Matrix& Y, ActiveFunctionType af,
-    std::vector<int>& int_vector, std::vector<real>& real_vector, std::vector<Matrix>& matrix_vector, real a /*= 1*/, real r /*= 0*/)
+void MatrixEx::activeBackwardSimple(Matrix& X, const Matrix& Y, ActiveFunctionType af, real a /*= 1*/, real r /*= 0*/)
 {
-    assert(checkMatrixDevice({ &X, &Y }));
-    auto nan = CUDNN_NOT_PROPAGATE_NAN;
-    auto cuda = Y.cuda();
-    switch (af)
-    {
-    default:
-        activeBackward(X, Y, af, a, r);
-        break;
-    }
+    std::vector<int> int_vector;
+    std::vector<real> real_vector;
+    std::vector<Matrix> matrix_vector;
+    activeBackward(X, Y, af, int_vector, real_vector, matrix_vector, a, r);
 }
 
 //池化
@@ -441,7 +459,7 @@ void MatrixEx::poolingForward(const Matrix& X, Matrix& Y, PoolingType pooling_ty
         }
         if (s)
         {
-            fmt::print(stderr, "POOL forward error {}\n", s);
+            LOG(stderr, "POOL forward error {}\n", s);
         }
     }
     else
@@ -541,7 +559,7 @@ void MatrixEx::poolingBackward(Matrix& X, const Matrix& Y, PoolingType pooling_t
         }
         if (s)
         {
-            fmt::print(stderr, "POOL backward error {}\n", s);
+            LOG(stderr, "POOL backward error {}\n", s);
         }
     }
     else
@@ -636,7 +654,14 @@ void MatrixEx::convolutionForward(const Matrix& X, const Matrix& W, Matrix& Y, s
 {
     assert(checkMatrixDevice({ &X, &W, &Y }));
     assert(stride.size() >= 2 && padding.size() >= 2);
-    assert(methods.size() >= 2 && workspaces.size() >= 1);
+    if (methods.size() < 3)
+    {
+        methods.resize(3, -1);
+    }
+    if (workspaces.size() < 2)
+    {
+        workspaces.resize(2);
+    }
     auto cuda = X.cuda();
     if (Y.inGPU())
     {
@@ -675,7 +700,7 @@ void MatrixEx::convolutionForward(const Matrix& X, const Matrix& W, Matrix& Y, s
                 //int ss[8];
                 //cudnnGetTensorNdDescriptor(A.getCudnnTensorDesc(), 8, &tt, &n, nn, ss);
                 //cudnnGetTensorNdDescriptor(X.getCudnnTensorDesc(), 8, &tt, &n, nn, ss);
-                fmt::print(stderr, "Find CONV forward algorithm failed! {}, {}, {}\n", scd, sfd, t);
+                LOG(stderr, "Find CONV forward algorithm failed! {}, {}, {}\n", scd, sfd, t);
             }
             else
             {
@@ -695,10 +720,10 @@ void MatrixEx::convolutionForward(const Matrix& X, const Matrix& W, Matrix& Y, s
                 if (memory > workspaces[0].getDataSizeInByte())
                 {
                     workspaces[0].resize(1, 1, 1, memory / sizeof(real) + 2);
-                    //fmt::print(stdout, "resize work space {}\n", memory);
+                    //LOG("resize work space {}\n", memory);
                 }
 #ifdef _DEBUG
-                fmt::print(stdout, "conv forward choose {},{},{}\n", cfap[c].algo, cfap[c].mathType, cfap[c].memory);
+                LOG("conv forward choose {},{},{}\n", cfap[c].algo, cfap[c].mathType, cfap[c].memory);
 #endif
             }
             //workspace->message();
@@ -709,7 +734,7 @@ void MatrixEx::convolutionForward(const Matrix& X, const Matrix& W, Matrix& Y, s
             cuda->convolution_desc_, cfa, workspaces[0].data(), workspaces[0].getDataSizeInByte(), &r, Y.tensor_desc(), Y.data());
         if (scf)
         {
-            fmt::print(stderr, "CONV forward error {}, {}, {}, {}\n", scd, sfd, scf, cfa);
+            LOG(stderr, "CONV forward error {}, {}, {}, {}\n", scd, sfd, scf, cfa);
         }
     }
     else
@@ -759,7 +784,7 @@ void MatrixEx::convolutionForward(const Matrix& X, const Matrix& W, Matrix& Y, s
 
 #ifdef DIRECT_COMPUTE_CONVOLUTION
         //这是原始计算方法，速度很慢，不要打开这段代码
-        //fmt::print(stderr, "Please supply buffer vector and use the faster convolution method.\n");
+        //LOG(stderr, "Please supply buffer vector and use the faster convolution method.\n");
         Y.initData(0);
         for (int n = 0; n < Y.number_; n++)
         {
@@ -834,10 +859,10 @@ void MatrixEx::convolutionBackward(Matrix& X, Matrix& W, const Matrix& Y, std::v
                 if (memory > workspaces[0].getDataSizeInByte())
                 {
                     workspaces[0].resize(1, 1, 1, memory / sizeof(real) + 2);
-                    //fmt::print(stdout, "resize work space {}\n", memory);
+                    //LOG("resize work space {}\n", memory);
                 }
 #ifdef _DEBUG
-                fmt::print(stdout, "conv backward X choose dx {},{},{}\n", cbdap[c].algo, cbdap[c].mathType, cbdap[c].memory);
+                LOG("conv backward X choose dx {},{},{}\n", cbdap[c].algo, cbdap[c].mathType, cbdap[c].memory);
 #endif
                 //workspace->message();
             }
@@ -847,7 +872,7 @@ void MatrixEx::convolutionBackward(Matrix& X, Matrix& W, const Matrix& Y, std::v
                 cuda->convolution_desc_, cbda, workspaces[0].data(), workspaces[0].getDataSizeInByte(), &rx, X.tensor_desc(), X.d().data());
             if (scbx)
             {
-                fmt::print(stderr, "CONV backward data error {}\n", scbx);
+                LOG(stderr, "CONV backward data error {}\n", scbx);
             }
         }
         if (W.needReverse())
@@ -875,10 +900,10 @@ void MatrixEx::convolutionBackward(Matrix& X, Matrix& W, const Matrix& Y, std::v
                 if (memory > workspaces[0].getDataSizeInByte())
                 {
                     workspaces[0].resize(1, 1, 1, memory / sizeof(real) + 2);
-                    //fmt::print(stdout, "resize work space {}\n", memory);
+                    //LOG("resize work space {}\n", memory);
                 }
 #ifdef _DEBUG
-                fmt::print(stdout, "conv backward W choose dw {},{},{}\n", cbfap[c].algo, cbfap[c].mathType, cbfap[c].memory);
+                LOG("conv backward W choose dw {},{},{}\n", cbfap[c].algo, cbfap[c].mathType, cbfap[c].memory);
 #endif
                 //workspace->message();
             }
@@ -888,7 +913,7 @@ void MatrixEx::convolutionBackward(Matrix& X, Matrix& W, const Matrix& Y, std::v
                 cuda->convolution_desc_, cbfa, workspaces[0].data(), workspaces[0].getDataSizeInByte(), &rw, cuda->filter_desc_, W.d().data());
             if (scbw)
             {
-                fmt::print(stderr, "CONV backward weight error {}\n", scbw);
+                LOG(stderr, "CONV backward weight error {}\n", scbw);
             }
         }
         //if (B.needUpdate())
@@ -1008,7 +1033,7 @@ void MatrixEx::convolutionBackward(Matrix& X, Matrix& W, const Matrix& Y, std::v
 
 #ifdef DIRECT_COMPUTE_CONVOLUTION
         //这是原始计算方法，速度很慢，不要打开这段代码
-        //fmt::print(stderr, "Please supply buffer vector and use the faster convolution method.\n");
+        //LOG(stderr, "Please supply buffer vector and use the faster convolution method.\n");
         if (W.needReverse())
         {
             W.d().scale(rw);
@@ -1041,62 +1066,85 @@ void MatrixEx::convolutionBackward(Matrix& X, Matrix& W, const Matrix& Y, std::v
     }
 }
 
-//随机让一些点不参与计算
-void MatrixEx::dropoutForward(const Matrix& X, Matrix& Y, ActivePhaseType work_phase, real v, int seed, Matrix& rg_stat, Matrix& reverse_space)
-{
-
-}
-
-void MatrixEx::dropoutBackward(Matrix& X, const Matrix& Y, real v, int seed, Matrix& rg_stat, Matrix& reverse_space)
-{
-
-}
-
-//批归一化
-void MatrixEx::batchNormalizationForward(const Matrix& X, Matrix& Y,
-    ActivePhaseType work_phase, BatchNormalizationType bn_type, real& exp_aver_factor, real epsilon, Matrix& scale, Matrix& bias,
-    Matrix& result_running_mean, Matrix& result_running_variance, Matrix& result_save_mean, Matrix& result_save_inv_variance)
-{
-
-}
-
-void MatrixEx::batchNormalizationBackward(Matrix& X, const Matrix& Y,
-    ActivePhaseType work_phase, BatchNormalizationType bn_type, real epsilon, real rate, Matrix& scale, Matrix& bias,
-    Matrix& saved_mean, Matrix& saved_inv_variance, Matrix& result_dscale, Matrix& result_dbias)
-{
-    assert(checkMatrixDevice({ &X, &Y }));
-    auto cuda = Y.cuda();
-    if (X.inGPU())
-    {
-        cudnnBatchNormalizationBackward(cuda->cudnn_handle_, cudnnBatchNormMode_t(bn_type),
-            &const_real_1, &const_real_0, &const_real_1, &const_real_0, X.tensor_desc(), X.data(), Y.tensor_desc(), Y.d().data(), X.tensor_desc(), X.d().data(),
-            scale.tensor_desc(), scale.data(), result_dscale.data(), result_dbias.data(),
-            std::max(epsilon * 1.0, CUDNN_BN_MIN_EPSILON), saved_mean.data(), saved_inv_variance.data());
-        MatrixEx::add(scale, result_dscale, scale, 1, -rate);
-        MatrixEx::add(bias, result_dbias, bias, 1, -rate);
-    }
-}
-
 //ada_d表示ada方法计算得到的参数的改变量，应在下一步加到原参数上，下同
 void MatrixEx::adaDeltaUpdate(Matrix& mean_d2, Matrix& mean_ada_d2, Matrix& d, Matrix& ada_d, real rou, real epsilon)
 {
-
+    assert(checkMatrixDevice({ &mean_d2, &mean_ada_d2, &d, &ada_d }));
+    if (d.inGPU())
+    {
+        cuda_ada_delta_update(mean_d2.data(), mean_ada_d2.data(), d.data(), ada_d.data(), d.data_size_, rou, epsilon);
+    }
+    else
+    {
+        auto p1 = mean_d2.data();
+        auto p2 = mean_ada_d2.data();
+        auto p3 = d.data();
+        auto p4 = ada_d.data();
+        for (int i = 0; i < d.data_size_; i++)
+        {
+            p1[i] = p1[i] * rou + p3[i] * p3[i] * (1 - rou);
+            p4[i] = p3[i] * sqrt((p2[i] + epsilon) / (p1[i] + epsilon));
+            p2[i] = p2[i] * rou + p4[i] * p4[i] * (1 - rou);
+        }
+    }
 }
 
 void MatrixEx::adamUpdate(Matrix& mean_d, Matrix& mean_d2, Matrix& d, Matrix& ada_d, real beta1, real beta2, real epsilon, real t)
 {
-
+    assert(checkMatrixDevice({ &mean_d, &mean_d2, &d, &ada_d }));
+    if (d.inGPU())
+    {
+        cuda_adam_update(mean_d.data(), mean_d2.data(), d.data(), ada_d.data(), d.data_size_, beta1, beta2, epsilon, t);
+    }
+    else
+    {
+        auto p1 = mean_d.data();
+        auto p2 = mean_d2.data();
+        auto p3 = d.data();
+        auto p4 = ada_d.data();
+        for (int i = 0; i < d.data_size_; i++)
+        {
+            p1[i] = p1[i] * beta1 + p3[i] * (1 - beta1);
+            p2[i] = p2[i] * beta2 + p3[i] * p3[i] * (1 - beta2);
+            p4[i] = p3[i] / (1 - pow(beta1, t)) / (sqrt(p2[i] / (1 - pow(beta2, t))) + epsilon);
+        }
+    }
 }
 
 void MatrixEx::adaRMSPropUpdate(Matrix& mean_d2, Matrix& d, Matrix& ada_d, real rou, real epsilon)
 {
-
+    assert(checkMatrixDevice({ &mean_d2, &d, &ada_d }));
+    if (d.inGPU())
+    {
+        cuda_rms_prop_update(mean_d2.data(), d.data(), ada_d.data(), d.data_size_, rou, epsilon);
+    }
+    else
+    {
+        auto p1 = mean_d2.data();
+        auto p2 = d.data();
+        auto p3 = ada_d.data();
+        for (int i = 0; i < d.data_size_; i++)
+        {
+            p1[i] = p1[i] * rou + p2[i] * p2[i] * (1 - rou);
+            p3[i] = p2[i] * sqrt(1.0 / (p1[i] + epsilon));
+        }
+    }
 }
 
 //R = ((1-rou)/(1-rou_hat)-rou/rou_hat)*beta
 void MatrixEx::sparse(Matrix& rou_hat, Matrix& R, real rou, real beta)
 {
-
+    if (rou_hat.inGPU())
+    {
+        cuda_sparse(rou_hat.data(), R.data(), R.data_size_, rou, beta);
+    }
+    else
+    {
+        for (int i = 0; i < R.data_size_; i++)
+        {
+            R.data()[i] = ((1 - rou) / (1 - rou_hat.data()[i]) - rou / rou_hat.data()[i]) * beta;
+        }
+    }
 }
 
 void MatrixEx::fill(Matrix& m, RandomFillType random_type, int in, int out)
@@ -1131,64 +1179,18 @@ void MatrixEx::fill(Matrix& m, RandomFillType random_type, int in, int out)
         random_generator.set_parameter(0, a);
         //LOG("Gaussian distribution\n");
         break;
+    case RANDOM_FILL_LECUN:
+        random_generator.set_random_type(RANDOM_NORMAL);
+        a = 1.0 / in;
+        random_generator.set_parameter(0, a);
+        //LOG("Gaussian distribution\n");
+        break;
     default:
         break;
     }
     std::vector<real> temp(m.getDataSize());
     random_generator.rand_data(temp.data(), temp.size());
     m.initData(temp.data(), temp.size());
-}
-
-void MatrixEx::sin(const Matrix& X, Matrix& Y, real a /*= 1*/)
-{
-
-}
-
-void MatrixEx::cos(const Matrix& X, Matrix& Y, real a /*= 1*/)
-{
-
-}
-
-void MatrixEx::zigzag(const Matrix& X, Matrix& Y)
-{
-
-}
-
-//实际上这个激活函数在奇异点不连续，无法训练
-void MatrixEx::zigzagb(Matrix& X, const Matrix& Y)
-{
-
-}
-
-void MatrixEx::step(const Matrix& X, Matrix& Y)
-{
-
-}
-
-void MatrixEx::leaky_relu(const Matrix& X, Matrix& Y, real l, real a /*= 1*/, real b /*= 0*/)
-{
-    assert(checkMatrixDevice({ &X, &Y }));
-    if (X.inGPU())
-    {
-        cuda_leaky_relu(X.data(), Y.data(), X.getDataSize(), l, 1, 0);
-    }
-    else
-    {
-        //未完成
-    }
-}
-
-void MatrixEx::leaky_relub(Matrix& X, const Matrix& Y, real l, real a /*= 1*/, real b /*= 0*/)
-{
-    assert(checkMatrixDevice({ &X, &Y }));
-    if (X.inGPU())
-    {
-        cuda_leaky_relub(X.data(), X.d().data(), Y.data(), Y.d().data(), X.getDataSize(), l, 1, 0);
-    }
-    else
-    {
-        //未完成
-    }
 }
 
 }    // namespace cccc

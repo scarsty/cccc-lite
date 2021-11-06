@@ -33,12 +33,12 @@ public:
     void forward(Matrix& X, Matrix& A)
     {
         activePrepare(active_phase_);
-        MatrixEx::activeForward2(X, A, active_function_, int_vector_, real_vector_, matrix_vector_);
+        MatrixEx::activeForward(X, A, active_function_, int_vector_, real_vector_, matrix_vector_);
     }
 
     void backward(Matrix& A, Matrix& X)
     {
-        MatrixEx::activeBackward2(X, A, active_function_, int_vector_, real_vector_, matrix_vector_);
+        MatrixEx::activeBackward(X, A, active_function_, int_vector_, real_vector_, matrix_vector_);
     }
 
     bool isNone() { return active_function_ == ACTIVE_FUNCTION_NONE; }

@@ -2,6 +2,7 @@
 #include "ConsoleControl.h"
 #include "File.h"
 #include "NetCifa.h"
+//#include "NetLayer.h"
 #include "Random.h"
 #include "convert.h"
 #include <algorithm>
@@ -15,15 +16,15 @@ Brain::Brain() : X_train_{ DeviceType::CPU }, Y_train_{ DeviceType::CPU }, X_tra
 
 Brain::~Brain()
 {
-    delete_all(nets_);
-    DataPreparerFactory::destroy(data_preparer_);
-    DataPreparerFactory::destroy(data_preparer2_);
-    CudaControl::destroyAll();
+    //delete_all(nets_);
+    //cuda资源由操作系统回收
+    //CudaControl::destroyAll();
 }
 
 //返回为0是正确创建
 int Brain::init(const std::string& ini /*= ""*/)
 {
+    LOG("{}\n", Timer::getNowAsString());
     if (loadIni(ini))
     {
         LOG("Error: Load ini file failed!!\n");
@@ -49,8 +50,6 @@ int Brain::init(const std::string& ini /*= ""*/)
 
 int Brain::loadIni(const std::string& ini)
 {
-    LOG("{}\n", Timer::getNowAsString());
-
     //LOG("Size of real is %lu bytes\n", sizeof(real));
 
     //初始化选项
@@ -59,17 +58,17 @@ int Brain::loadIni(const std::string& ini)
     {
         if (File::fileExist(ini))
         {
-            option_.loadIniFile(ini);
+            option_.loadFile(ini);
         }
         else
         {
-            option_.loadIniString(ini);
+            option_.loadString(ini);
         }
     }
     //option_.print();
     batch_ = (std::max)(1, option_.getInt("", "batch", 100));
-    work_mode_ = option_.getEnum("", "work_mode", WORK_MODE_NORMAL);
-
+    //work_mode_ = option_.getEnum("", "work_mode", WORK_MODE_NORMAL);
+    LOG::setLevel(option_.getInt("", "output_log", 1));
     return 0;
 }
 
@@ -89,23 +88,19 @@ int Brain::testGPUDevice()
         {
             LOG("Error: No CUDA devices!!\n");
             CudaControl::setGlobalCudaType(DeviceType::CPU);
-            return 1;
         }
     }
 
     if (option_.getInt("", "use_cuda") != 0 && CudaControl::getGlobalCudaType() != DeviceType::GPU)
     {
         LOG("CUDA state is not right, refuse to run!\n");
-        LOG("Re-init the net again, or consider CPU mode (slow).\n");
+        LOG("Re-init the net again, or consider CPU mode (manually set use_cuda = 0).\n");
         return 1;
     }
 
     MP_count_ = (std::min)(device_count, option_.getInt("", "mp", 1));
+    MP_count_ = std::min(MP_count_, 1);
     if (MP_count_ <= 0)
-    {
-        MP_count_ = 1;
-    }
-    if (MP_count_ > 1)
     {
         MP_count_ = 1;
     }
@@ -114,7 +109,7 @@ int Brain::testGPUDevice()
 
 int Brain::initNets()
 {
-    delete_all(nets_);
+    nets_.clear();
     nets_.resize(MP_count_);
     //这里读取ini中指定的device顺序，其中第一个设备为主网络，该值一般来说应由用户指定
     auto mp_device = option_.getVector<int>("", "mp_device");
@@ -144,25 +139,28 @@ int Brain::initNets()
     auto cifa = option_.getInt("", "cifa");
     for (int i = 0; i < MP_count_; i++)
     {
-        CudaControl::select(mp_device[i]);
-        Net* net;
+        LOG("Trying to create net {}...\n", i);
+        int cuda_id = -1;
+        if (CudaControl::select(mp_device[i]))
+        {
+            cuda_id = CudaControl::select(mp_device[i])->getDeviceID();    //若不合理则换成一个能用的
+        }
+        if (mp_device[i] != cuda_id)
+        {
+            LOG("Device {} is not right, change it to {}\n", mp_device[i], cuda_id);
+            mp_device[i] = cuda_id;
+        }
+        std::unique_ptr<Net> net;
         if (cifa)
         {
-            net = new NetCifa();
+            net = std::make_unique<NetCifa>();
         }
         else
         {
+            //net = std::make_unique<NetLayer>();
         }
-        net->setDevice(mp_device[i]);
-        int dev_id = net->getDevice();
-        if (dev_id >= 0)
-        {
-            LOG("Net {} will be created on device {}\n", i, dev_id);
-        }
-        else
-        {
-            LOG("Net {} will be created on CPU\n", i);
-        }
+        net->setDeviceID(mp_device[i]);
+        int dev_id = net->getDeviceID();
         net->setOption(&option_);
         if (net->init() != 0)
         {
@@ -172,7 +170,15 @@ int Brain::initNets()
         {
             net->loadWeight(option_.getString("", "load_file"));
         }
-        nets_[i] = net;
+        nets_[i] = std::move(net);
+        if (dev_id >= 0)
+        {
+            LOG("Net {} has been created on device {}\n", i, dev_id);
+        }
+        else
+        {
+            LOG("Net {} has been created on CPU\n", i);
+        }
     }
 
     if (MP_count_ > 1)
@@ -207,17 +213,18 @@ void Brain::initDataPreparer()
     //这里使用公共数据准备器，实际上完全可以创建私有的准备器
     auto dim0 = nets_[0]->getX().getDim();
     auto dim1 = nets_[0]->getY().getDim();
-    DataPreparerFactory::destroy(data_preparer_);
-    data_preparer_ = DataPreparerFactory::create(&option_, "data_preparer", dim0, dim1);
+    //DataPreparerFactory::destroy(data_preparer_);
+    //data_preparer_ =  std::make_unique<>  DataPreparerFactory::create(&option_, "data_preparer", dim0, dim1);
+    data_preparer_ = DataPreparerFactory::makeUniquePtr(&option_, "data_preparer", dim0, dim1);
     std::string test_section = "data_preparer2";
     if (!option_.hasSection(test_section))
     {
-        option_.setOption("", "test_test", "0");
-        option_.setOption("", "test_test_origin", "0");
+        option_.setKey("", "test_test", "0");
+        option_.setKey("", "test_test_origin", "0");
         return;
         //option_.setOption(test_section, "test", "1");
     }
-    data_preparer2_ = DataPreparerFactory::create(&option_, test_section, dim0, dim1);
+    data_preparer2_ = DataPreparerFactory::makeUniquePtr(&option_, test_section, dim0, dim1);
 }
 
 //初始化训练集，必须在DataPreparer之后
@@ -246,9 +253,9 @@ void Brain::initTestData()
 //注意通常情况下是使用第一个网络测试数据
 void Brain::run(int train_epochs /*= -1*/)
 {
-    auto net = nets_[0];
+    auto& net = nets_[0];
     //初测
-    testData(net, option_.getInt("", "force_output"), option_.getInt("", "test_max"));
+    testData(net.get(), option_.getInt("", "force_output"), option_.getInt("", "test_type", 1));
 
     if (train_epochs < 0)
     {
@@ -256,7 +263,7 @@ void Brain::run(int train_epochs /*= -1*/)
     }
     LOG("Going to run for {} epochs...\n", train_epochs);
 
-    train(nets_, data_preparer_, train_epochs);
+    train(nets_, data_preparer_.get(), train_epochs);
 
     std::string save_filename = option_.getString("", "save_file");
     if (save_filename != "")
@@ -265,9 +272,9 @@ void Brain::run(int train_epochs /*= -1*/)
     }
 
     //终测
-    testData(net, option_.getInt("", "force_output"), option_.getInt("", "test_max"));
+    testData(net.get(), option_.getInt("", "force_output"), option_.getInt("", "test_type", 1));
     //附加测试，有多少个都能用
-    extraTest(net, "extra_test", option_.getInt("", "force_output"), option_.getInt("", "test_max"));
+    extraTest(net.get(), "extra_test", option_.getInt("", "force_output"), option_.getInt("", "test_type", 1));
 
 #ifdef LAYER_TIME
     for (auto& l : nets_[0]->getLayerVector())
@@ -281,9 +288,23 @@ void Brain::run(int train_epochs /*= -1*/)
     LOG("{}\n", Timer::getNowAsString());
 }
 
+//暂时阻塞等待条件。注意，这里只能用宏，用函数写起来很麻烦
+#define WAIT_UNTIL(condition) \
+    do { \
+        while (!(condition)) { std::this_thread::sleep_for(std::chrono::nanoseconds(100)); } \
+    } while (0)
+#define WAIT_UNTIL_OVERTIME(condition, overtime) \
+    do { \
+        auto t0 = std::chrono::system_clock::now(); \
+        while (!(condition) && std::chrono::system_clock::now() - t0 < std::chrono::nanoseconds(int64_t(overtime))) \
+        { \
+            std::this_thread::sleep_for(std::chrono::nanoseconds(100)); \
+        } \
+    } while (0)
+
 //训练一批数据，输出步数和误差，若训练次数为0可以理解为纯测试模式
 //首个参数为指定几个结构完全相同的网络并行训练
-void Brain::train(std::vector<Net*> nets, DataPreparer* data_preparer, int epochs)
+void Brain::train(std::vector<std::unique_ptr<Net>>& nets, DataPreparer* data_preparer, int epochs)
 {
     if (epochs <= 0)
     {
@@ -302,7 +323,7 @@ void Brain::train(std::vector<Net*> nets, DataPreparer* data_preparer, int epoch
     Timer timer_per_epoch, timer_trained;
     //prepareData();
     TrainInfo train_info;
-    train_info.data_prepared = 0;
+    train_info.data_prepared = -1;
 
     int test_test = option_.getInt("", "test_test", 0);
     int test_test_origin = option_.getInt("", "test_test_origin", 0);
@@ -312,7 +333,7 @@ void Brain::train(std::vector<Net*> nets, DataPreparer* data_preparer, int epoch
     std::vector<std::thread> net_threads(nets.size());
     for (int i = 0; i < net_threads.size(); i++)
     {
-        net_threads[i] = std::thread{ [this, nets, i, &train_info, epochs]()
+        net_threads[i] = std::thread{ [this, &nets, i, &train_info, epochs]()
             { trainOneNet(nets, i, train_info, epoch_count_, epochs); } };
     }
 
@@ -325,9 +346,9 @@ void Brain::train(std::vector<Net*> nets, DataPreparer* data_preparer, int epoch
         {
             data_preparer2_->prepareData(epoch_count, "test", X_test_, Y_test_, X_test_cpu_, Y_test_cpu_);
         }
-        train_info.data_prepared = 1;
-        WAIT_UNTIL(train_info.data_distributed == MP_count_);
-        train_info.data_prepared = 0;
+        train_info.data_prepared = epoch_count;
+        WAIT_UNTIL(train_info.data_distributed == MP_count_ || train_info.stop);
+        //train_info.data_prepared = 0;
         train_info.data_distributed = 0;
         //回调
         if (running_callback_)
@@ -360,9 +381,9 @@ void Brain::train(std::vector<Net*> nets, DataPreparer* data_preparer, int epoch
 }
 
 //训练网络数组nets中的一个
-void Brain::trainOneNet(std::vector<Net*> nets, int net_id, TrainInfo& train_info, int epoch0, int epochs)
+void Brain::trainOneNet(std::vector<std::unique_ptr<Net>>& nets, int net_id, TrainInfo& train_info, int epoch0, int epochs)
 {
-    auto net = nets[net_id];
+    auto& net = nets[net_id];
     net->setDeviceSelf();
     net->setActivePhase(ACTIVE_PHASE_TRAIN);
 
@@ -388,8 +409,8 @@ void Brain::trainOneNet(std::vector<Net*> nets, int net_id, TrainInfo& train_inf
     int test_epoch = option_.getInt("", "test_epoch", 1);
     int save_epoch = option_.getInt("", "save_epoch", 10);
     int out_iter = option_.getInt("", "out_iter", 100);
-    int test_max = option_.getInt("", "test_max", 0);
-    std::string save_format = option_.getString("", "save_format", "save/save-{epoch}.txt");
+    int test_type = option_.getInt("", "test_type", 1);
+    std::string save_format = option_.dealString(option_.getString("", "save_format", "save/save-{epoch}.txt"), 1);
     int total_batch = X_train_cpu_.getNumber();
 
     realc max_test_origin_accuracy = 0;
@@ -401,9 +422,9 @@ void Brain::trainOneNet(std::vector<Net*> nets, int net_id, TrainInfo& train_inf
     int epoch_count = epoch0;
     while (epoch_count < epoch0 + epochs)
     {
-        epoch_count++;
         //等待数据准备完成
-        WAIT_UNTIL(train_info.data_prepared == 1);
+        WAIT_UNTIL(train_info.data_prepared == epoch_count || train_info.stop);
+        epoch_count++;
         Matrix::copyRows(X_train_cpu_, net_id * total_batch / MP_count_, X_train_gpu, 0, X_train_gpu.getNumber());
         Matrix::copyRows(Y_train_cpu_, net_id * total_batch / MP_count_, Y_train_gpu, 0, Y_train_gpu.getNumber());
         //train_data_gpu.Y()->message("train data gpu Y");
@@ -418,7 +439,8 @@ void Brain::trainOneNet(std::vector<Net*> nets, int net_id, TrainInfo& train_inf
         //训练前在训练集上的测试，若训练集实时生成可以使用
         if (net_id == 0 && epoch_count % test_epoch == 0 && pre_test_train)
         {
-            net->test("Pre-test on train set", &X_train_gpu, &Y_train_gpu, &A_train_gpu, 0, 1);
+            net->test("Test on train set before training", &X_train_gpu, &Y_train_gpu, &A_train_gpu, 0, 1);
+            net->checkNorm();
         }
         realc e = 0;
         for (int iter = 0; iter < X_train_gpu.getNumber() / X_train_sub.getNumber(); iter++)
@@ -430,7 +452,7 @@ void Brain::trainOneNet(std::vector<Net*> nets, int net_id, TrainInfo& train_inf
             //LOG("%d, %g, %g\n", iter, train_data_sub.X()->dotSelf(), train_data_sub.Y()->dotSelf());
 
             //同步未完成
-            WAIT_UNTIL(train_info.parameters_collected == 0);
+            WAIT_UNTIL(train_info.parameters_collected == 0 || train_info.stop);
 
             net->active(&X_train_sub, &Y_train_sub, nullptr, true, output ? &e : nullptr);
             //发出网络训练结束信号
@@ -445,7 +467,7 @@ void Brain::trainOneNet(std::vector<Net*> nets, int net_id, TrainInfo& train_inf
                 }
 
                 //主网络等待所有网络训练完成
-                WAIT_UNTIL(train_info.trained == MP_count_);
+                WAIT_UNTIL(train_info.trained == MP_count_ || train_info.stop);
                 train_info.trained = 0;
                 //同步
                 if (MP_count_ > 1)
@@ -463,7 +485,7 @@ void Brain::trainOneNet(std::vector<Net*> nets, int net_id, TrainInfo& train_inf
             else
             {
                 //非主网络等待同步结束
-                WAIT_UNTIL(train_info.parameters_collected > 0);
+                WAIT_UNTIL(train_info.parameters_collected > 0 || train_info.stop);
                 train_info.parameters_collected--;
                 //分发到各个网络
                 Matrix::copyDataAcrossDevice(nets[0]->getAllWeights(), net->getAllWeights());
@@ -480,17 +502,17 @@ void Brain::trainOneNet(std::vector<Net*> nets, int net_id, TrainInfo& train_inf
             realc test_result;
             if (test_train_origin)
             {
-                net->test(content + "original train set", &X_train_, &Y_train_, nullptr, 0, test_max, 0, &test_result);
+                net->test(content + "original train set", &X_train_, &Y_train_, nullptr, 0, test_type, 0, &test_result);
             }
             if (test_train)
             {
-                net->test(content + "transformed train set", &X_train_gpu, &Y_train_gpu, nullptr, 0, test_max, 0, &test_result);
+                net->test(content + "transformed train set", &X_train_gpu, &Y_train_gpu, nullptr, 0, test_type, 0, &test_result);
             }
             if (data_preparer2_)
             {
                 if (test_test_origin)
                 {
-                    net->test(content + "original test set", &X_test_, &Y_test_, nullptr, 0, test_max, 0, &test_result);
+                    net->test(content + "original test set", &X_test_, &Y_test_, nullptr, 0, test_type, 0, &test_result);
                     if (test_result >= max_test_origin_accuracy)
                     {
                         max_test_origin_accuracy = test_result;
@@ -499,7 +521,7 @@ void Brain::trainOneNet(std::vector<Net*> nets, int net_id, TrainInfo& train_inf
                 }
                 if (test_test)
                 {
-                    net->test(content + "transformed test set", &X_test_cpu_, &Y_test_cpu_, nullptr, 0, test_max, 0, &test_result);
+                    net->test(content + "transformed test set", &X_test_cpu_, &Y_test_cpu_, nullptr, 0, test_type, 0, &test_result);
                     if (test_result >= max_test_accuracy)
                     {
                         max_test_accuracy = test_result;
@@ -507,9 +529,11 @@ void Brain::trainOneNet(std::vector<Net*> nets, int net_id, TrainInfo& train_inf
                     }
                 }
             }
-            realc l1, l2;
-            net->calNorm(l1, l2);
-            LOG("L1 = {}, L2 = {}\n", l1, l2);
+            if (net->checkNorm())
+            {
+                LOG("Numerical fault! Stop training!\n");
+                train_info.stop = 1;
+            }
             if (epoch_count % save_epoch == 0 && !save_format.empty())
             {
                 std::string save_name = save_format;
@@ -546,86 +570,106 @@ void Brain::trainOneNet(std::vector<Net*> nets, int net_id, TrainInfo& train_inf
 }
 
 //输出训练集和测试集的测试结果
-void Brain::testData(Net* net, int force_output /*= 0*/, int test_max /*= 0*/)
+void Brain::testData(Net* net, int force_output /*= 0*/, int test_type /*= 0*/)
 {
     if (net == nullptr)
     {
-        net = nets_[0];
+        net = nets_[0].get();
     }
     realc result;
     if (option_.getInt("", "test_train_origin"))
     {
-        net->test("Test on original train set", &X_train_, &Y_train_, nullptr, force_output, test_max, 0, &result);
+        net->test("Test on original train set", &X_train_, &Y_train_, nullptr, force_output, test_type, 0, &result);
     }
     if (option_.getInt("", "test_train"))
     {
-        net->test("Test on transformed train set", &X_train_cpu_, &Y_train_cpu_, nullptr, force_output, test_max, 0, &result);
+        net->test("Test on transformed train set", &X_train_cpu_, &Y_train_cpu_, nullptr, force_output, test_type, 0, &result);
     }
     if (option_.getInt("", "test_test_origin"))
     {
-        net->test("Test on original test set", &X_test_, &Y_test_, nullptr, force_output, test_max, 0, &result);
+        net->test("Test on original test set", &X_test_, &Y_test_, nullptr, force_output, test_type, 0, &result);
     }
     if (option_.getInt("", "test_test"))
     {
-        net->test("Test on transformed test set", &X_test_cpu_, &Y_test_cpu_, nullptr, force_output, test_max, 0, &result);
+        net->test("Test on transformed test set", &X_test_cpu_, &Y_test_cpu_, nullptr, force_output, test_type, 0, &result);
     }
+    net->checkNorm();
 }
 
 //附加测试集，一般无用
-void Brain::extraTest(Net* net, const std::string& section, int force_output /*= 0*/, int test_max /*= 0*/)
+void Brain::extraTest(Net* net, const std::string& section, int force_output /*= 0*/, int test_type /*= 0*/)
 {
     if (!option_.hasSection(section))
     {
         return;
     }
-    auto dp_test = DataPreparerFactory::create(&option_, section, net->getX().getDim(), net->getY().getDim());
+    auto dp_test = DataPreparerFactory::makeUniquePtr(&option_, section, net->getX().getDim(), net->getY().getDim());
     Matrix X_extra, Y_extera;
     dp_test->initData(X_extra, Y_extera);
-    delete dp_test;
     if (X_extra.getDataSize() > 0 && Y_extera.getDataSize() > 0)
     {
-        net->test("Extra test", &X_extra, &Y_extera, nullptr, force_output, test_max);
+        net->test("Extra test", &X_extra, &Y_extera, nullptr, force_output, test_type);
     }
 }
 
 int Brain::testExternalData(void* x, void* y, void* a, int n, int attack_times, realc* error)
 {
-    Matrix X(DeviceType::CPU), Y(DeviceType::CPU), A(DeviceType::CPU);
-    auto net = getNet();
-
-    auto dim0 = net->getX().getDim();
-    dim0.back() = n;
-    auto dim1 = net->getY().getDim();
-    dim1.back() = n;
-
-    Matrix *x1 = nullptr, *y1 = nullptr, *a1 = nullptr;
-    if (x)
+    std::vector<int> n_begin(1, 0), n_count(1, n);
+    auto run = [this, x, y, a, attack_times, error, &n_begin, &n_count](int i)
     {
-        X.shareData((real*)x);
-        X.resize(dim0);
-        x1 = &X;
-    }
-    if (y)
-    {
-        Y.shareData((real*)y);
-        Y.resize(dim1);
-        y1 = &Y;
-    }
-    if (a)
-    {
-        A.shareData((real*)a);
-        A.resize(dim1);
-        a1 = &A;
-    }
-    setLog(0);
-    int r = net->test("", x1, y1, a1, 0, 0, attack_times, error);
-    setLog(1);
-    return r;
-}
+        Matrix X(DeviceType::CPU), Y(DeviceType::CPU), A(DeviceType::CPU);
 
-int Brain::getFloatPrecision()
-{
-    return sizeof(real);
+        auto net = nets_[i].get();
+        auto dim0 = net->getX().getDim();
+        dim0.back() = n_count[i];
+        auto dim1 = net->getY().getDim();
+        dim1.back() = n_count[i];
+
+        Matrix *x1 = nullptr, *y1 = nullptr, *a1 = nullptr;
+        if (x)
+        {
+            X.shareData((real*)x + net->getX().getRow() * n_begin[i]);
+            X.resize(dim0);
+            x1 = &X;
+        }
+        if (y)
+        {
+            Y.shareData((real*)y + net->getY().getRow() * n_begin[i]);
+            Y.resize(dim1);
+            y1 = &Y;
+        }
+        if (a)
+        {
+            A.shareData((real*)a + net->getA().getRow() * n_begin[i]);
+            A.resize(dim1);
+            a1 = &A;
+        }
+
+        return net->test("", x1, y1, a1, 0, 0, attack_times, error);
+    };
+    LOG::setLevel(0);
+    if (nets_.size() == 1)
+    {
+        run(0);
+    }
+    else if (nets_.size() > 1)
+    {
+        n_begin.resize(nets_.size());
+        n_count.resize(nets_.size());
+        int k = (n + nets_.size() - 1) / nets_.size();
+        for (int i = 0; i < nets_.size(); i++)
+        {
+            n_begin[i] = k * i;
+            n_count[i] = std::min(n - k * i, k);
+        }
+#pragma omp parallel for
+        for (int i = 0; i < nets_.size(); i++)
+        {
+            run(i);
+        }
+    }
+    LOG::restoreLevel();
+    return 0;
 }
 
 }    // namespace cccc

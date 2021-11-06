@@ -10,34 +10,37 @@ void MatrixOp::forward(std::vector<MatrixOp>& op_queue)
     for (auto& op : op_queue)
     {
         //op.in_[0]->message("in");
-        op.forward();
+        op.forwardData();
         //op.out_[0]->message("out");
     }
 }
 
-void MatrixOp::backward(std::vector<MatrixOp>& op_queue, std::vector<MatrixOp>& loss)
+void MatrixOp::backward(std::vector<MatrixOp>& op_queue, std::vector<MatrixOp>& loss, bool clear_d)
 {
-    for (auto& op : op_queue)
+    if (clear_d)
     {
-        for (auto& m : op.in_)
+        for (auto& op : op_queue)
         {
-            m->setKeepWeight(0);
+            for (auto& m : op.in_)
+            {
+                m->setKeepWeight(0);
+            }
+        }
+        for (auto& op : loss)
+        {
+            for (auto& m : op.in_)
+            {
+                m->setKeepWeight(0);
+            }
         }
     }
     for (auto& op : loss)
     {
-        for (auto& m : op.in_)
-        {
-            m->setKeepWeight(0);
-        }
-    }
-    for (auto& op : loss)
-    {
-        op.calloss();
+        op.backwardLoss();
     }
     for (auto it = op_queue.rbegin(); it != op_queue.rend(); ++it)
     {
-        it->backward();
+        it->backwardDataWeight();
         //it->out_[0]->d().message("dY" + std::to_string(int(it->type_)));
         //it->in_[0]->d().message("dX" + std::to_string(int(it->type_)));
         //if (!it->wb_.empty())
@@ -47,7 +50,7 @@ void MatrixOp::backward(std::vector<MatrixOp>& op_queue, std::vector<MatrixOp>& 
     }
 }
 
-void MatrixOp::forward()
+void MatrixOp::forwardData()
 {
     auto& X = *in_[0];
     auto& Y = *out_[0];
@@ -73,7 +76,7 @@ void MatrixOp::forward()
         MatrixEx::concatByChannel(in_, Y);
         break;
     case MatrixOpType::ACTIVE:
-        MatrixEx::activeForward2(X, Y, ActiveFunctionType(para_int_.back()), para_int_, para_real_, para_matrix_);
+        MatrixEx::activeForward(X, Y, ActiveFunctionType(para_int_.back()), para_int_, para_real_, para_matrix_);
         break;
     case MatrixOpType::POOL:
         MatrixEx::poolingForward(X, Y, PoolingType(para_int_[1]), para_int_[2],
@@ -82,10 +85,13 @@ void MatrixOp::forward()
     case MatrixOpType::CONV:
         MatrixEx::convolutionForward(X, *wb_[0], Y, para_int_, para_matrix_, para_int_v_[0], para_int_v_[1], para_real_[0]);
         break;
+    case MatrixOpType::CORR:
+        MatrixEx::correlationForward(X, *wb_[0], Y, para_int_, para_matrix_, para_int_v_[0], para_int_v_[1], para_real_[0]);
+        break;
     }
 }
 
-void MatrixOp::backward()
+void MatrixOp::backwardDataWeight()
 {
     auto& Y = *out_[0];
     real data_weight = 1;
@@ -134,7 +140,7 @@ void MatrixOp::backward()
     case MatrixOpType::ACTIVE:
         if (in_[0]->needReverse())
         {
-            MatrixEx::activeBackward2(*in_[0], Y, ActiveFunctionType(para_int_.back()), para_int_, para_real_, para_matrix_, 1, in_[0]->keepWeight());
+            MatrixEx::activeBackward(*in_[0], Y, ActiveFunctionType(para_int_.back()), para_int_, para_real_, para_matrix_, 1, in_[0]->keepWeight());
         }
         break;
     case MatrixOpType::POOL:
@@ -147,6 +153,9 @@ void MatrixOp::backward()
     case MatrixOpType::CONV:
         MatrixEx::convolutionBackward(*in_[0], *wb_[0], Y, para_int_, para_matrix_, para_int_v_[0], para_int_v_[1], para_real_[0], in_[0]->keepWeight(), 1);
         break;
+    case MatrixOpType::CORR:
+        MatrixEx::correlationBackward(*in_[0], *wb_[0], Y, para_int_, para_matrix_, para_int_v_[0], para_int_v_[1], para_real_[0], in_[0]->keepWeight(), 1);
+        break;
     case MatrixOpType::RESHAPE:
         Matrix::copyData(Y.d(), in_[0]->d());
         break;
@@ -157,7 +166,7 @@ void MatrixOp::backward()
     }
 }
 
-void MatrixOp::calloss()
+void MatrixOp::backwardLoss()
 {
     //若反向过程需更新多个矩阵，则在函数内部判断needUpdate
     switch (type_)
@@ -192,12 +201,12 @@ void MatrixOp::calloss()
 
 void MatrixOp::print(const std::vector<MatrixOp>& op_queue)
 {
-    fprintf(stdout, "begin->");
+    LOG("begin->");
     for (const auto& op : op_queue)
     {
         op.print();
     }
-    fprintf(stdout, "end\n");
+    LOG("end\n");
 }
 
 void MatrixOp::print() const
@@ -217,9 +226,9 @@ void MatrixOp::print() const
         "l2",
     };
 
-    fprintf(stdout, "%s->", strs[int(type_)].c_str());
+    LOG("{}->", strs[int(type_)]);
 #ifdef _DEBUG
-    //fprintf(stdout, "\n");
+    //LOG( "\n");
     //for (const auto& m : matrix_in_)
     //{
     //    m.message();
@@ -228,7 +237,7 @@ void MatrixOp::print() const
     //{
     //    m.message();
     //}
-    //fprintf(stdout, "\n");
+    //LOG("\n");
 #endif
 }
 
@@ -321,7 +330,7 @@ void MatrixOp::as_mul(MatrixSP& X1, MatrixSP& X2, MatrixSP& Y, real a, std::vect
     set(MatrixOpType::MUL, { X2 }, { X1 }, { Y }, {}, { a });    //这里注意顺序
     if (X1->getNumber() != X2->getRow())
     {
-        fprintf(stderr, "Error: cannot product!\n");
+        LOG(stderr, "Error: cannot product!\n");
     }
 }
 
@@ -390,6 +399,7 @@ void MatrixOp::as_active(MatrixSP& X, MatrixSP& Y, ActiveFunctionType af, std::v
     //MatrixExtend::activeBufferInit(*X, af, int_vector, matrix_vector);
     v.push_back(af);
     Y->resize(*X);
+    MatrixEx::activeBufferInit(*X, af, int_vector, real_vector, matrix_vector);
     set(MatrixOpType::ACTIVE, { X }, {}, { Y }, v, real_vector, matrix_vector);
 }
 
@@ -417,7 +427,7 @@ void MatrixOp::as_pool(MatrixSP& X, MatrixSP& Y, PoolingType pooling_type, int r
     set(MatrixOpType::POOL, { X }, {}, { Y }, v, { a }, {}, { window, stride, padding });
 }
 
-void MatrixOp::as_conv(MatrixSP& X, MatrixSP& W, MatrixSP& Y, std::vector<int> stride, std::vector<int> padding, realc a)
+void MatrixOp::as_conv(MatrixSP& X, MatrixSP& W, MatrixSP& Y, std::vector<int> stride, std::vector<int> padding, int conv_type, realc a /*= 1*/)
 {
     auto dim = X->getDim();
     getDefaultStridePadding(MatrixOpType::CONV, W->getDim(), stride, padding);
@@ -428,7 +438,12 @@ void MatrixOp::as_conv(MatrixSP& X, MatrixSP& W, MatrixSP& Y, std::vector<int> s
     }
     dim[dim.size() - 2] = W->getDim().back();
     Y->resize(dim);
-    set(MatrixOpType::CONV, { X }, { W }, { Y }, v, { a }, { Matrix(), Matrix(), Matrix() }, { stride, padding });
+    auto t = MatrixOpType::CONV;
+    if (conv_type == 1)
+    {
+        t = MatrixOpType::CORR;
+    }
+    set(t, { X }, { W }, { Y }, v, { a }, { Matrix(), Matrix(), Matrix() }, { stride, padding });
 }
 
 void MatrixOp::as_reshape(MatrixSP& X, MatrixSP& Y, std::vector<int>& dim)

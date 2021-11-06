@@ -28,7 +28,7 @@ protected:
     Option option_;
     Timer timer_total_;
     int MP_count_ = 1;
-    std::vector<Net*> nets_;
+    std::vector<std::unique_ptr<Net>> nets_;
     WorkModeType work_mode_ = WORK_MODE_NORMAL;
 
 public:
@@ -71,10 +71,10 @@ public:
     //经变换后的测试集，不同之处同训练集
     Matrix X_test_cpu_, Y_test_cpu_;
 
-    DataPreparer* data_preparer_ = nullptr;    //训练集准备器
-    DataPreparer* getDataPreparer() { return data_preparer_; }
+    DataPreparerFactory::UniquePtr data_preparer_;    //训练集准备器
+    DataPreparerFactory::UniquePtr& getDataPreparer() { return data_preparer_; }
 
-    DataPreparer* data_preparer2_ = nullptr;    //测试集准备器
+    DataPreparerFactory::UniquePtr data_preparer2_;    //测试集准备器
 
 public:
     //此处需注意顺序
@@ -90,8 +90,8 @@ public:
     void initTestData();
 
 public:
-    void train(std::vector<Net*> nets, DataPreparer* data_preparer, int epochs);
-    void train(Net* net, DataPreparer* data_preparer, int epochs) { train({ net }, data_preparer, epochs); }
+    void train(std::vector<std::unique_ptr<Net>>& nets, DataPreparer* data_preparer, int epochs);
+    //void train(std::vector<std::unique_ptr<Net>>& net, DataPreparer* data_preparer, int epochs) { train({ net }, data_preparer, epochs); }
 
 private:
     //在主线程进行数据准备，副线程进行训练和测试
@@ -113,7 +113,7 @@ private:
         TrainInfo() { reset(); }
         ~TrainInfo() {}
     };
-    void trainOneNet(std::vector<Net*> nets, int net_id, TrainInfo& train_info, int epoch0, int epochs);
+    void trainOneNet(std::vector<std::unique_ptr<Net>>& nets, int net_id, TrainInfo& train_info, int epoch0, int epochs);
 
 public:
     //获取网络的时候，应注意当前的gpu
@@ -121,22 +121,20 @@ public:
     {
         if (nets_.size() > i)
         {
-            return nets_[i];
+            return nets_[i].get();
         }
         return nullptr;
     }
-    const std::vector<Net*> getNets() { return nets_; }
+    const std::vector<std::unique_ptr<Net>>& getNets() { return nets_; }
 
 public:
     //以下构成一组调度范例
     void run(int train_epochs = -1);
-    void testData(Net* net, int force_output = 0, int test_max = 0);
-    void extraTest(Net* net, const std::string& section, int force_output = 0, int test_max = 0);
+    void testData(Net* net, int force_output = 0, int test_type = 0);
+    void extraTest(Net* net, const std::string& section, int force_output = 0, int test_type = 0);
 
 public:
     int testExternalData(void* x, void* y, void* a, int n, int attack_times = 0, realc* error = nullptr);
-
-    static int getFloatPrecision();
 
 public:
     void setLearnRateBase(real lrb)
@@ -147,19 +145,5 @@ public:
         }
     }
 };
-
-//暂时阻塞等待条件。注意，这里只能用宏，用函数写起来很麻烦
-#define WAIT_UNTIL(condition) \
-    do { \
-        while (!(condition)) { std::this_thread::sleep_for(std::chrono::nanoseconds(100)); } \
-    } while (0)
-#define WAIT_UNTIL_OVERTIME(condition, overtime) \
-    do { \
-        auto t0 = std::chrono::system_clock::now(); \
-        while (!(condition) && std::chrono::system_clock::now() - t0 < std::chrono::nanoseconds(int64_t(overtime))) \
-        { \
-            std::this_thread::sleep_for(std::chrono::nanoseconds(100)); \
-        } \
-    } while (0)
 
 }    // namespace cccc

@@ -68,6 +68,8 @@ public:
     cudnnSpatialTransformerDescriptor_t spatial_transformer_desc_ = nullptr;
     cudnnLRNDescriptor_t lrn_desc_ = nullptr;
 
+    size_t memory_used_ = 0;
+
 private:
     static int device_count_;
     static std::vector<CudaControl> cuda_toolkit_vector_;    //排序按照nvml_id_

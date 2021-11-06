@@ -4,7 +4,7 @@
 namespace cccc
 {
 
-const char Option::default_section_[] = "will";
+const char default_section_[] = "will";
 
 Option::Option()
 {
@@ -13,50 +13,15 @@ Option::Option()
 
 Option::Option(const std::string& filename) : Option()
 {
-    loadIniFile(filename);
+    loadFile(filename);
 }
 
-Option::~Option()
+void Option::setKeys(const std::string& section, const std::string& pairs)
 {
+    setKeys(section, convert::splitString(pairs, ";"));
 }
 
-void Option::loadIniFile(const std::string& filename)
-{
-    std::string content = convert::readStringFromFile(filename);
-    loadIniString(content);
-    //print();
-}
-
-void Option::loadIniString(const std::string& content)
-{
-    ini_reader_.loadString(content);
-}
-
-int Option::getInt(const std::string& section, const std::string& key, int default_value)
-{
-    return int(getReal(section, key, default_value));
-}
-
-double Option::getReal(const std::string& section, const std::string& key, double default_value)
-{
-    return ini_reader_.getReal(section, key, default_value);
-}
-
-//提取字串属性，会去掉单引号，双引号
-std::string Option::getString(const std::string& section, const std::string& key, const std::string& default_value)
-{
-    std::string str = ini_reader_.getString(section, key, default_value);
-    convert::replaceAllSubStringRef(str, "\'", "");
-    convert::replaceAllSubStringRef(str, "\"", "");
-    return str;
-}
-
-void Option::setOptions(const std::string& section, const std::string& pairs)
-{
-    setOptions(section, convert::splitString(pairs, ";"));
-}
-
-void Option::setOptions(const std::string& section, const std::vector<std::string>& pairs)
+void Option::setKeys(const std::string& section, const std::vector<std::string>& pairs)
 {
     for (auto pair : pairs)
     {
@@ -66,14 +31,44 @@ void Option::setOptions(const std::string& section, const std::vector<std::strin
         {
             auto key = pair.substr(0, p);
             auto value = pair.substr(p + 1);
-            setOption(section, key, value);
+            setKey(section, key, value);
         }
     }
 }
 
-void Option::print()
+std::string Option::dealString(std::string str, int to_filename /*= 0*/)
 {
-    ini_reader_.print();
+    size_t p = 0;
+    while ((p = str.find("{", p)) != std::string::npos)
+    {
+        auto p0 = p;
+        p++;
+        std::string section, key;
+        auto p1 = str.find("::", p);
+        if (p1 != std::string::npos)
+        {
+            section = str.substr(p, p1 - p);
+            p = p1 + 2;
+        }
+        auto p2 = str.find("}", p);
+        {
+            key = str.substr(p, p2 - p);
+            p = p2 + 1;
+        }
+        if (hasKey(section, key))
+        {
+            std::string sub = getString(section, key);
+            if (to_filename)
+            {
+                convert::replaceAllSubStringRef(sub, ":", "");
+                convert::replaceAllSubStringRef(sub, "\\", "");
+                convert::replaceAllSubStringRef(sub, "/", "");
+            }
+            convert::replaceAllSubStringRef(str, str.substr(p0, p - p0), sub);
+            p = p0 + sub.size();
+        }
+    }
+    return str;
 }
 
 //初始化map，注意一些设置是有别名的
@@ -92,9 +87,32 @@ void Option::initEnums()
             { "softmax", ACTIVE_FUNCTION_SOFTMAX },
             { "softmax_fast", ACTIVE_FUNCTION_SOFTMAX_FAST },
             { "softmax_log", ACTIVE_FUNCTION_SOFTMAX_LOG },
+            { "dropout", ACTIVE_FUNCTION_DROPOUT },
+            { "recurrent", ACTIVE_FUNCTION_RECURRENT },
+            { "softplus", ACTIVE_FUNCTION_SOFTPLUS },
+            { "local_response_normalization", ACTIVE_FUNCTION_LOCAL_RESPONSE_NORMALIZATION },
+            { "lrn", ACTIVE_FUNCTION_LOCAL_RESPONSE_NORMALIZATION },
+            { "local_constrast_normalization", ACTIVE_FUNCTION_LOCAL_CONSTRAST_NORMALIZATION },
+            { "lcn", ACTIVE_FUNCTION_LOCAL_CONSTRAST_NORMALIZATION },
+            { "divisive_normalization", ACTIVE_FUNCTION_DIVISIVE_NORMALIZATION },
+            { "dn", ACTIVE_FUNCTION_DIVISIVE_NORMALIZATION },
+            { "batch_normalization", ACTIVE_FUNCTION_BATCH_NORMALIZATION },
+            { "bn", ACTIVE_FUNCTION_BATCH_NORMALIZATION },
+            { "spatial_transformer", ACTIVE_FUNCTION_SPATIAL_TRANSFORMER },
+            { "sum_max", ACTIVE_FUNCTION_SUMMAX },
+            { "zero_channel", ACTIVE_FUNCTION_ZERO_CHANNEL },
             { "sigmoid_ce", ACTIVE_FUNCTION_SIGMOID_CE },
             { "softmax_ce", ACTIVE_FUNCTION_SOFTMAX_CE },
             { "softmax_fast_ce", ACTIVE_FUNCTION_SOFTMAX_FAST_CE },
+            { "sin", ACTIVE_FUNCTION_SIN },
+            { "zigzag", ACTIVE_FUNCTION_ZIGZAG },
+            { "leaky_relu", ACTIVE_FUNCTION_LEAKY_RELU },
+            { "lrelu", ACTIVE_FUNCTION_LEAKY_RELU },
+            { "selu", ACTIVE_FUNCTION_SELU },
+            { "square", ACTIVE_FUNCTION_SQUARE },
+            { "abs", ACTIVE_FUNCTION_ABS },
+            { "sinp", ACTIVE_FUNCTION_SIN_PLUS },
+            { "silu", ACTIVE_FUNCTION_SILU },
         });
 
     registerEnum<LayerConnectionType>(
@@ -108,6 +126,16 @@ void Option::initEnums()
             { "conv", LAYER_CONNECTION_CONVOLUTION },
             { "pooling", LAYER_CONNECTION_POOLING },
             { "pool", LAYER_CONNECTION_POOLING },
+            { "direct", LAYER_CONNECTION_DIRECT },
+            { "correlation", LAYER_CONNECTION_CORRELATION },
+            { "corr", LAYER_CONNECTION_CORRELATION },
+            { "conv2", LAYER_CONNECTION_CORRELATION },
+            { "combine", LAYER_CONNECTION_COMBINE },
+            { "extract", LAYER_CONNECTION_EXTRACT },
+            { "roteigen", LAYER_CONNECTION_ROTATE_EIGEN },
+            { "norm2", LAYER_CONNECTION_NORM2 },
+            { "transpose", LAYER_CONNECTION_TRANSPOSE },
+            { "nac", LAYER_CONNECTION_NAC },
         });
 
     registerEnum<CostFunctionType>(
@@ -132,10 +160,11 @@ void Option::initEnums()
 
     registerEnum<RandomFillType>(
         {
-            { "constant", RANDOM_FILL_CONSTANT },
             { "xavier", RANDOM_FILL_XAVIER },
+            { "constant", RANDOM_FILL_CONSTANT },
             { "gaussian", RANDOM_FILL_GAUSSIAN },
             { "msra", RANDOM_FILL_GAUSSIAN },
+            { "lecun", RANDOM_FILL_LECUN },
         });
 
     registerEnum<AdjustLearnRateType>(

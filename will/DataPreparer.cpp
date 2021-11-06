@@ -19,11 +19,11 @@ void DataPreparer::init()
 {
     if (option_->hasSection(section_))
     {
-        setLog(option_->getInt(section_, "output_log", 1));
+        LOG::setLevel(option_->getInt(section_, "output_log", 1));
     }
     else
     {
-        setLog(0);
+        LOG::setLevel(0);
     }
     OPTION_GET_INT(shuffle_);
     OPTION_GET_INT(trans_);
@@ -34,7 +34,7 @@ void DataPreparer::init()
     OPTION_GET_INT(fill_);
     OPTION_GET_INT(fill_group_);
     init2();
-    setLog(1);
+    LOG::restoreLevel();
 }
 
 //初始化训练集准备器

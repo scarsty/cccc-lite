@@ -9,6 +9,8 @@
 #include <nvml.h>
 #endif
 
+#include "Log.h"
+
 namespace cccc
 {
 
@@ -53,7 +55,7 @@ CudaControl* CudaControl::select(int dev_id)
             dev_id = getBestDevice();
             cudaDeviceProp device_prop;
             cudaGetDeviceProperties(&device_prop, cuda_toolkit_vector_[dev_id].cuda_id_);
-            fmt::print(stdout, "Device {} does not exist, automatically choose device {}\n",
+            LOG("Device {} does not exist, automatically choose device {}\n",
                 old_dev_id, dev_id);
         }
 
@@ -81,7 +83,7 @@ int CudaControl::checkDevices()
     int ver_r, ver_d;
     cudaRuntimeGetVersion(&ver_r);
     cudaDriverGetVersion(&ver_d);
-    fmt::print("CUDA version: Runtime {}, Driver {} (R must <= D)\n", ver_r, ver_d);
+    LOG("CUDA version: Runtime {}, Driver {} (R must <= D)\n", ver_r, ver_d);
     device_count_ = 0;
     if (cudaGetDeviceCount(&device_count_) != cudaSuccess || device_count_ <= 0)
     {
@@ -124,25 +126,26 @@ int CudaControl::init(int use_cuda, int dev_id /*= -1*/)
     cublas_ = new Cublas();
     if (cublas_->init() != CUBLAS_STATUS_SUCCESS)
     {
-        fmt::print(stderr, "CUBLAS initialization error on device {}!\n", dev_id);
+        LOG(stderr, "CUBLAS initialization error on device {}!\n", dev_id);
         return 1;
     }
     if (cudnnCreate(&cudnn_handle_) != CUDNN_STATUS_SUCCESS)
     {
-        fmt::print(stderr, "CUDNN initialization error on device {}!\n", dev_id);
+        LOG(stderr, "CUDNN initialization error on device {}!\n", dev_id);
         return 2;
     }
     //if (curandCreateGenerator(&toolkit_.curand_generator_, CURAND_RNG_PSEUDO_DEFAULT) != CURAND_STATUS_SUCCESS)
     //{
-    //    fmt::print(stderr, "CURAND initialization error!\n");
+    //    LOG(stderr, "CURAND initialization error!\n");
     //    return 3;
     //}
     //else
     //{
     //    curandSetPseudoRandomGeneratorSeed(toolkit_.curand_generator_, 1234ULL);
     //}
-    fmt::print(stdout, "CUDA initialization on device {} succeed\n", cuda_id_);
-    fmt::print(stdout, "Float precision is {}\n", sizeof(real) * 8);
+    LOG("CUDA initialization on device {} succeed\n", cuda_id_);
+    //LOG("CUBLAS Version = {}, CUDNN Version = {}\n", cublas_->get_version(), cudnnGetVersion());
+    LOG("Float precision is {}\n", sizeof(real) * 8);
     inited_ = true;
     global_device_type_ = DeviceType::GPU;
 
@@ -271,7 +274,7 @@ void CudaControl::setTensorDesc4D(cudnnTensorDescriptor_t tensor, int w, int h, 
         auto r = cudnnSetTensor4dDescriptor(tensor, CUDNN_TENSOR_NCHW, MYCUDNN_DATA_REAL, n, c, h, w);
         if (r)
         {
-            fmt::print(stderr, "Set tensor failed!\n");
+            LOG(stderr, "Set tensor failed!\n");
         }
     }
 }
@@ -284,7 +287,7 @@ void CudaControl::setTensorDescND(cudnnTensorDescriptor_t tensor, std::vector<in
         int size = dim.size();
         if (size > CUDNN_DIM_MAX)
         {
-            fmt::print(stderr, "Error: wrong dimensions of tensor!\n");
+            LOG(stderr, "Error: wrong dimensions of tensor!\n");
             return;
         }
         dim1 = dim;
@@ -365,8 +368,8 @@ void CudaControl::evaluateDevices()
 
         // If we don't find the values, we default use the previous one
         // to run properly
-        fprintf(stderr,
-            "MapSMtoCores for SM %d.%d is undefined."
+        LOG(stderr,
+            "MapSMtoCores for SM {}.{} is undefined."
             "  Default to use %d Cores/SM\n",
             major, minor, nGpuArchCoresPerSM[index - 1].Cores);
 
@@ -416,7 +419,7 @@ void CudaControl::evaluateDevices()
             {
                 cudaMemGetInfo(&free, &total);
             }
-            fmt::print(stdout, "Device {} ({}): {}, {:7.2f} GFLOPS, {:7.2f} MB ({:g}%) free\n",
+            LOG("Device {} ({}): {}, {:7.2f} GFLOPS, {:7.2f} MB ({:g}%) free\n",
                 ct.cuda_id_, pci_info, device_prop.name, flops / 1e9, free / 1048576.0, 100.0 * free / total);
             state = flops / 1e12 + free / 1e9;
             pci[i] = device_prop.pciBusID;

@@ -8,7 +8,7 @@ Cifar10Reader::Cifar10Reader()
 {
 }
 
-void readDara(Matrix& X, Matrix& Y, const std::string& filename, int begin)
+static void readData(Matrix& X, Matrix& Y, const std::string& filename, int begin)
 {
     std::vector<uint8_t> arr;
     File::readFileToVector(filename, arr);
@@ -65,11 +65,11 @@ void Cifar10Reader::load(Matrix& X, Matrix& Y, std::string path /*= "cifa10"*/, 
         Y.resize(10, 50000);
         Y.initData(0);
         fprintf(stdout, "Loading Cifar10 train data... ");
-        readDara(X, Y, path + "data_batch_1.bin", 0);
-        readDara(X, Y, path + "data_batch_2.bin", 10000);
-        readDara(X, Y, path + "data_batch_3.bin", 20000);
-        readDara(X, Y, path + "data_batch_4.bin", 30000);
-        readDara(X, Y, path + "data_batch_5.bin", 40000);
+        readData(X, Y, path + "data_batch_1.bin", 0);
+        readData(X, Y, path + "data_batch_2.bin", 10000);
+        readData(X, Y, path + "data_batch_3.bin", 20000);
+        readData(X, Y, path + "data_batch_4.bin", 30000);
+        readData(X, Y, path + "data_batch_5.bin", 40000);
         fprintf(stdout, "done\n");
     }
     else if (data_type == 2)
@@ -78,7 +78,7 @@ void Cifar10Reader::load(Matrix& X, Matrix& Y, std::string path /*= "cifa10"*/, 
         Y.resize(10, 10000);
         Y.initData(0);
         fprintf(stdout, "Loading Cifar10 test data... ");
-        readDara(X, Y, path + "test_batch.bin", 0);
+        readData(X, Y, path + "test_batch.bin", 0);
         fprintf(stdout, "done\n");
     }
     else

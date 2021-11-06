@@ -30,6 +30,10 @@
       <UniqueIdentifier>{2a3933f8-115f-45e7-834d-0367a65f965c}</UniqueIdentifier>
       <Extensions>Data*.*</Extensions>
     </Filter>
+    <Filter Include="layer">
+      <UniqueIdentifier>{6625ebba-819f-41bf-8501-72e44f10b3a5}</UniqueIdentifier>
+      <Extensions>Layer*.*</Extensions>
+    </Filter>
     <Filter Include="math">
       <UniqueIdentifier>{b1000c3a-726a-497c-b4f3-7bde70c0545f}</UniqueIdentifier>
     </Filter>
@@ -42,9 +46,6 @@
     </Filter>
     <Filter Include="option">
       <UniqueIdentifier>{8b6e00fa-12c4-4110-8076-633dc67bf76c}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="save">
-      <UniqueIdentifier>{0c2e2ddb-2ad6-44e6-b686-f10063927baa}</UniqueIdentifier>
     </Filter>
     <Filter Include="solver">
       <UniqueIdentifier>{5fef8200-bbaa-48fe-9413-48c583ea301f}</UniqueIdentifier>
@@ -68,15 +69,6 @@
     </ClCompile>
     <ClCompile Include="DataPreparerTxt.cpp">
       <Filter>data</Filter>
-    </ClCompile>
-    <ClCompile Include="Neural.cpp">
-      <Filter>base</Filter>
-    </ClCompile>
-    <ClCompile Include="Util.cpp">
-      <Filter>base</Filter>
-    </ClCompile>
-    <ClCompile Include="Log.cpp">
-      <Filter>base</Filter>
     </ClCompile>
     <ClCompile Include="Activer.cpp">
       <Filter>activer</Filter>
@@ -150,9 +142,6 @@
       <Filter>data</Filter>
     </ClInclude>
     <ClInclude Include="Neural.h">
-      <Filter>base</Filter>
-    </ClInclude>
-    <ClInclude Include="Util.h">
       <Filter>base</Filter>
     </ClInclude>
     <ClInclude Include="Log.h">
@@ -237,5 +226,8 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="..\..\README.md" />
+    <None Include="cuda_lib.inc">
+      <Filter>cuda</Filter>
+    </None>
   </ItemGroup>
 </Project>

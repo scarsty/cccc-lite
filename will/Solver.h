@@ -20,7 +20,9 @@ protected:
 
     Matrix W_sign_;    //L1范数调整
 
-    real weight_decay_, weight_decay_l1_;    //正则化参数合
+    real weight_decay_ = 0, weight_decay_l1_ = 0;    //正则化参数合
+
+    int auto_weight_decay_ = 0;    //自动权重衰减，为1时维持模平方不变
 
     real momentum_ = 0;                //上次的dWeight保留，即动量
     int momentum_clear_epoch_ = -1;    //每隔数个epoch将动量积累清零

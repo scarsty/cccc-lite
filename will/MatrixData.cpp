@@ -1,9 +1,11 @@
 #include "MatrixData.h"
 #include "Matrix.h"
+#include "Log.h"
 
 namespace cccc
 {
 //此处有问题，目前来看只能在同设备中resize
+
 real* MatrixData::resize(int64_t size, bool reserve_data, bool force)
 {
     if (size <= occupy_data_size_ && !force)
@@ -21,15 +23,16 @@ real* MatrixData::resize(int64_t size, bool reserve_data, bool force)
         cuda_->setThisDevice();
         if (cudaMalloc((void**)&new_data, size * sizeof(real)) == cudaSuccess)
         {
-            //fmt::print(stderr, "Success malloc size in byte is %lld (%g)!\n", size * sizeof(real), 1.0 * size * sizeof(real));
+            cuda_->memory_used_ += size * sizeof(real);
+            LOG(2, "Device {} MALLOC {:g}, memory used {:g}!\n", cuda_->getDeviceID(), 1.0 * size * sizeof(real), 1.0 * cuda_->memory_used_);
             //if (size * sizeof(real) > 3e8)
             //{
-            //    fmt::print(stderr, "Very big!\n");
+            //    LOG(2, "Very big!\n");
             //}
         }
         else
         {
-            fmt::print(stderr, "Error: matrix malloc data failed! size in byte is {} ({:g})!\n", size * sizeof(real), 1.0 * size * sizeof(real));
+            LOG(2, "Device {} FAIL TO MALLOC {:g}!\n", cuda_->getDeviceID(), 1.0 * size * sizeof(real));
         }
     }
     else
@@ -48,11 +51,6 @@ real* MatrixData::resize(int64_t size, bool reserve_data, bool force)
 
 void MatrixData::free()
 {
-    //if (occupy_data_size_ * sizeof(real) > 1e9)
-    //{
-    //    fmt::print(stderr, "Free %lld bytes!\n", occupy_data_size_ * sizeof(real));
-    //}
-
     if (data_ == nullptr)
     {
         occupy_data_size_ = 0;
@@ -61,20 +59,23 @@ void MatrixData::free()
     if (cuda_)
     {
         auto current_gpu = CudaControl::getCurrentDevice();
-        if (current_gpu == cuda_->getDeviceID())
+        if (current_gpu != cuda_->getDeviceID())
         {
-            auto status = cudaFree(data_);
-            //if (status != cudaSuccess)
-            //{
-            //    fmt::print(stderr, "Failed to free %lld bytes!\n", occupy_data_size_ * sizeof(real));
-            //}
+            cuda_->setThisDevice();
+        }
+        auto status = cudaFree(data_);
+        if (status == cudaSuccess)
+        {
+            cuda_->memory_used_ -= occupy_data_size_ * sizeof(real);
+            LOG(2, "Device {} FREE {:g}, memory used {:g}!\n", cuda_->getDeviceID(), 1.0 * occupy_data_size_ * sizeof(real), 1.0 * cuda_->memory_used_);
         }
         else
         {
-            cuda_->setThisDevice();
-            cudaFree(data_);
+            LOG(2, "Device {} FAIL TO FREE {:g}!\n", cuda_->getDeviceID(), 1.0 * occupy_data_size_ * sizeof(real));
+        }
+        if (current_gpu != cuda_->getDeviceID())
+        {
             CudaControl::setDevice(current_gpu);
-            //cuda_ = CudaControl::getCurrentCuda();
         }
     }
     else
@@ -83,6 +84,37 @@ void MatrixData::free()
     }
     occupy_data_size_ = 0;
     data_ = nullptr;
+}
+
+inline int64_t MatrixData::copy(DeviceType dt_src, const real* src, DeviceType dt_dst, real* dst, int64_t size)
+{
+    if (src == nullptr || dst == nullptr || src == dst)
+    {
+        return 0;
+    }
+    int64_t size_in_byte = size * sizeof(real);
+    cudaError state = cudaSuccess;
+    if (dt_dst == DeviceType::GPU && dt_src == DeviceType::GPU)
+    {
+        state = cudaMemcpy(dst, src, size_in_byte, cudaMemcpyDeviceToDevice);
+    }
+    else if (dt_dst == DeviceType::GPU && dt_src == DeviceType::CPU)
+    {
+        state = cudaMemcpy(dst, src, size_in_byte, cudaMemcpyHostToDevice);
+    }
+    else if (dt_dst == DeviceType::CPU && dt_src == DeviceType::GPU)
+    {
+        state = cudaMemcpy(dst, src, size_in_byte, cudaMemcpyDeviceToHost);
+    }
+    else
+    {
+        memcpy(dst, src, size_in_byte);
+    }
+    if (state != cudaSuccess)
+    {
+        LOG(stderr, "Error: cudaMemcpy failed with error code is {}, size in byte is {} ({:g})!\n", state, size_in_byte, 1.0 * size_in_byte);
+    }
+    return size;
 }
 
 }    // namespace cccc

@@ -13,26 +13,16 @@ namespace cccc
 //注意实数只获取双精度数，如果是单精度模式会包含隐式转换
 //获取整数的时候，先获取双精度数并强制转换
 
-class Option
+extern const char default_section_[];
+using INI_t = INIReader<CompareDefaultValue<default_section_>, CompareNoUnderline>;
+
+class Option : public INI_t
 {
 public:
     Option();
     Option(const std::string& filename);
-    ~Option();
-
-private:
-    static const char default_section_[];
-    INIReader<CompareDefaultValue<default_section_>, CompareNoUnderline> ini_reader_;
 
 public:
-    //载入ini文件
-    void loadIniFile(const std::string& filename);
-    void loadIniString(const std::string& content);
-
-    //从指定块读取
-    int getInt(const std::string& section, const std::string& key, int default_value = 0);
-    double getReal(const std::string& section, const std::string& key, double default_value = 0.0);
-    std::string getString(const std::string& section, const std::string& key, const std::string& default_value = "");
     template <typename T>
     std::vector<T> getVector(const std::string& section, const std::string& key, const std::vector<T>& default_value = {})
     {
@@ -42,20 +32,10 @@ public:
         return v;
     }
 
-    bool hasSection(const std::string& section) { return ini_reader_.hasSection(section); }
-    bool hasOption(const std::string& section, const std::string key) { return ini_reader_.hasKey(section, key); }
+    void setKeys(const std::string& section, const std::string& pairs);
+    void setKeys(const std::string& section, const std::vector<std::string>& pairs);
 
-    std::vector<std::string> getAllSections() { return ini_reader_.getAllSections(); }
-    std::vector<std::string> getAllOptions(const std::string& section) { return ini_reader_.getAllKeys(section); }
-
-    void setOption(const std::string& section, const std::string& key, const std::string& value)
-    {
-        ini_reader_.setKey(section, key, value);
-    }
-    void setOptions(const std::string& section, const std::string& pairs);
-    void setOptions(const std::string& section, const std::vector<std::string>& pairs);
-
-    void print();
+    std::string dealString(std::string str, int to_filename = 0);
 
     //以下为枚举值的处理
 private:

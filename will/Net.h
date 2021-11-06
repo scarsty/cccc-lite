@@ -32,9 +32,12 @@ protected:
     MatrixSP Y_ = makeMatrixSP();
     Matrix loss_weight_;    //该变量用以强调某些类别
 
+    int batches_for_learn_ = 1;
+    int64_t learned_batches_ = 0;
+
 public:
-    void setDevice(int dev) { device_id_ = CudaControl::setDevice(dev); }
-    int getDevice() { return device_id_; }
+    void setDeviceID(int dev) { device_id_ = CudaControl::setDevice(dev); }
+    int getDeviceID() { return device_id_; }
     void setDeviceSelf() { CudaControl::setDevice(device_id_); }
     Matrix& getAllWeights() { return all_weights_; }
     Matrix& getWorkspace() { return workspace_; }
@@ -56,6 +59,7 @@ public:
     int loadWeight(const std::string& str, int load_mode = 0);
 
     void calNorm(realc& l1, realc& l2);
+    int checkNorm();
 
 private:
     int resetBatchSize(int n);
@@ -63,7 +67,7 @@ private:
 
 public:
     void setActivePhase(ActivePhaseType ap) {}
-    int test(const std::string& info, Matrix* X, Matrix* Y, Matrix* A, int output_group = 0, int test_max = 0, int attack_times = 0, realc* result = nullptr);
+    int test(const std::string& info, Matrix* X, Matrix* Y, Matrix* A, int output_group = 0, int test_type = 0, int attack_times = 0, realc* result = nullptr);
 
 protected:
     void combineWeights();

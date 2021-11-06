@@ -15,6 +15,7 @@ DataPreparerMnist::DataPreparerMnist()
 
 DataPreparerMnist::~DataPreparerMnist()
 {
+    //LOG("Destory MNIST with section [{}]\n", section_);
 }
 
 void DataPreparerMnist::init2()
@@ -27,6 +28,7 @@ void DataPreparerMnist::init2()
     OPTION_GET_INT(type_);
     OPTION_GET_INT(random_diff_);
     OPTION_GET_INT(remove59_);
+    OPTION_GET_INT(reverse_color_);
 }
 
 //one example to deal MNIST
@@ -75,6 +77,14 @@ void DataPreparerMnist::fillData(Matrix& X, Matrix& Y)
                     Matrix::copyRows(Y1, i, Y, k, 1);
                     k++;
                 }
+            }
+        }
+
+        if (reverse_color_)
+        {
+            for (int i = 0; i < X.getDataSize(); i++)
+            {
+                X.getData(i) = 1 - X.getData(i);
             }
         }
     }
