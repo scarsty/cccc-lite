@@ -1,4 +1,0 @@
-[submodule "common"]
-	path = common
-	url = https://github.com/scarsty/common.git
-	branch = master
