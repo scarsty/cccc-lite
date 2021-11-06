@@ -42,6 +42,8 @@ int Net::init()
         //LossWeight_->printAsMatrix();
     }
 
+    batches_for_learn_ = option_->getInt("", "batches_for_learn", 1);
+
     //计算总占用空间
     //std::map<void*, int64_t> map1;
     //int64_t max_size = 0, sum = 0;
@@ -84,14 +86,18 @@ void Net::active(Matrix* X, Matrix* Y, Matrix* A, bool learn, realc* error)
     if (learn)
     {
         //all_weights_.d().message("d0");
-        MatrixOp::backward(op_queue_, loss_);
+        MatrixOp::backward(op_queue_, loss_, true);
         //all_weights_.d().message("d1");
         //all_weights_.message("0");
         //LOG("%d\n", getX().getNumber());
-        solver_.updateWeights(getX().getNumber());
-        //all_weights_.d().message("1");
-        solver_.actMomentum();
-        //all_weights_.d().message("momentum");
+        if ((learned_batches_ + 1) % batches_for_learn_ == 0)
+        {
+            solver_.updateWeights(getX().getNumber() * batches_for_learn_);
+            //all_weights_.d().message("1");
+            solver_.actMomentum();
+            //all_weights_.d().message("momentum");
+        }
+        learned_batches_++;
     }
     if (A)
     {
@@ -114,7 +120,8 @@ int Net::saveWeight(const std::string& filename)
     {
         return -1;
     }
-    Log::LOG("Save net to {}... ", filename);
+    LOG("Save net to {}... ", filename);
+    File::makePath(File::getFilePath(filename));
 
     int sum = 0;
     for (auto& m : weights_)
@@ -131,19 +138,19 @@ int Net::saveWeight(const std::string& filename)
     std::string suffix;
     if (!option_->getString("", "save_sign").empty())
     {
-        suffix = option_->getString("", "save_sign") + " " + Timer::getNowAsString();
+        suffix = option_->dealString(option_->getString("", "save_sign")) + " " + Timer::getNowAsString();
         buffer += "save_sign\n" + suffix + "\n";
     }
 
     if (convert::writeStringToFile(buffer, filename) > 0)
     {
-        Log::LOG("done\n");
+        LOG("done\n");
         LOG("Save sign: {}\n", suffix);
         return 0;
     }
     else
     {
-        Log::LOG("failed!\n");
+        LOG("failed!\n");
         return -1;
     }
 }
@@ -160,17 +167,17 @@ int Net::loadWeight(const std::string& str, int load_mode)
     setDeviceSelf();
     if (str == "")
     {
-        Log::LOG("Warning: no data!\n");
+        LOG("Warning: no data!\n");
         return -2;
     }
 
     if (load_mode == 0)
     {
-        Log::LOG("Loading net from {}... ", str);
+        LOG("Loading net from {}... ", str);
     }
     else
     {
-        Log::LOG("Loading net from memory... ");
+        LOG("Loading net from memory... ");
     }
 
     std::string buffer;
@@ -185,7 +192,7 @@ int Net::loadWeight(const std::string& str, int load_mode)
 
     if (buffer.size() <= 0)
     {
-        Log::LOG("failed!\n");
+        LOG("failed!\n");
         return -2;
     }
 
@@ -196,7 +203,7 @@ int Net::loadWeight(const std::string& str, int load_mode)
         sum += m->load(p + sum, (buffer.size() - sum * sizeof(real)) / sizeof(real));
     }
 
-    Log::LOG("done\n");
+    LOG("done\n");
 
     int ret = 0;
     std::string sign_substr = "save_sign\n";
@@ -210,22 +217,22 @@ int Net::loadWeight(const std::string& str, int load_mode)
         {
             sign = buffer.substr(sign_begin_pos, sign_end_pos - sign_begin_pos);
         }
-        Log::LOG("Save sign: {}\n", sign);
+        LOG("Save sign: {}\n", sign);
     }
     else
     {
-        Log::LOG("Warning: no save sign!\n");
+        LOG("Warning: no save sign!\n");
         weght_end_pos = buffer.size();
         ret = 1;
     }
     if (weght_end_pos > sum * sizeof(real))
     {
-        Log::LOG("Warning: size of weight is longer than net!\n");
+        LOG("Warning: size of weight is longer than net!\n");
         ret = 1;
     }
     else if (weght_end_pos < sum * sizeof(real))
     {
-        Log::LOG("Warning: size of weight is shorter than net!\n");
+        LOG("Warning: size of weight is shorter than net!\n");
         ret = 1;
     }
     return ret;
@@ -245,7 +252,15 @@ void Net::calNorm(realc& l1, realc& l2)
             l2 += m->dotSelf();
         }
     }
-    //LOG("L1 = %g, L2 = %g\n", l1, l2);
+}
+
+//返回值非零表示网络已经出现数值问题
+int Net::checkNorm()
+{
+    realc l1, l2;
+    calNorm(l1, l2);
+    LOG("L1 = {}, L2 = {}\n", l1, l2);
+    return isnan(l1) || isnan(l2);
 }
 
 int Net::resetBatchSize(int n)
@@ -297,8 +312,8 @@ std::vector<int> Net::getTestGroup()
 
 //测试一个大组
 //返回值是max位置准确率，即标签正确率
-//test_max时，result返回准确率，否则返回的是error
-int Net::test(const std::string& info, Matrix* X, Matrix* Y, Matrix* A, int output_group /*= 0*/, int test_max /*= 0*/, int attack_times /*= 0*/, realc* result /*= nullptr*/)
+//test_type时，result返回准确率，否则返回的是error
+int Net::test(const std::string& info, Matrix* X, Matrix* Y, Matrix* A, int output_group /*= 0*/, int test_type /*= 0*/, int attack_times /*= 0*/, realc* result /*= nullptr*/)
 {
     if (info != "")
     {
@@ -321,18 +336,22 @@ int Net::test(const std::string& info, Matrix* X, Matrix* Y, Matrix* A, int outp
     }
 
     int group_size = X->getNumber();
+    if (test_type == 2)
+    {
+        group_size = 1;
+    }
     if (group_size <= 0)
     {
         return 0;
     }
 
-    bool need_y = output_group > 0 || test_max > 0 || result;
+    bool need_y = output_group > 0 || test_type > 0 || result;
 
     setActivePhase(ACTIVE_PHASE_TEST);
 
     realc total_error = 0, error = 0;
     realc* errorp = nullptr;
-    if (test_max == 0 && result)
+    if (test_type == 0 && result)
     {
         errorp = &error;
     }
@@ -416,7 +435,7 @@ int Net::test(const std::string& info, Matrix* X, Matrix* Y, Matrix* A, int outp
     getX() = Xp;
     getY() = Yp;
     getA() = Ap;
-    if (test_max == 0 && result)
+    if (test_type == 0 && result)
     {
         total_error /= X->getNumber();
         *result = total_error;
@@ -425,41 +444,36 @@ int Net::test(const std::string& info, Matrix* X, Matrix* Y, Matrix* A, int outp
         ConsoleControl::setColor(CONSOLE_COLOR_NONE);
     }
 
-    //if (A)
-    //{
-    //    Matrix::copyData(A_gpu, *A);
-    //}
-
-    //恢复网络原来的设置组数
-
+    //恢复网络原来的设置
     setActivePhase(ACTIVE_PHASE_TRAIN);
 
     //若Y为空没有继续测试的必要
-    if (Y == nullptr && output_group == 0 && test_max == 0)
+    if (Y == nullptr)
     {
         return 0;
     }
 
-    int y_size = Y->getRow();
-    auto Y_cpu = Y->autoShareClone(DeviceType::CPU);
-    auto A_cpu = A->autoShareClone(DeviceType::CPU);
-
-    for (int i = 0; i < (std::min)(group_size, output_group); i++)
+    if (test_type == 1)
     {
-        for (int j = 0; j < y_size; j++)
-        {
-            LOG("{:6.3f} ", A_cpu.getData(j, i));
-        }
-        LOG(" --> ");
-        for (int j = 0; j < y_size; j++)
-        {
-            LOG("{:6.3f} ", Y_cpu.getData(j, i));
-        }
-        LOG("\n");
-    }
+        int y_size = Y->getRow();
+        auto Y_cpu = Y->autoShareClone(DeviceType::CPU);
+        auto A_cpu = A->autoShareClone(DeviceType::CPU);
 
-    if (test_max)
-    {
+        LOG("Label -> Infer\n");
+        for (int i = 0; i < (std::min)(group_size, output_group); i++)
+        {
+            for (int j = 0; j < y_size; j++)
+            {
+                LOG("{:6.3f} ", Y_cpu.getData(j, i));
+            }
+            LOG(" --> ");
+            for (int j = 0; j < y_size; j++)
+            {
+                LOG("{:6.3f} ", A_cpu.getData(j, i));
+            }
+            LOG("\n");
+        }
+
         ConsoleControl::setColor(CONSOLE_COLOR_LIGHT_RED);
         auto A_max = Matrix(A_cpu.getDim(), DeviceType::CPU);
 
@@ -492,7 +506,7 @@ int Net::test(const std::string& info, Matrix* X, Matrix* Y, Matrix* A, int outp
         }
         else
         {
-            MatrixEx::activeForward(A_cpu, A_max, ACTIVE_FUNCTION_ABSMAX);
+            MatrixEx::activeForwardSimple(A_cpu, A_max, ACTIVE_FUNCTION_ABSMAX);
         }
         //A_max->print();
 
@@ -556,6 +570,51 @@ int Net::test(const std::string& info, Matrix* X, Matrix* Y, Matrix* A, int outp
             *result = accuracy_total;
         }
     }
+    else if (test_type == 2)
+    {
+        Matrix Y_cpu = Y->cloneSharedCol();
+        Matrix A_cpu = A->cloneSharedCol();
+        Y_cpu.toCPU();
+        A_cpu.toCPU();
+
+        LOG("Label -> Infer\n");
+        auto out_matrix = [](Matrix& M1, Matrix& M2)
+        {
+            int step = 4;
+            for (int iw = 0; iw < M1.getWidth(); iw += step)
+            {
+                LOG("[");
+                for (int ih = 0; ih < M1.getHeight(); ih += step)
+                {
+                    auto v = M1.getData(iw, ih, 0, 0);
+                    if (v > 0.5)
+                    {
+                        LOG("#");
+                    }
+                    else
+                    {
+                        LOG(" ");
+                    }
+                }
+                LOG("]         [");
+                for (int ih = 0; ih < M2.getHeight(); ih += step)
+                {
+                    auto v = M2.getData(iw, ih, 0, 0);
+                    if (v > 0.5)
+                    {
+                        LOG("#");
+                    }
+                    else
+                    {
+                        LOG(" ");
+                    }
+                }
+                LOG("]\n");
+            }
+        };
+
+        out_matrix(Y_cpu, A_cpu);
+    }
     return 0;
 }
 
@@ -576,6 +635,7 @@ void Net::combineWeights()
     }
     all_weights_.resize(1, sum);
     auto& dparameters = all_weights_.d();
+    all_weights_.initData(0);
     dparameters.initData(0);
     int64_t p = 0;
     int mode = 2;
@@ -603,13 +663,15 @@ void Net::combineWeights()
 
 void Net::initWeights()
 {
-    auto filler = option_->getEnum("", "filler", RANDOM_FILL_XAVIER);
+    auto filler = option_->getEnum("", "init_weight", RANDOM_FILL_XAVIER);
+    LOG("Initialized weight method is {}\n", option_->getStringFromEnum(filler));
     for (auto& op : op_queue_)
     {
         for (auto& m : op.getMatrixWb())
         {
             int one_channel = m->getRow() / m->getChannel();
             MatrixEx::fill(*m, filler, m->getChannel() * one_channel, m->getNumber() * one_channel);
+            //m->scale(10);    //调试用
             weights_.push_back(m.get());
         }
     }

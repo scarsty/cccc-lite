@@ -29,6 +29,7 @@ void Solver::init(Option* op, std::string section, Matrix& W)
     W_ = &W;
     weight_decay_ = op->getReal2(section, "weight_decay", 0);
     weight_decay_l1_ = op->getReal2(section, "weight_decay_l1", 0);
+    auto_weight_decay_ = op->getReal2(section, "auto_weight_decay", 0);
 
     normalized_dweight_ = op->getInt2(section, "normalized_dweight", 0);
 
@@ -37,10 +38,15 @@ void Solver::init(Option* op, std::string section, Matrix& W)
         W_sign_.resize(W);
     }
 
+    if (auto_weight_decay_ == 1)
+    {
+        weight_decay_ = 0;
+    }
+
     //求解器设定
     solver_type_ = op->getEnum2(section, "solver", SOLVER_SGD);
 
-    fmt::print("Solver type is {}\n", op->getStringFromEnum(solver_type_));
+    LOG("Solver type is {}\n", op->getStringFromEnum(solver_type_));
 
     momentum_ = op->getReal2(section, "momentum", 0.9);
     momentum_clear_epoch_ = op->getInt2(section, "momentum_clear_epoch", -1);
@@ -223,6 +229,11 @@ void Solver::updateWeights(int batch)
     //if (W)
     auto& W = *W_;
     auto& dW = W_->d();
+    real pre_norm_l2;
+    if (auto_weight_decay_ == 1)
+    {
+        pre_norm_l2 = W.dotSelf();
+    }
     switch (solver_type_)
     {
     case SOLVER_SGD:
@@ -269,6 +280,14 @@ void Solver::updateWeights(int batch)
         MatrixEx::adaRMSPropUpdate(W_vector_[1], dW, W_vector_[0], real_vector_[1], real_vector_[0]);
         Matrix::add(W, W_vector_[0], W, 1, -learn_rate_ * lr_weight_scale_);
         break;
+    }
+    if (auto_weight_decay_ == 1)
+    {
+        auto norm_l2 = W.dotSelf();
+        if (norm_l2 > pre_norm_l2)    //模只能变小
+        {
+            W.scale(sqrt(pre_norm_l2 / norm_l2));
+        }
     }
 }
 

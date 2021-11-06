@@ -5,50 +5,51 @@
 namespace cccc
 {
 
-Application::Application()
-{
-}
-
-Application::~Application()
-{
-}
-
-void Application::start()
-{
-}
-
-void Application::stop()
-{
-}
-
 void Application::run()
 {
-    start();
     Brain brain;
+
+    std::map<std::string, std::string> replace_pairs;
+    auto replace_strings = convert::splitString(replace_string_, ";");
+    for (auto& r : replace_strings)
+    {
+        auto rs = convert::splitString(r, ":");
+        if (rs.size() >= 1)
+        {
+            rs.resize(2);
+            replace_pairs[rs[0]] = rs[1];
+        }
+    }
+
     auto filenames = convert::splitString(ini_file_);
     for (auto filename : filenames)
     {
         if (!File::fileExist(filename))
         {
             fprintf(stderr, "%s doesn't exist!\n", filename.c_str());
-            return;
         }
-        brain.getOption()->loadIniFile(filename);
+        auto ini_str = convert::readStringFromFile(filename);
+        //Ìæ»»µôÒ»Ð©×Ö·û
+        for (auto rp : replace_pairs)
+        {
+            convert::replaceAllSubStringRef(ini_str, rp.first, rp.second);
+        }
+        brain.getOption()->loadString(ini_str);
     }
     auto load_filenames = convert::splitString(brain.getOption()->getString("", "load_ini"), ",");
     for (auto filename : load_filenames)
     {
         if (filename != "")
         {
-            brain.getOption()->loadIniFile(filename);
+            brain.getOption()->loadFile(filename);
         }
     }
 
     //format the string into ini style by inserting '\n'
-    convert::replaceAllSubStringRef(ini_string_, "[", "\n[");
-    convert::replaceAllSubStringRef(ini_string_, "]", "]\n");
-    convert::replaceAllSubStringRef(ini_string_, ";", "\n");
-    brain.getOption()->loadIniString(ini_string_);
+    convert::replaceAllSubStringRef(add_option_string_, "[", "\n[");
+    convert::replaceAllSubStringRef(add_option_string_, "]", "]\n");
+    convert::replaceAllSubStringRef(add_option_string_, ";", "\n");
+    brain.getOption()->loadString(add_option_string_);
 
     if (brain.init() != 0)
     {
@@ -60,20 +61,11 @@ void Application::run()
         brain.run();
         loop_ = false;
     }
-    stop();
-}
-
-void Application::mainLoop()
-{
 }
 
 int Application::getFloatPresicion()
 {
-    return Brain::getFloatPrecision();
-}
-
-void Application::callback(void* net_pointer)
-{
+    return sizeof(real);
 }
 
 }    // namespace cccc

@@ -12,6 +12,7 @@ int main(int argc, char* argv[])
 
     cmd.add<std::string>("config", 'c', "config file (ini format) of the net", false, "will.ini");
     cmd.add<std::string>("add-config", 'a', "additional config string ([sec1]key1=v1;key2=v2[sec2]key1=v1...)", false, "");
+    cmd.add<std::string>("replace", 'r', "replace strings before loading ini (old1:new1;old2:new2...)", false, "");
     cmd.add("version", 'v', "version information");
 
 #ifdef _MSC_VER
@@ -23,8 +24,9 @@ int main(int argc, char* argv[])
     if (cmd.exist("config"))
     {
         cccc::Application app;
-        app.setIniFile(cmd.get<std::string>("config"));
-        app.setIniString(cmd.get<std::string>("add-config"));
+        app.ini_file_ = cmd.get<std::string>("config");
+        app.add_option_string_ = cmd.get<std::string>("add-config");
+        app.replace_string_ = cmd.get<std::string>("replace");
         app.run();
     }
     else if (cmd.exist("version"))

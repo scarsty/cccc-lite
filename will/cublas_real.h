@@ -1,7 +1,7 @@
 #pragma once
 #ifndef NO_CUDA
 #include "blas_types.h"
-#include "cublas_v2.h"
+#include "cuda_lib.h"
 
 namespace cccc
 {
@@ -54,6 +54,12 @@ public:
         }
     }
     CUBLAS_FUNCTION void set_handle(cublasHandle_t h) { handle_ = h; }
+    CUBLAS_FUNCTION int get_version() 
+    {
+        int ver;
+        cublasGetVersion(handle_, &ver);
+        return ver;
+    }
 
 public:
     CUBLAS_FUNCTION float dot(const int N, const float* X, const int incX, const float* Y, const int incY)
@@ -372,5 +378,4 @@ protected:
 };
 
 }    // namespace cccc
-
 #endif

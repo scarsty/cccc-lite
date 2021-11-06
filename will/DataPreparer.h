@@ -97,34 +97,34 @@ protected:
 #define OPTION_GET_INT(a) \
     do { \
         a = option_->getInt(section_, #a, a); \
-        LOG("{} = {}\n", NAME_STR(a), a); \
+        LOG("  {} = {}\n", NAME_STR(a), a); \
     } while (0)
 #define OPTION_GET_INT2(a, v) \
     do { \
         a = option_->getInt(section_, #a, v); \
-        LOG("{} = {}\n", NAME_STR(a), a); \
+        LOG("  {} = {}\n", NAME_STR(a), a); \
     } while (0)
 #define OPTION_GET_REAL(a) \
     do { \
         a = option_->getReal(section_, #a, a); \
-        LOG("{} = {}\n", NAME_STR(a), a); \
+        LOG("  {} = {}\n", NAME_STR(a), a); \
     } while (0)
 #define OPTION_GET_REAL2(a, v) \
     do { \
         a = option_->getReal(section_, #a, v); \
-        LOG("{} = {}\n", NAME_STR(a), a); \
+        LOG("  {} = {}\n", NAME_STR(a), a); \
     } while (0)
 #define OPTION_GET_STRING(a) \
     do { \
         a = option_->getString(section_, #a, ""); \
-        LOG("{} = {}\n", NAME_STR(a), a); \
+        LOG("  {} = {}\n", NAME_STR(a), a); \
     } while (0)
 #define OPTION_GET_NUMVECTOR(a, v, n, d) \
     do { \
         a.clear(); \
         convert::findNumbers(option_->getString(section_, #a, v), a); \
         a.resize(n, d); \
-        LOG("{} = {}\n", NAME_STR(a), a); \
+        LOG("  {} = {}\n", NAME_STR(a), a); \
     } while (0)
 
 }    // namespace cccc

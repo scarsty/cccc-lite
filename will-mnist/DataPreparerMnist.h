@@ -12,6 +12,7 @@ private:
     int type_ = 1;
     int random_diff_ = 0;
     int remove59_ = 0;
+    int reverse_color_ = 0;
     Random<double> rand_;
 
 public:

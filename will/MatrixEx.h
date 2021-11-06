@@ -22,18 +22,18 @@ public:
     static void concatByChannelBackward(std::vector<MatrixSP>& X_vector, const Matrix& Y);
     static void splitByChannel(const Matrix& X, std::vector<Matrix>& Y_vector);
 
-    static void activeBufferInit(const Matrix& X, ActiveFunctionType af, std::vector<int>& int_vector, std::vector<Matrix>& matrix_vector);
+    static void activeBufferInit(const Matrix& X, ActiveFunctionType af, std::vector<int>& int_vector, std::vector<real>& real_vector, std::vector<Matrix>& matrix_vector);
 
     //激活的实际计算
     //激活和反向激活中，输入和输出矩阵都是同维度
     //请注意反向的情况，常数a和r的含义与正向的对应关系不同
-    static void activeForward(const Matrix& X, Matrix& Y, ActiveFunctionType af, real a = 1, real r = 0);
-    static void activeBackward(Matrix& X, const Matrix& Y, ActiveFunctionType af, real a = 1, real r = 0);
+    static void activeForward(const Matrix& X, Matrix& Y, ActiveFunctionType af,
+        std::vector<int>& int_vector, std::vector<real>& real_vector, std::vector<Matrix>& matrix_vector, real a = 1, real r = 0);
+    static void activeBackward(Matrix& X, const Matrix& Y, ActiveFunctionType af,
+        std::vector<int>& int_vector, std::vector<real>& real_vector, std::vector<Matrix>& matrix_vector, real a = 1, real r = 0);
 
-    static void activeForward2(const Matrix& X, Matrix& Y, ActiveFunctionType af,
-        std::vector<int>& int_vector, std::vector<real>& real_vector, std::vector<Matrix>& matrix_vector, real a = 1, real r = 0);
-    static void activeBackward2(Matrix& X, const Matrix& Y, ActiveFunctionType af,
-        std::vector<int>& int_vector, std::vector<real>& real_vector, std::vector<Matrix>& matrix_vector, real a = 1, real r = 0);
+    static void activeForwardSimple(const Matrix& X, Matrix& Y, ActiveFunctionType af, real a = 1, real r = 0);
+    static void activeBackwardSimple(Matrix& X, const Matrix& Y, ActiveFunctionType af, real a = 1, real r = 0);
 
     static void poolingForward(const Matrix& X, Matrix& Y, PoolingType pooling_type, int reverse,
         const std::vector<int>& window, const std::vector<int>& stride, const std::vector<int>& padding, realc a = 1, realc r = 0);
@@ -71,15 +71,20 @@ public:
 
     static void fill(Matrix& m, RandomFillType random_type, int in, int out);
 
-    static void sin(const Matrix& X, Matrix& Y, real a = 1);
-    static void cos(const Matrix& X, Matrix& Y, real a = 1);
-    static void zigzag(const Matrix& X, Matrix& Y);
-    static void zigzagb(Matrix& X, const Matrix& Y);
+    static void sin(const Matrix& X, Matrix& Y, real a = 1) {}
+    static void cos(const Matrix& X, Matrix& Y, real a = 1) {}
+    static void zigzag(const Matrix& X, Matrix& Y) {}
+    static void zigzagb(Matrix& X, const Matrix& Y) {}
 
-    static void step(const Matrix& X, Matrix& Y);
+    static void step(const Matrix& X, Matrix& Y) {}
 
-    static void leaky_relu(const Matrix& X, Matrix& Y, real l, real a = 1, real b = 0);
-    static void leaky_relub(Matrix& X, const Matrix& Y, real l, real a = 1, real b = 0);
+    static void leaky_relu(const Matrix& X, Matrix& Y, real l, real a = 1, real b = 0) {}
+    static void leaky_relub(Matrix& X, const Matrix& Y, real l, real a = 1, real b = 0) {}
+
+    static void correlationForward(const Matrix& X, const Matrix& W, Matrix& Y, std::vector<int>& methods, std::vector<Matrix>& workspaces,
+        const std::vector<int>& stride, const std::vector<int>& padding, realc a = 1, realc r = 0) {}
+    static void correlationBackward(Matrix& X, Matrix& W, const Matrix& Y, std::vector<int>& methods, std::vector<Matrix>& workspaces,
+        const std::vector<int>& stride, const std::vector<int>& padding, realc a = 1, realc rx = 0, realc rw = 0) {}
 };
 
 }    // namespace cccc

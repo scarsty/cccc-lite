@@ -6,37 +6,45 @@
 namespace cccc
 {
 
-class Log
+class LOG
 {
 public:
-    Log();
-    virtual ~Log();
     template <typename... Args>
-    static void LOG(Args&&... args)
+    LOG(Args&&... args)
     {
-        if (log_state() == 0)
+        if (current_level() >= 1)
         {
-            return;
+            fmt::print(args...);
         }
-        fmt::print(stdout, args...);
     }
     template <typename... Args>
-    static void LOG_DEBUG(Args&&... args)
+    LOG(int level, Args&&... args)
     {
-#ifdef _DEBUG
-        LOG(args...);
-#endif
+        if (current_level() >= level)
+        {
+            fmt::print(args...);
+        }
     }
+
+    static void setLevel(int level)
+    {
+        prev_level() = current_level();
+        current_level() = level;
+    }
+    static int getLevel() { return current_level(); }
+    static void restoreLevel() { current_level() = prev_level(); }
 
 private:
-    static int& log_state()
+    static int& current_level()
     {
-        static int log = 1;
-        return log;
+        static int cl = 1;
+        return cl;
     }
-
-public:
-    static void setLog(int log) { log_state() = log; }
+    static int& prev_level()
+    {
+        static int pl = 1;
+        return pl;
+    }
 };
 
 }    // namespace cccc

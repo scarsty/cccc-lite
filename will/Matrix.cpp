@@ -1,4 +1,5 @@
 #include "Matrix.h"
+#include "Log.h"
 #include "Random.h"
 #include "VectorMath.h"
 #include <cassert>
@@ -191,7 +192,7 @@ int Matrix::resizeKeepNumber(const std::vector<int>& dim, bool reserve_data, boo
 
 //输出矩阵内容
 //注意这个实际上是按照内存顺序
-void Matrix::print(FILE* fout) const
+void Matrix::print() const
 {
     auto temp = dataMirrorCPU();
     for (int p = 0; p < channel_ * number_; p++)
@@ -201,27 +202,27 @@ void Matrix::print(FILE* fout) const
             for (int w = 0; w < width_; w++)
             {
                 auto v = temp->data_[whcn2i(w, h, p, 0)];
-                fmt::print(fout, "{} ", realc(v));
+                LOG("{} ", realc(v));
             }
-            fmt::print(fout, "\n");
+            LOG("\n");
         }
-        fmt::print(fout, "\n");
+        LOG("\n");
     }
 }
 
 //将矩阵当做向量，按照内存中的顺序依次输出
-void Matrix::printAsVector(FILE* fout) const
+void Matrix::printAsVector() const
 {
     auto temp = dataMirrorCPU();
     for (int i = 0; i < data_size_; i++)
     {
-        fmt::print(fout, "{} ", temp->data_[i]);
+        LOG("{} ", temp->data_[i]);
     }
-    fmt::print(fout, "\n");
+    LOG("\n");
 }
 
 //按照矩阵输出，因为是列优先，故不是内存顺序
-void Matrix::printAsMatrix(FILE* fout) const
+void Matrix::printAsMatrix() const
 {
     auto temp = dataMirrorCPU();
     for (int r = 0; r < row_; r++)
@@ -229,11 +230,11 @@ void Matrix::printAsMatrix(FILE* fout) const
         for (int c = 0; c < number_; c++)
         {
             auto v = temp->data_[mn2i(r, c)];
-            fmt::print(fout, "{} ", realc(v));
+            LOG("{} ", realc(v));
         }
-        fmt::print(fout, "\n");
+        LOG("\n");
     }
-    fmt::print(fout, "\n");
+    LOG("\n");
 }
 
 //int Matrix::save(SaveBuffer& buffer) const
@@ -342,7 +343,7 @@ void Matrix::copyDataAcrossDevice(const Matrix& A, Matrix& R, int64_t size)
         cudaError state = cudaMemcpyPeer(R.data(), R.cuda()->getDeviceID(), A.data(), A.cuda()->getDeviceID(), size_in_byte);
         if (state != cudaSuccess)
         {
-            fmt::print(stderr, "Error: cudaMemcpyPeer failed with error code is {}, size in byte is {} ({:g})!\n", state, size_in_byte, 1.0 * size_in_byte);
+            LOG(2, "Error: cudaMemcpyPeer failed with error code is {}, size in byte is {} ({:g})!\n", state, size_in_byte, 1.0 * size_in_byte);
         }
     }
     else
@@ -367,7 +368,7 @@ void Matrix::shareData(const Matrix& A, int w, int h, int c, int n)
     assert(checkMatrixDevice({ this, &A }));
     if (cuda() != A.cuda())
     {
-        fmt::print(stderr, "Error: share data are on different device ({}, {})!\n", cuda()->getDeviceID(), A.cuda()->getDeviceID());
+        LOG(stderr, "Error: share data are on different device ({}, {})!\n", cuda()->getDeviceID(), A.cuda()->getDeviceID());
     }
     if (getDeviceType() == A.getDeviceType())
     {
@@ -453,13 +454,14 @@ void Matrix::toGPU()
 {
     if (!inGPU() && CudaControl::getGlobalCudaType() == DeviceType::GPU)
     {
-        real* temp = nullptr;
-        std::swap(temp, shared_data_->data_);
+        auto temp = shared_data_;
+        //std::swap(temp, shared_data_->data_);
+        shared_data_ = std::make_shared<MatrixData>();
         shared_data_->occupy_data_size_ = 0;
         shared_data_->setCudaAsCurrent();
         shared_data_->resize(data_size_);
-        MatrixData::copy(DeviceType::CPU, temp, DeviceType::GPU, shared_data_->data_, data_size_);
-        delete[] temp;
+        MatrixData::copy(DeviceType::CPU, temp->data_, DeviceType::GPU, shared_data_->data_, data_size_);
+        //delete[] temp;
         data_ = shared_data_->data_;
     }
 }
@@ -471,7 +473,8 @@ void Matrix::toCPU(bool reserve_data)
     {
         real* temp = new real[data_size_];
         MatrixData::copy(DeviceType::GPU, shared_data_->data_, DeviceType::CPU, temp, data_size_);
-        shared_data_->free();
+        //shared_data_->free();
+        shared_data_ = std::make_shared<MatrixData>();
         shared_data_->setCuda(nullptr);
         shared_data_->occupy_data_size_ = data_size_;
         std::swap(temp, shared_data_->data_);
@@ -937,7 +940,7 @@ void Matrix::importData(real* v, int64_t n)
     MatrixData::copy(DeviceType::CPU, v, getDeviceType(), data(), std::min(n, data_size_));
     //for (int i = 0; i < n; i++)
     //{
-    //    fmt::print(stdout, "{}, ", v[i]);
+    //    LOG("{}, ", v[i]);
     //}
 }
 
@@ -1096,7 +1099,7 @@ bool Matrix::checkMatrixDevice(const std::vector<const Matrix*>& v)
         {
             if (v[i]->data_size_ > 0 && cuda != v[i]->cuda())
             {
-                fmt::print(stderr, "Matrices are not in the same device!\n");
+                LOG(stderr, "Matrices are not in the same device!\n");
                 return false;
                 break;
             }
@@ -1109,31 +1112,31 @@ void Matrix::message(const std::string& info) const
 {
     //int w, h, c, n, t;
     //cudnnDataType_t tt;
-    fmt::print(stdout, "{}:", info);
+    LOG("{}:", info);
     if (inGPU())
     {
-        fmt::print(stdout, " GPU({}),", cuda()->getDeviceID());
+        LOG(" GPU({}),", cuda()->getDeviceID());
     }
     else
     {
-        fmt::print(stdout, " CPU,");
+        LOG(" CPU,");
     }
-    fmt::print(stdout, " dim =");
+    LOG(" dim =");
     for (auto& i : dim_)
     {
-        fmt::print(stdout, " {}", i);
+        LOG(" {}", i);
     }
-    //fmt::print(stdout, ", address = %p\n", getDataPointer());
-    fmt::print(stdout, ", norm^2 = {}\n", dotSelf());
+    //LOG(", address = %p\n", getDataPointer());
+    LOG(", norm^2 = {}\n", dotSelf());
     //cudnnDataType_t t;
     //int n;
     //int d1[8];
     //int s1[8];
     //cudnnGetTensorNdDescriptor(tensor_desc(), 8, &t, &n, d1, s1);
-    //fmt::print(stdout, "%d %d\n", t, n);
+    //LOG("%d %d\n", t, n);
     //for (int i = 0; i < 8; i++)
     //{
-    //    fmt::print(stdout, "%d %d\n", d1[i], s1[i]);
+    //    LOG("%d %d\n", d1[i], s1[i]);
     //}
     //cudnnSetTensorNdDescriptor(tensor_desc_, t, n, d1, s1);
 }    // namespace cccc

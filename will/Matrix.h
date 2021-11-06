@@ -158,9 +158,9 @@ public:
     int resizeAndNumber(const std::vector<int>& dim, int n, bool reserve_data = true, bool force = false);
     int resizeKeepNumber(const std::vector<int>& dim, bool reserve_data = true, bool force = false);    //注意此处参数dim的最后一个值是无用的
 
-    void print(FILE* fout = stdout) const;
-    void printAsVector(FILE* fout = stdout) const;
-    void printAsMatrix(FILE* fout = stdout) const;
+    void print() const;
+    void printAsVector() const;
+    void printAsMatrix() const;
 
     //int save(SaveBuffer& buffer) const;
     //int load(SaveBuffer& buffer);

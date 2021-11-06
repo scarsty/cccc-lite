@@ -2,6 +2,7 @@
 #include "DataPreparerImage.h"
 #include "DataPreparerTxt.h"
 #include "DynamicLibrary.h"
+#include "File.h"
 
 namespace cccc
 {
@@ -12,10 +13,20 @@ DataPreparer* DataPreparerFactory::create(Option* op, const std::string& section
     std::string library_name = op->getString(section, "library");
 #ifdef _WIN32
 #ifdef _DEBUG
-    library_name = op->getString(section, "libraryd", library_name);
+    library_name = op->getString(section, "library_dlld", library_name);
+#else
+    library_name = op->getString(section, "library_dll", library_name);
 #endif
 #else
     library_name = op->getString(section, "library_so", library_name);
+    if (convert::toLowerCase(File::getFileExt(library_name)) == "dll")
+    {
+        library_name = File::getFilenameWithoutPath(File::getFileMainname(library_name)) + ".so";
+        if (library_name.find("lib") != 0)
+        {
+            library_name = "lib" + library_name;
+        }
+    }
 #endif
     auto function_name = op->getString(section, "function", "dp_ext");
 
@@ -78,7 +89,7 @@ DataPreparer* DataPreparerFactory::create(Option* op, const std::string& section
     return dp;
 }
 
-void DataPreparerFactory::destroy(DataPreparer*& dp)
+void DataPreparerFactory::destroy(DataPreparer* dp)
 {
     if (dp)
     {

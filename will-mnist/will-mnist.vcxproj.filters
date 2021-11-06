@@ -17,10 +17,10 @@
     <ClInclude Include="DataPreparerMnist.h">
       <Filter>headers</Filter>
     </ClInclude>
-    <ClInclude Include="Cifar10Reader.h">
-      <Filter>sources</Filter>
-    </ClInclude>
     <ClInclude Include="MnistReader.h">
+      <Filter>headers</Filter>
+    </ClInclude>
+    <ClInclude Include="Cifar10Reader.h">
       <Filter>headers</Filter>
     </ClInclude>
   </ItemGroup>

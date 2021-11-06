@@ -8,6 +8,7 @@ IMPORT(cublasSetMathMode);
 IMPORT(cublasSgemm_v2);
 IMPORT(cublasSgemv_v2);
 IMPORT(cublasSscal_v2);
+IMPORT(cublasGetVersion);
 IMPORT(cudnnActivationBackward);
 IMPORT(cudnnActivationForward);
 IMPORT(cudnnAddTensor);
@@ -70,3 +71,4 @@ IMPORT(cudnnSetTensor4dDescriptor);
 IMPORT(cudnnSetTensorNdDescriptor);
 IMPORT(cudnnSoftmaxBackward);
 IMPORT(cudnnSoftmaxForward);
+IMPORT(cudnnGetVersion)

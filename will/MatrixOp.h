@@ -1,4 +1,5 @@
 #pragma once
+#include "Log.h"
 #include "Matrix.h"
 #include "MatrixEx.h"
 
@@ -18,6 +19,7 @@ enum class MatrixOpType
     ACTIVE,
     POOL,
     CONV,
+    CORR,
     RESHAPE,
     LOSS,
     L2,
@@ -50,15 +52,15 @@ public:
         para_int_v_ = iv;
         if (out_.size() > 0 && out_[0]->getDataSize() == 0)
         {
-            fprintf(stderr, "Error: output is empty!\n");
+            LOG(stderr, "Error: output is empty!\n");
         }
     }
 
     static void forward(std::vector<MatrixOp>& op_queue);
-    static void backward(std::vector<MatrixOp>& op_queue, std::vector<MatrixOp>& loss);
-    void forward();
-    void backward();
-    void calloss();
+    static void backward(std::vector<MatrixOp>& op_queue, std::vector<MatrixOp>& loss, bool clear_d);
+    void forwardData();
+    void backwardDataWeight();
+    void backwardLoss();
 
     static void print(const std::vector<MatrixOp>& op_queue);
     void print() const;
@@ -87,7 +89,7 @@ public:
     void as_active(MatrixSP& X, MatrixSP& Y, ActiveFunctionType af);
     void as_active(MatrixSP& X, MatrixSP& Y, ActiveFunctionType af, std::vector<int>&& int_vector, std::vector<real>&& real_vector, std::vector<Matrix>&& matrix_vector);
     void as_pool(MatrixSP& X, MatrixSP& Y, PoolingType pooling_type, int reverse, std::vector<int> window, std::vector<int> stride, std::vector<int> padding, realc a = 1);
-    void as_conv(MatrixSP& X, MatrixSP& W, MatrixSP& Y, std::vector<int> stride, std::vector<int> padding, realc a = 1);
+    void as_conv(MatrixSP& X, MatrixSP& W, MatrixSP& Y, std::vector<int> stride, std::vector<int> padding, int conv_type, realc a = 1);
     void as_reshape(MatrixSP& X, MatrixSP& Y, std::vector<int>& dim);
 
     //以下专为处理损失函数
