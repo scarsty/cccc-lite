@@ -112,7 +112,7 @@ int64_t MatrixData::copy(DeviceType dt_src, const real* src, DeviceType dt_dst, 
     }
     if (state != cudaSuccess)
     {
-        LOG(stderr, "Error: cudaMemcpy failed with error code is {}, size in byte is {} ({:g})!\n", state, size_in_byte, 1.0 * size_in_byte);
+        LOG(stderr, "Error: cudaMemcpy failed with error code is {}, size in byte is {:g}!\n", state, 1.0 * size_in_byte);
     }
     return size;
 }

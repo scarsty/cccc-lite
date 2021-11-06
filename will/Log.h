@@ -1,7 +1,6 @@
 #pragma once
-#define FMT_HEADER_ONLY
-#include "fmt/format.h"
-#include "fmt/ranges.h"
+#include "Format1.h"
+#include "iostream"
 
 namespace cccc
 {
@@ -14,7 +13,7 @@ public:
     {
         if (current_level() >= 1)
         {
-            fmt::print(args...);
+            format1::print(args...);
         }
     }
     template <typename... Args>
@@ -22,7 +21,7 @@ public:
     {
         if (current_level() >= level)
         {
-            fmt::print(args...);
+            format1::print(args...);
         }
     }
 
