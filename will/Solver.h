@@ -20,7 +20,7 @@ protected:
 
     Matrix W_sign_;    //L1范数调整
 
-    real weight_decay_ = 0, weight_decay_l1_ = 0;    //正则化参数合
+    real weight_decay_ = 0, weight_decay_l1_ = 0;    //正则化参数或权重的衰减
 
     int auto_weight_decay_ = 0;    //自动权重衰减，为1时维持模平方不变
 
