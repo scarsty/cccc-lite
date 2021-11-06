@@ -498,7 +498,7 @@ void Brain::trainOneNet(std::vector<std::unique_ptr<Net>>& nets, int net_id, Tra
         //主网络负责测试
         if (net_id == 0 && epoch_count % test_epoch == 0)
         {
-            std::string content = fmt::format("Test net {}: ", net_id);
+            std::string content = format1::format("Test net {}: ", net_id);
             realc test_result;
             if (test_train_origin)
             {
