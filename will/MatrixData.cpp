@@ -86,7 +86,7 @@ void MatrixData::free()
     data_ = nullptr;
 }
 
-inline int64_t MatrixData::copy(DeviceType dt_src, const real* src, DeviceType dt_dst, real* dst, int64_t size)
+int64_t MatrixData::copy(DeviceType dt_src, const real* src, DeviceType dt_dst, real* dst, int64_t size)
 {
     if (src == nullptr || dst == nullptr || src == dst)
     {
