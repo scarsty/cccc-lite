@@ -1,4 +1,5 @@
 #include "Application.h"
+#include "Log.h"
 #include "cmdline.h"
 #include <cstdio>
 
@@ -31,34 +32,34 @@ int main(int argc, char* argv[])
     }
     else if (cmd.exist("version"))
     {
-        fprintf(stdout, "LIBWILL (A Deep Neural Net library) command line interface\n");
-        fprintf(stdout, "Float precision is %d (", cccc::Application::getFloatPresicion() * 8);
+        cccc::LOG("LIBWILL (A Deep Neural Net library) command line interface\n");
+        cccc::LOG("Float precision is %d (", cccc::Application::getFloatPresicion() * 8);
         switch (cccc::Application::getFloatPresicion())
         {
         case 2:
-            fprintf(stdout, "half");
+            cccc::LOG("half");
             break;
         case 4:
-            fprintf(stdout, "float");
+            cccc::LOG("float");
             break;
         case 8:
-            fprintf(stdout, "double");
+            cccc::LOG("double");
             break;
         default:
-            fprintf(stdout, "unknown");
+            cccc::LOG("unknown");
         }
-        fprintf(stdout, ")\n");
-        fprintf(stdout, "Built with ");
+        cccc::LOG(")\n");
+        cccc::LOG("Built with ");
 #if defined(_MSC_VER)
-        fprintf(stdout, "Microsoft Visual Studio %d\n", _MSC_VER);
+        cccc::LOG("Microsoft Visual Studio %d\n", _MSC_VER);
 #elif defined(__clang__)
-        fprintf(stdout, "Clang %s\n", __clang_version__);
+        cccc::LOG("Clang %s\n", __clang_version__);
 #elif defined(__GNUC__)
-        fprintf(stdout, "GNU C %s\n", __VERSION__);
+        cccc::LOG("GNU C %s\n", __VERSION__);
 #else
-        fprintf(stdout, "Unknown complier\n");
+        cccc::LOG("Unknown complier\n");
 #endif
-        fprintf(stdout, "Commemorating my great teacher and friend Dr. Yu Wang\n");
+        cccc::LOG("Commemorating my great teacher and friend Dr. Yu Wang\n");
     }
     else
     {

@@ -1,11 +1,12 @@
 #pragma once
 
+#include "Log.h"
 #include "Random.h"
 #include "cblas_real.h"
 #include "cublas_real.h"
 #include "cuda_fp16.h"
 #include "cuda_runtime.h"
-#include "will_cuda.h"
+#include "cuda_functions.h"
 #include <algorithm>
 #include <cstdio>
 
@@ -137,12 +138,12 @@ class CblasHalf : public Cblas
 public:
     CBLAS_FUNCTION float dot(const int N, const will_half* X, const int incX, const will_half* Y, const int incY)
     {
-        fprintf(stderr, "Unsupported dot for fp16 on CPU\n");
+        LOG(stderr, "Unsupported dot for fp16 on CPU\n");
         return 0;
     }
     CBLAS_FUNCTION float asum(const int N, const will_half* X, const int incX)
     {
-        fprintf(stderr, "Unsupported asum for fp16 on CPU\n");
+        LOG(stderr, "Unsupported asum for fp16 on CPU\n");
         return 0;
     }
     CBLAS_FUNCTION int iamax(const int N, const will_half* X, const int incX)
@@ -161,15 +162,15 @@ public:
     }
     CBLAS_FUNCTION void scal(const int N, const will_half alpha, will_half* X, const int incX)
     {
-        fprintf(stderr, "Unsupported scal for fp16 on CPU\n");
+        LOG(stderr, "Unsupported scal for fp16 on CPU\n");
     }
     CBLAS_FUNCTION void gemv(const MatrixTransType TransA, const int M, const int N, const will_half alpha, const will_half* A, const int lda, const will_half* X, const int incX, const will_half beta, will_half* Y, const int incY)
     {
-        fprintf(stderr, "Unsupported gemv for fp16 on CPU\n");
+        LOG(stderr, "Unsupported gemv for fp16 on CPU\n");
     }
     CBLAS_FUNCTION void gemm(const MatrixTransType TransA, const MatrixTransType TransB, const int M, const int N, const int K, const will_half alpha, const will_half* A, const int lda, const will_half* B, const int ldb, const will_half beta, will_half* C, const int ldc)
     {
-        fprintf(stderr, "Unsupported gemm for fp16 on CPU\n");
+        LOG(stderr, "Unsupported gemm for fp16 on CPU\n");
     }
 };
 

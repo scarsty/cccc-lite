@@ -1,5 +1,6 @@
 #include "cuda_lib.h"
 #include "DynamicLibrary.h"
+#include "Log.h"
 #include <string>
 #include <vector>
 
@@ -24,18 +25,18 @@ public:
         func = (func##_t)DynamicLibrary::getFunction(lib, #func); \
         if (func) \
         { \
-            /*fprintf(stdout, "Found %s in %s\n", #func, lib.c_str());*/ \
+            /*LOG("Found {} in {}\n", #func, lib);*/ \
             libs_used[lib]++; \
             break; \
         } \
     } \
-    if (func == nullptr) { fprintf(stderr, "Found %s failed!\n", #func); }
+    if (func == nullptr) { LOG(stderr, "Found {} failed!\n", #func); }
 
 #include "cuda_lib.inc"
 #undef IMPORT
         for (auto& lu : libs_used)
         {
-            fprintf(stdout, "Loaded dynamic library %s\n", lu.first.c_str());
+            LOG("Loaded dynamic library {}\n", lu.first);
         }
     }
 
