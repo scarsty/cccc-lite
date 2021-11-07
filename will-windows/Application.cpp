@@ -26,7 +26,7 @@ void Application::run()
     {
         if (!File::fileExist(filename))
         {
-            fprintf(stderr, "%s doesn't exist!\n", filename.c_str());
+            LOG(stderr, "%s doesn't exist!\n", filename.c_str());
         }
         auto ini_str = convert::readStringFromFile(filename);
         //Ìæ»»µôÒ»Ð©×Ö·û

@@ -14,13 +14,13 @@
     <ProjectGuid>{271C3640-1916-4736-B07F-DABF0F3914DF}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
     <RootNamespace>neural</RootNamespace>
-    <WindowsTargetPlatformVersion>10.0.19041.0</WindowsTargetPlatformVersion>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
     <ConfigurationType>StaticLibrary</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
-    <PlatformToolset>v140</PlatformToolset>
+    <PlatformToolset>v143</PlatformToolset>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
@@ -110,7 +110,7 @@
       <AdditionalDependencies>will-cuda.lib;openblas.lib;nvml.lib;cudart_static.lib</AdditionalDependencies>
     </Lib>
     <Lib>
-      <AdditionalLibraryDirectories>$(CUDA_PATH)/lib/x64;../lib/x64;$(SolutionDir)$(Platform)\$(Configuration)\</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>$(CUDA_PATH)/lib/x64;../lib/x64;$(SolutionDir)$(Platform)\$(Configuration)\;$(VCPKG_LIB_PATH)/x64-windows/lib</AdditionalLibraryDirectories>
     </Lib>
   </ItemDefinitionGroup>
   <ItemGroup>
@@ -138,6 +138,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\common\Cifa.h" />
+    <ClInclude Include="..\..\common\Format1.h" />
     <ClInclude Include="Activer.h" />
     <ClInclude Include="blas_types.h" />
     <ClInclude Include="cblas_real.h" />

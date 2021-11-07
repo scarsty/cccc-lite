@@ -1,5 +1,6 @@
 #pragma once
 #include "INIReader.h"
+#include "Log.h"
 #include "convert.h"
 #include "types.h"
 #include <functional>
@@ -78,7 +79,7 @@ public:
         {
             if (!value_str.empty())
             {
-                fprintf(stderr, "Warning: undefined value \"%s\" for %s, set to %s!\n", value_str.c_str(), key.c_str(), getStringFromEnum(T(0)).c_str());
+                LOG("Warning: undefined value \"{}\" for {}, set to {}!\n", value_str, key, getStringFromEnum(T(0)));
             }
             return default_value;
         }

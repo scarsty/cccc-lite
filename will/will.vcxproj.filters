@@ -219,6 +219,9 @@
     <ClInclude Include="cuda_lib.h">
       <Filter>cuda</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\common\Format1.h">
+      <Filter>common</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <Text Include="..\CMakeLists.txt" />

@@ -1,5 +1,6 @@
 #include "MnistReader.h"
 #include "File.h"
+#include "Log.h"
 
 namespace cccc
 {
@@ -83,21 +84,21 @@ void MnistReader::load(Matrix& X, Matrix& Y, std::string path /*= "mnist"*/, int
     {
         label = path + "train-labels.idx1-ubyte";
         image = path + "train-images.idx3-ubyte";
-        fprintf(stdout, "Loading MNIST train data... ");
+        LOG("Loading MNIST train data... ");
     }
     else if (data_type == 2)
     {
         label = path + "t10k-labels.idx1-ubyte";
         image = path + "t10k-images.idx3-ubyte";
-        fprintf(stdout, "Loading MNIST test data... ");
+        LOG("Loading MNIST test data... ");
     }
     else
     {
-        fprintf(stdout, "Please check MNIST type: 1 - train set (60000), 2 - test set (10000)\n");
+        LOG("Please check MNIST type: 1 - train set (60000), 2 - test set (10000)\n");
         return;
     }
     readData(label, image, X, Y);
-    fprintf(stdout, "done\n");
+    LOG("done\n");
 }
 
 }    // namespace cccc

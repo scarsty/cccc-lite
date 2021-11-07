@@ -1,5 +1,6 @@
 #include "Cifar10Reader.h"
 #include "File.h"
+#include "Log.h"
 
 namespace cccc
 {
@@ -64,26 +65,26 @@ void Cifar10Reader::load(Matrix& X, Matrix& Y, std::string path /*= "cifa10"*/, 
         X.resize(32, 32, 3, 50000);
         Y.resize(10, 50000);
         Y.initData(0);
-        fprintf(stdout, "Loading Cifar10 train data... ");
+        LOG("Loading Cifar10 train data... ");
         readData(X, Y, path + "data_batch_1.bin", 0);
         readData(X, Y, path + "data_batch_2.bin", 10000);
         readData(X, Y, path + "data_batch_3.bin", 20000);
         readData(X, Y, path + "data_batch_4.bin", 30000);
         readData(X, Y, path + "data_batch_5.bin", 40000);
-        fprintf(stdout, "done\n");
+        LOG("done\n");
     }
     else if (data_type == 2)
     {
         X.resize(32, 32, 3, 10000);
         Y.resize(10, 10000);
         Y.initData(0);
-        fprintf(stdout, "Loading Cifar10 test data... ");
+        LOG("Loading Cifar10 test data... ");
         readData(X, Y, path + "test_batch.bin", 0);
-        fprintf(stdout, "done\n");
+        LOG("done\n");
     }
     else
     {
-        fprintf(stdout, "Please check Cifar10 type: 1 - train set (50000), 2 - test set (10000)\n");
+        LOG("Please check Cifar10 type: 1 - train set (50000), 2 - test set (10000)\n");
         return;
     }
     //X.message();
