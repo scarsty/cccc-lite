@@ -1,4 +1,4 @@
-project(libwill)
+project(libcccc)
 cmake_minimum_required(VERSION 2.6)
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
@@ -8,12 +8,12 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 option(CCCC_CPU "CPU support" ON)
  
 if(NOT CCCC_CPU)
-add_subdirectory(will-cuda)
+add_subdirectory(cccc-cuda)
 endif()
-add_subdirectory(will)
-add_subdirectory(will-windows)
-add_subdirectory(will-mnist)
+add_subdirectory(cccc)
+add_subdirectory(cccc-windows)
+add_subdirectory(cccc-mnist)
 
 if(WITH_PYTHON)
-add_subdirectory(will-python)
+add_subdirectory(cccc-python)
 endif()

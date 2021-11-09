@@ -20,9 +20,6 @@
     <Filter Include="brain">
       <UniqueIdentifier>{0b817fea-8808-42c4-8adb-6c357148dd45}</UniqueIdentifier>
     </Filter>
-    <Filter Include="common">
-      <UniqueIdentifier>{e12d9f9d-dbb5-4ea1-a636-3ce3e6908db5}</UniqueIdentifier>
-    </Filter>
     <Filter Include="cuda">
       <UniqueIdentifier>{81cb7be8-6daa-48f2-99dd-17f39bfde5bc}</UniqueIdentifier>
     </Filter>
@@ -49,6 +46,9 @@
     </Filter>
     <Filter Include="solver">
       <UniqueIdentifier>{5fef8200-bbaa-48fe-9413-48c583ea301f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="nb">
+      <UniqueIdentifier>{e12d9f9d-dbb5-4ea1-a636-3ce3e6908db5}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
@@ -85,11 +85,14 @@
     <ClCompile Include="cublas_real.cpp">
       <Filter>math</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\common\convert.cpp">
-      <Filter>common</Filter>
+    <ClCompile Include="..\..\nb\convert.cpp">
+      <Filter>nb</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\common\File.cpp">
-      <Filter>common</Filter>
+    <ClCompile Include="..\..\nb\File.cpp">
+      <Filter>nb</Filter>
+    </ClCompile>
+    <ClCompile Include="NetLayer.cpp">
+      <Filter>net</Filter>
     </ClCompile>
     <ClCompile Include="Net.cpp">
       <Filter>net</Filter>
@@ -97,11 +100,14 @@
     <ClCompile Include="NetCifa.cpp">
       <Filter>net</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\common\Cifa.cpp">
-      <Filter>common</Filter>
+    <ClCompile Include="..\..\nb\Cifa.cpp">
+      <Filter>nb</Filter>
     </ClCompile>
     <ClCompile Include="CudaControl.cpp">
       <Filter>cuda</Filter>
+    </ClCompile>
+    <ClCompile Include="Layer.cpp">
+      <Filter>layer</Filter>
     </ClCompile>
     <ClCompile Include="MatrixOp.cpp">
       <Filter>matrix</Filter>
@@ -171,29 +177,32 @@
     <ClInclude Include="cuda_half_hack.h">
       <Filter>cuda</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\common\ConsoleControl.h">
-      <Filter>common</Filter>
+    <ClInclude Include="..\..\nb\ConsoleControl.h">
+      <Filter>nb</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\common\convert.h">
-      <Filter>common</Filter>
+    <ClInclude Include="..\..\nb\convert.h">
+      <Filter>nb</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\common\DynamicLibrary.h">
-      <Filter>common</Filter>
+    <ClInclude Include="..\..\nb\DynamicLibrary.h">
+      <Filter>nb</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\common\File.h">
-      <Filter>common</Filter>
+    <ClInclude Include="..\..\nb\File.h">
+      <Filter>nb</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\common\INIReader.h">
-      <Filter>common</Filter>
+    <ClInclude Include="..\..\nb\INIReader.h">
+      <Filter>nb</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\common\Random.h">
-      <Filter>common</Filter>
+    <ClInclude Include="..\..\nb\Random.h">
+      <Filter>nb</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\common\Timer.h">
-      <Filter>common</Filter>
+    <ClInclude Include="..\..\nb\Timer.h">
+      <Filter>nb</Filter>
     </ClInclude>
     <ClInclude Include="dll_export.h">
       <Filter>base</Filter>
+    </ClInclude>
+    <ClInclude Include="Netlayer.h">
+      <Filter>net</Filter>
     </ClInclude>
     <ClInclude Include="Net.h">
       <Filter>net</Filter>
@@ -201,11 +210,14 @@
     <ClInclude Include="NetCifa.h">
       <Filter>net</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\common\Cifa.h">
-      <Filter>common</Filter>
+    <ClInclude Include="..\..\nb\Cifa.h">
+      <Filter>nb</Filter>
     </ClInclude>
     <ClInclude Include="CudaControl.h">
       <Filter>cuda</Filter>
+    </ClInclude>
+    <ClInclude Include="Layer.h">
+      <Filter>layer</Filter>
     </ClInclude>
     <ClInclude Include="MatrixOp.h">
       <Filter>matrix</Filter>
@@ -219,8 +231,8 @@
     <ClInclude Include="cuda_lib.h">
       <Filter>cuda</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\common\Format1.h">
-      <Filter>common</Filter>
+    <ClInclude Include="..\..\nb\Format1.h">
+      <Filter>nb</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

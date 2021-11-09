@@ -11,7 +11,7 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="will_extension.h">
+    <ClInclude Include="cccc_extension.h">
       <Filter>headers</Filter>
     </ClInclude>
     <ClInclude Include="DataPreparerMnist.h">
