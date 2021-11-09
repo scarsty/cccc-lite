@@ -10,22 +10,37 @@
       <Platform>x64</Platform>
     </ProjectConfiguration>
   </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="Cifar10Reader.cpp" />
+    <ClCompile Include="DataPreparerMnist.cpp" />
+    <ClCompile Include="MnistReader.cpp" />
+    <ClCompile Include="extension.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Cifar10Reader.h" />
+    <ClInclude Include="DataPreparerMnist.h" />
+    <ClInclude Include="MnistReader.h" />
+    <ClInclude Include="cccc_extension.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <Text Include="CMakeLists.txt" />
+  </ItemGroup>
   <PropertyGroup Label="Globals">
-    <ProjectGuid>{4D42F1DC-AFF8-4F03-AF3A-8B2528D38D0F}</ProjectGuid>
+    <ProjectGuid>{A5C5A5AE-E816-4189-9518-23190FDAC9AE}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
     <RootNamespace>neural</RootNamespace>
-    <ProjectName>will-windows</ProjectName>
+    <ProjectName>cccc-mnist</ProjectName>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
-    <ConfigurationType>Application</ConfigurationType>
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
     <PlatformToolset>v143</PlatformToolset>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
-    <ConfigurationType>Application</ConfigurationType>
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
     <PlatformToolset>v143</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
@@ -56,17 +71,17 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <PreprocessorDefinitions>_DEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>../include;include/cuda;../../common;../will;../will-cuda;$(CUDA_PATH)/include;$(USR_LOCAL)\include;$(VCPKG_LIB_PATH)\x64-windows\include</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>../include;../include/cuda;../../nb;../cccc;../cccc-cuda;$(CUDA_PATH)/include;$(USR_LOCAL)\include;$(VCPKG_LIB_PATH)\x64-windows\include</AdditionalIncludeDirectories>
       <PreprocessToFile>false</PreprocessToFile>
-      <OpenMPSupport>false</OpenMPSupport>
+      <OpenMPSupport>true</OpenMPSupport>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <AdditionalOptions>/source-charset:utf-8 %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>../lib/x64;$(SolutionDir)$(Platform)\$(Configuration)\</AdditionalLibraryDirectories>
-      <AdditionalDependencies>will.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>../lib/x64;$(OutDir)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>cccc.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <ForceSymbolReferences>%(ForceSymbolReferences)</ForceSymbolReferences>
     </Link>
     <PostBuildEvent>
@@ -82,8 +97,8 @@
       <Optimization>MaxSpeed</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
-      <PreprocessorDefinitions>NDEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>../include;../include/cuda;../../common;../will;../will-cuda;$(CUDA_PATH)/include;$(USR_LOCAL)\include;$(VCPKG_LIB_PATH)\x64-windows\include</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>NNO_CUDA;NDEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>../include;../include/cuda;../../nb;../cccc;../cccc-cuda;$(CUDA_PATH)/include;$(USR_LOCAL)\include;$(VCPKG_LIB_PATH)\x64-windows\include</AdditionalIncludeDirectories>
       <EnableParallelCodeGeneration>true</EnableParallelCodeGeneration>
       <OpenMPSupport>true</OpenMPSupport>
       <PreprocessToFile>false</PreprocessToFile>
@@ -97,28 +112,17 @@
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>../lib/x64;$(SolutionDir)$(Platform)\$(Configuration)\</AdditionalLibraryDirectories>
-      <AdditionalDependencies>will.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>lib/x64;$(OutDir)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>cccc.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <ForceSymbolReferences>%(ForceSymbolReferences)</ForceSymbolReferences>
       <DelayLoadDLLs>
       </DelayLoadDLLs>
-      <Profile>true</Profile>
     </Link>
     <PostBuildEvent>
       <Command>
       </Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
-  <ItemGroup>
-    <ClCompile Include="Application.cpp" />
-    <ClCompile Include="windows.cpp" />
-  </ItemGroup>
-  <ItemGroup>
-    <ClInclude Include="Application.h" />
-  </ItemGroup>
-  <ItemGroup>
-    <Text Include="CMakeLists.txt" />
-  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>

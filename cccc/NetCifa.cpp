@@ -125,7 +125,7 @@ int NetCifa::runScript(const std::string& script)
 
     auto lines = convert::splitString(convert::replaceAllSubString(script, "\r", ""), "\n");
     int i = 1;
-    LOG::setLevel(option_->getInt("", "output_net", 1));
+    LOG::setLevel(option_->getInt("train", "output_net", 1));
     for (auto& l : lines)
     {
         LOG("{:3}\t{}\n", i++, l);

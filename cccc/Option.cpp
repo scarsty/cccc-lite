@@ -4,8 +4,6 @@
 namespace cccc
 {
 
-const char default_section_[] = "will";
-
 Option::Option()
 {
     initEnums();

@@ -32,7 +32,7 @@ int main(int argc, char* argv[])
     }
     else if (cmd.exist("version"))
     {
-        cccc::LOG("LIBWILL (A Deep Neural Net library) command line interface\n");
+        cccc::LOG("CCCC (A Deep Neural Net library) command line interface\n");
         cccc::LOG("Float precision is %d (", cccc::Application::getFloatPresicion() * 8);
         switch (cccc::Application::getFloatPresicion())
         {

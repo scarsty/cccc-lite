@@ -14,8 +14,7 @@ namespace cccc
 //注意实数只获取双精度数，如果是单精度模式会包含隐式转换
 //获取整数的时候，先获取双精度数并强制转换
 
-extern const char default_section_[];
-using INI_t = INIReader<CompareDefaultValue<default_section_>, CompareNoUnderline>;
+using INI_t = INIReader<CompareCaseInsensitivity, CompareNoUnderline>;
 
 class Option : public INI_t
 {
@@ -95,7 +94,7 @@ public:
 public:
     //先读公共块，再读指定块
 #define GET_VALUE2(type, name) \
-    type name##2(const std::string& s, const std::string& k, type v) { return name(s, k, name("", k, v)); }
+    type name##2(const std::string& s, const std::string& k, type v) { return name(s, k, name("train", k, v)); }
 
     GET_VALUE2(int, getInt)
     GET_VALUE2(real, getReal)
@@ -107,6 +106,6 @@ public:
 #undef GET_VALUE2
 };
 
-//#define OPTION_GET_VALUE_INT(op, v, default_v) v = op->getInt("", #v, default_v)
+//#define OPTION_GET_VALUE_INT(op, v, default_v) v = op->getInt("train", #v, default_v)
 
 }    // namespace cccc

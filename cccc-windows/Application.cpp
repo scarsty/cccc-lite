@@ -36,7 +36,7 @@ void Application::run()
         }
         brain.getOption()->loadString(ini_str);
     }
-    auto load_filenames = convert::splitString(brain.getOption()->getString("", "load_ini"), ",");
+    auto load_filenames = convert::splitString(brain.getOption()->getString("train", "load_ini"), ",");
     for (auto filename : load_filenames)
     {
         if (filename != "")

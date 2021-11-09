@@ -1,7 +1,7 @@
 #include "Net.h"
 #include "ConsoleControl.h"
 #include "File.h"
-//#include "Layer.h"
+#include "Layer.h"
 #include "Timer.h"
 #include "VectorMath.h"
 #include <algorithm>
@@ -42,7 +42,7 @@ int Net::init()
         //LossWeight_->printAsMatrix();
     }
 
-    batches_for_learn_ = option_->getInt("", "batches_for_learn", 1);
+    batches_for_learn_ = option_->getInt("train", "batches_for_learn", 1);
 
     //计算总占用空间
     //std::map<void*, int64_t> map1;
@@ -136,9 +136,9 @@ int Net::saveWeight(const std::string& filename)
     }
 
     std::string suffix;
-    if (!option_->getString("", "save_sign").empty())
+    if (!option_->getString("train", "save_sign").empty())
     {
-        suffix = option_->dealString(option_->getString("", "save_sign")) + " " + Timer::getNowAsString();
+        suffix = option_->dealString(option_->getString("train", "save_sign")) + " " + Timer::getNowAsString();
         buffer += "save_sign\n" + suffix + "\n";
     }
 

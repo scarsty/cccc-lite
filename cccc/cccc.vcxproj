@@ -57,7 +57,7 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <PreprocessorDefinitions>_DEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>.;./layer;../include;../include/cuda;../will-cuda;$(CUDA_PATH)/include;$(USR_LOCAL)\include;../../common;$(VCPKG_LIB_PATH)\x64-windows\include</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>.;./layer;../include;../include/cuda;../cccc-cuda;$(CUDA_PATH)/include;$(USR_LOCAL)\include;../../nb;$(VCPKG_LIB_PATH)\x64-windows\include</AdditionalIncludeDirectories>
       <PreprocessToFile>false</PreprocessToFile>
       <OpenMPSupport>false</OpenMPSupport>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
@@ -71,7 +71,7 @@
       <ForceSymbolReferences>%(ForceSymbolReferences)</ForceSymbolReferences>
     </Link>
     <Lib>
-      <AdditionalDependencies>will-cuda.lib;openblas.lib;nvml.lib;cudart_static.lib;cublas.lib;cudnn_adv_infer.lib;cudnn_adv_train.lib;cudnn_cnn_infer.lib;cudnn_cnn_train.lib;cudnn_ops_infer.lib;cudnn_ops_train.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>cccc-cuda.lib;openblas.lib;nvml.lib;cudart_static.lib;cublas.lib;cudnn_adv_infer.lib;cudnn_adv_train.lib;cudnn_cnn_infer.lib;cudnn_cnn_train.lib;cudnn_ops_infer.lib;cudnn_ops_train.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Lib>
     <Lib>
       <AdditionalLibraryDirectories>$(CUDA_PATH)/lib/x64;../lib/x64;$(SolutionDir)$(Platform)\$(Configuration)\</AdditionalLibraryDirectories>
@@ -86,7 +86,7 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <PreprocessorDefinitions>NNO_CUDA;NDEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>.;./layer;../include;../include/cuda;../../common;../will-cuda;$(CUDA_PATH)/include;$(USR_LOCAL)\include;$(VCPKG_LIB_PATH)\x64-windows\include</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>.;./layer;../include;../include/cuda;../../nb;../cccc-cuda;$(CUDA_PATH)/include;$(USR_LOCAL)\include;$(VCPKG_LIB_PATH)\x64-windows\include</AdditionalIncludeDirectories>
       <EnableParallelCodeGeneration>true</EnableParallelCodeGeneration>
       <OpenMPSupport>true</OpenMPSupport>
       <PreprocessToFile>false</PreprocessToFile>
@@ -101,20 +101,20 @@
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalLibraryDirectories>./lib;$(SolutionDir)$(Platform)\$(Configuration)\</AdditionalLibraryDirectories>
-      <AdditionalDependencies>will-cuda.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>cccc-cuda.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <ForceSymbolReferences>%(ForceSymbolReferences)</ForceSymbolReferences>
       <ModuleDefinitionFile>
       </ModuleDefinitionFile>
     </Link>
     <Lib>
-      <AdditionalDependencies>will-cuda.lib;openblas.lib;nvml.lib;cudart_static.lib</AdditionalDependencies>
+      <AdditionalDependencies>cccc-cuda.lib;openblas.lib;nvml.lib;cudart_static.lib</AdditionalDependencies>
     </Lib>
     <Lib>
-      <AdditionalLibraryDirectories>$(CUDA_PATH)/lib/x64;../lib/x64;$(SolutionDir)$(Platform)\$(Configuration)\;$(VCPKG_LIB_PATH)/x64-windows/lib</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>$(CUDA_PATH)/lib/x64;../lib/x64;$(SolutionDir)$(Platform)\$(Configuration)\;$(VCPKG_LIB_PATH)\x64-windows\lib</AdditionalLibraryDirectories>
     </Lib>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="..\..\common\Cifa.cpp" />
+    <ClCompile Include="..\..\nb\Cifa.cpp" />
     <ClCompile Include="Activer.cpp" />
     <ClCompile Include="cublas_real.cpp" />
     <ClCompile Include="CudaControl.cpp" />
@@ -122,55 +122,59 @@
     <ClCompile Include="DataPreparerFactory.cpp" />
     <ClCompile Include="DataPreparerImage.cpp" />
     <ClCompile Include="DataPreparerTxt.cpp" />
-    <ClCompile Include="..\..\common\File.cpp" />
+    <ClCompile Include="..\..\nb\File.cpp" />
     <ClCompile Include="DataPreparer.cpp" />
+    <ClCompile Include="Layer.cpp" />
     <ClCompile Include="Matrix.cpp" />
     <ClCompile Include="MatrixData.cpp" />
     <ClCompile Include="MatrixEx.cpp" />
     <ClCompile Include="MatrixOp.cpp" />
     <ClCompile Include="Net.cpp" />
     <ClCompile Include="NetCifa.cpp" />
+    <ClCompile Include="NetLayer.cpp" />
     <ClCompile Include="Option.cpp" />
     <ClCompile Include="Brain.cpp" />
-    <ClCompile Include="..\..\common\convert.cpp" />
+    <ClCompile Include="..\..\nb\convert.cpp" />
     <ClCompile Include="Solver.cpp" />
     <ClCompile Include="AdditionalCost.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\..\common\Cifa.h" />
-    <ClInclude Include="..\..\common\Format1.h" />
+    <ClInclude Include="..\..\nb\Cifa.h" />
+    <ClInclude Include="..\..\nb\Format1.h" />
     <ClInclude Include="Activer.h" />
     <ClInclude Include="blas_types.h" />
     <ClInclude Include="cblas_real.h" />
-    <ClInclude Include="..\..\common\ConsoleControl.h" />
+    <ClInclude Include="..\..\nb\ConsoleControl.h" />
     <ClInclude Include="cublas_real.h" />
     <ClInclude Include="CudaControl.h" />
     <ClInclude Include="cuda_lib.h" />
     <ClInclude Include="DataPreparerFactory.h" />
     <ClInclude Include="DataPreparerImage.h" />
     <ClInclude Include="DataPreparerTxt.h" />
-    <ClInclude Include="..\..\common\DynamicLibrary.h" />
-    <ClInclude Include="..\..\common\File.h" />
+    <ClInclude Include="..\..\nb\DynamicLibrary.h" />
+    <ClInclude Include="..\..\nb\File.h" />
     <ClInclude Include="DataPreparer.h" />
+    <ClInclude Include="Layer.h" />
     <ClInclude Include="Log.h" />
     <ClInclude Include="cuda_half_hack.h" />
     <ClInclude Include="MatrixData.h" />
     <ClInclude Include="MatrixOp.h" />
     <ClInclude Include="Net.h" />
     <ClInclude Include="NetCifa.h" />
+    <ClInclude Include="Netlayer.h" />
     <ClInclude Include="dll_export.h" />
     <ClInclude Include="Matrix.h" />
     <ClInclude Include="MatrixEx.h" />
     <ClInclude Include="Neural.h" />
-    <ClInclude Include="..\..\common\INIReader.h" />
-    <ClInclude Include="..\..\common\convert.h" />
+    <ClInclude Include="..\..\nb\INIReader.h" />
+    <ClInclude Include="..\..\nb\convert.h" />
     <ClInclude Include="Solver.h" />
     <ClInclude Include="AdditionalCost.h" />
-    <ClInclude Include="..\..\common\Timer.h" />
+    <ClInclude Include="..\..\nb\Timer.h" />
     <ClInclude Include="VectorMath.h" />
     <ClInclude Include="Brain.h" />
     <ClInclude Include="Option.h" />
-    <ClInclude Include="..\..\common\Random.h" />
+    <ClInclude Include="..\..\nb\Random.h" />
     <ClInclude Include="types.h" />
   </ItemGroup>
   <ItemGroup>
