@@ -70,9 +70,9 @@ make
 
 本工程使用修改过的clang-format进行格式设置。
 
-### common库
+### mlcc库
 
-本工程依赖作者编写的一个公共的功能库，请从<https://github.com/scarsty/common>获取最新版本，并将其置于与本目录（cccc-lite）同级的路径下。
+本工程依赖作者编写的一个公共的功能库，请从<https://github.com/scarsty/mlcc>获取最新版本，并将其置于与本目录（cccc-lite）同级的路径下。
 
 ### logo
 
