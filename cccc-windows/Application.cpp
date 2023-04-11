@@ -1,6 +1,6 @@
 #include "Application.h"
 #include "Brain.h"
-#include "File.h"
+#include "filefunc.h"
 
 namespace cccc
 {
@@ -10,10 +10,10 @@ void Application::run()
     Brain brain;
 
     std::map<std::string, std::string> replace_pairs;
-    auto replace_strings = convert::splitString(replace_string_, ";");
+    auto replace_strings = strfunc::splitString(replace_string_, ";");
     for (auto& r : replace_strings)
     {
-        auto rs = convert::splitString(r, ":");
+        auto rs = strfunc::splitString(r, ":");
         if (rs.size() >= 1)
         {
             rs.resize(2);
@@ -21,22 +21,22 @@ void Application::run()
         }
     }
 
-    auto filenames = convert::splitString(ini_file_);
+    auto filenames = strfunc::splitString(ini_file_);
     for (auto filename : filenames)
     {
-        if (!File::fileExist(filename))
+        if (!filefunc::fileExist(filename))
         {
             LOG(stderr, "%s doesn't exist!\n", filename.c_str());
         }
-        auto ini_str = convert::readStringFromFile(filename);
+        auto ini_str = strfunc::readStringFromFile(filename);
         //Ìæ»»µôÒ»Ð©×Ö·û
         for (auto rp : replace_pairs)
         {
-            convert::replaceAllSubStringRef(ini_str, rp.first, rp.second);
+            strfunc::replaceAllSubStringRef(ini_str, rp.first, rp.second);
         }
         brain.getOption()->loadString(ini_str);
     }
-    auto load_filenames = convert::splitString(brain.getOption()->getString("train", "load_ini"), ",");
+    auto load_filenames = strfunc::splitString(brain.getOption()->getString("train", "load_ini"), ",");
     for (auto filename : load_filenames)
     {
         if (filename != "")
@@ -46,9 +46,9 @@ void Application::run()
     }
 
     //format the string into ini style by inserting '\n'
-    convert::replaceAllSubStringRef(add_option_string_, "[", "\n[");
-    convert::replaceAllSubStringRef(add_option_string_, "]", "]\n");
-    convert::replaceAllSubStringRef(add_option_string_, ";", "\n");
+    strfunc::replaceAllSubStringRef(add_option_string_, "[", "\n[");
+    strfunc::replaceAllSubStringRef(add_option_string_, "]", "]\n");
+    strfunc::replaceAllSubStringRef(add_option_string_, ";", "\n");
     brain.getOption()->loadString(add_option_string_);
 
     if (brain.init() != 0)

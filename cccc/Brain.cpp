@@ -1,10 +1,10 @@
 #include "Brain.h"
 #include "ConsoleControl.h"
-#include "File.h"
+#include "filefunc.h"
 #include "NetCifa.h"
 #include "NetLayer.h"
 #include "Random.h"
-#include "convert.h"
+#include "strfunc.h"
 #include <algorithm>
 
 namespace cccc
@@ -56,7 +56,7 @@ int Brain::loadIni(const std::string& ini)
     //貌似这个设计比较瞎
     if (ini != "")
     {
-        if (File::fileExist(ini))
+        if (filefunc::fileExist(ini))
         {
             option_.loadFile(ini);
         }
@@ -497,7 +497,7 @@ void Brain::trainOneNet(std::vector<std::unique_ptr<Net>>& nets, int net_id, Tra
         //主网络负责测试
         if (net_id == 0 && epoch_count % test_epoch == 0)
         {
-            std::string content = format1::format("Test net {}: ", net_id);
+            std::string content = fmt1::format("Test net {}: ", net_id);
             realc test_result;
             if (test_train_origin)
             {
@@ -536,13 +536,13 @@ void Brain::trainOneNet(std::vector<std::unique_ptr<Net>>& nets, int net_id, Tra
             if (epoch_count % save_epoch == 0 && !save_format.empty())
             {
                 std::string save_name = save_format;
-                convert::replaceAllSubStringRef(save_name, "{epoch}", std::to_string(epoch_count));
-                convert::replaceAllSubStringRef(save_name, "{date}", Timer::getNowAsString("%F"));
-                convert::replaceAllSubStringRef(save_name, "{time}", Timer::getNowAsString("%T"));
-                //convert::replaceAllSubStringRef(save_name, "{accurary}", std::to_string(test_accuracy_));
-                convert::replaceAllSubStringRef(save_name, "\n", "");
-                convert::replaceAllSubStringRef(save_name, " ", "_");
-                convert::replaceAllSubStringRef(save_name, ":", "_");
+                strfunc::replaceAllSubStringRef(save_name, "{epoch}", std::to_string(epoch_count));
+                strfunc::replaceAllSubStringRef(save_name, "{date}", Timer::getNowAsString("%F"));
+                strfunc::replaceAllSubStringRef(save_name, "{time}", Timer::getNowAsString("%T"));
+                //strfunc::replaceAllSubStringRef(save_name, "{accurary}", std::to_string(test_accuracy_));
+                strfunc::replaceAllSubStringRef(save_name, "\n", "");
+                strfunc::replaceAllSubStringRef(save_name, " ", "_");
+                strfunc::replaceAllSubStringRef(save_name, ":", "_");
                 net->saveWeight(save_name);
             }
         }

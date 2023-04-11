@@ -1,5 +1,5 @@
 #include "Cifar10Reader.h"
-#include "File.h"
+#include "filefunc.h"
 #include "Log.h"
 
 namespace cccc
@@ -12,7 +12,7 @@ Cifar10Reader::Cifar10Reader()
 static void readData(Matrix& X, Matrix& Y, const std::string& filename, int begin)
 {
     std::vector<uint8_t> arr;
-    File::readFileToVector(filename, arr);
+    filefunc::readFileToVector(filename, arr);
     int count = begin - 1;
     int k = 0;
     for (int i = 0; i < arr.size(); i++)

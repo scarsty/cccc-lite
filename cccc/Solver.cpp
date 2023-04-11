@@ -101,10 +101,10 @@ void Solver::init(Option* op, std::string section, Matrix& W)
     lr_bias_scale_ = op->getReal2(section, "lr_bias_scale", 2);
     lr_step_ = (std::max)(1, op->getInt2(section, "lr_step", 1));
 
-    auto lr_inter_set = convert::splitString(op->getString2(section, "lr_inter_set", ""), ",");
+    auto lr_inter_set = strfunc::splitString(op->getString2(section, "lr_inter_set", ""), ",");
     for (auto& set_str : lr_inter_set)
     {
-        auto sets = convert::splitString(set_str, ": ");
+        auto sets = strfunc::splitString(set_str, ": ");
         if (sets.size() == 2)
         {
             lr_inter_epoch_.push_back(atoi(sets[0].c_str()));

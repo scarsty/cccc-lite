@@ -119,11 +119,11 @@ int NetCifa::runScript(const std::string& script)
     {
         for (auto key : option_->getAllKeys(section))
         {
-            cifa_.register_parameter(convert::toLowerCase(section) + "::" + convert::toLowerCase(key), cifa::Object(option_->getReal(section, key), option_->getString(section, key)));
+            cifa_.register_parameter(strfunc::toLowerCase(section) + "::" + strfunc::toLowerCase(key), cifa::Object(option_->getReal(section, key), option_->getString(section, key)));
         }
     }
 
-    auto lines = convert::splitString(convert::replaceAllSubString(script, "\r", ""), "\n");
+    auto lines = strfunc::splitString(strfunc::replaceAllSubString(script, "\r", ""), "\n");
     int i = 1;
     LOG::setLevel(option_->getInt("train", "output_net", 1));
     for (auto& l : lines)

@@ -17,7 +17,8 @@ CCCC的设计同时支持动态图和静态图，目前只有静态图形式，�
 
 - 任何支持C++17以上的Visual Studio和可以相互配合的CUDA均可以使用，建议使用较新的版本。核心库默认使用v140编译，可以手动升级整个工程或者安装v140编译工具。
 - 下载cuDNN的开发包，将h文件，lib文件和dll文件复制到cuda工具箱目录中的include，lib/x64和bin目录。或者复制到自己指定的某个目录也可以，但是可能需要自己设置环境变量。
-- 检查环境变量CUDA_PATH的值，通常应该是“C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v10.0”（后面的数字为版本号，有可能不同）。
+- 检查环境变量CUDA_PATH的值，通常应该是“C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\vxx.x”（后面的数字为版本号，有可能不同）。
+- 在cccc-cuda.vcproj文件中，有两处涉及cuda版本号，类似“CUDA xx.x.targets/props”，需按照自己的实际情况手动修改。
 - 需要安装线性代数库OpenBLAS（推荐使用vcpkg或者msys2），将其库文件置于链接器可以找到的位置。
 - 需安装libfmt，推荐使用vcpkg安装。
 - 需要nvml库和nvml.dll，请使用显卡驱动中自带的，通常dll文件位于“C:\Program Files\NVIDIA Corporation\NVSMI”或者“C:\Windows\system32”，该目录有可能不在环境变量中，请自行设置或将dll文件复制出来。

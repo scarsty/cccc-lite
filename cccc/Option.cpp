@@ -16,14 +16,14 @@ Option::Option(const std::string& filename) : Option()
 
 void Option::setKeys(const std::string& section, const std::string& pairs)
 {
-    setKeys(section, convert::splitString(pairs, ";"));
+    setKeys(section, strfunc::splitString(pairs, ";"));
 }
 
 void Option::setKeys(const std::string& section, const std::vector<std::string>& pairs)
 {
     for (auto pair : pairs)
     {
-        convert::replaceAllSubStringRef(pair, " ", "");
+        strfunc::replaceAllSubStringRef(pair, " ", "");
         auto p = pair.find("=");
         if (p != std::string::npos)
         {
@@ -58,11 +58,11 @@ std::string Option::dealString(std::string str, int to_filename /*= 0*/)
             std::string sub = getString(section, key);
             if (to_filename)
             {
-                convert::replaceAllSubStringRef(sub, ":", "");
-                convert::replaceAllSubStringRef(sub, "\\", "");
-                convert::replaceAllSubStringRef(sub, "/", "");
+                strfunc::replaceAllSubStringRef(sub, ":", "");
+                strfunc::replaceAllSubStringRef(sub, "\\", "");
+                strfunc::replaceAllSubStringRef(sub, "/", "");
             }
-            convert::replaceAllSubStringRef(str, str.substr(p0, p - p0), sub);
+            strfunc::replaceAllSubStringRef(str, str.substr(p0, p - p0), sub);
             p = p0 + sub.size();
         }
     }

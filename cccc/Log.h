@@ -1,5 +1,5 @@
 #pragma once
-#include "Format1.h"
+#include "fmt1.h"
 
 namespace cccc
 {
@@ -12,7 +12,7 @@ public:
     {
         if (current_level() >= 1)
         {
-            format1::print(args...);
+            fmt1::print(args...);
         }
     }
     template <typename... Args>
@@ -20,7 +20,7 @@ public:
     {
         if (current_level() >= level)
         {
-            format1::print(args...);
+            fmt1::print(args...);
         }
     }
 

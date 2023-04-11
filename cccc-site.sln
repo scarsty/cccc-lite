@@ -21,11 +21,6 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "cccc-mnist", "cccc-mnist\cc
 		{271C3640-1916-4736-B07F-DABF0F3914DF} = {271C3640-1916-4736-B07F-DABF0F3914DF}
 	EndProjectSection
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "cccc-test", "cccc-test\cccc-test.vcxproj", "{4D238B6C-5E31-478F-A698-EEAE3ABD4DEB}"
-	ProjectSection(ProjectDependencies) = postProject
-		{271C3640-1916-4736-B07F-DABF0F3914DF} = {271C3640-1916-4736-B07F-DABF0F3914DF}
-	EndProjectSection
-EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "addition", "addition", "{594C730B-AC78-45E6-A7E5-BC30DEC1CFB7}"
 EndProject
 Global
@@ -50,17 +45,12 @@ Global
 		{A5C5A5AE-E816-4189-9518-23190FDAC9AE}.Debug|x64.Build.0 = Debug|x64
 		{A5C5A5AE-E816-4189-9518-23190FDAC9AE}.Release|x64.ActiveCfg = Release|x64
 		{A5C5A5AE-E816-4189-9518-23190FDAC9AE}.Release|x64.Build.0 = Release|x64
-		{4D238B6C-5E31-478F-A698-EEAE3ABD4DEB}.Debug|x64.ActiveCfg = Debug|x64
-		{4D238B6C-5E31-478F-A698-EEAE3ABD4DEB}.Debug|x64.Build.0 = Debug|x64
-		{4D238B6C-5E31-478F-A698-EEAE3ABD4DEB}.Release|x64.ActiveCfg = Release|x64
-		{4D238B6C-5E31-478F-A698-EEAE3ABD4DEB}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{A5C5A5AE-E816-4189-9518-23190FDAC9AE} = {594C730B-AC78-45E6-A7E5-BC30DEC1CFB7}
-		{4D238B6C-5E31-478F-A698-EEAE3ABD4DEB} = {594C730B-AC78-45E6-A7E5-BC30DEC1CFB7}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {9BF9770D-70D3-4C2A-B800-4BA6FD0EF3B6}

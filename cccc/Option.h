@@ -1,7 +1,7 @@
 #pragma once
 #include "INIReader.h"
 #include "Log.h"
-#include "convert.h"
+#include "strfunc.h"
 #include "types.h"
 #include <functional>
 #include <string>
@@ -14,9 +14,7 @@ namespace cccc
 //注意实数只获取双精度数，如果是单精度模式会包含隐式转换
 //获取整数的时候，先获取双精度数并强制转换
 
-using INI_t = INIReader<CompareCaseInsensitivity, CompareNoUnderline>;
-
-class Option : public INI_t
+class Option : public INIReaderNoUnderline
 {
 public:
     Option();
@@ -28,7 +26,7 @@ public:
     {
         std::vector<T> v;
         auto str = getString(section, key);
-        convert::findNumbers(str, v);
+        strfunc::findNumbers(str, v);
         return v;
     }
 
@@ -39,6 +37,29 @@ public:
 
     //以下为枚举值的处理
 private:
+    struct CompareNoUnderline
+    {
+        bool operator()(const std::string& l, const std::string& r) const
+        {
+            auto l1 = l;
+            auto r1 = r;
+            auto replaceAllString = [](std::string& s, const std::string& oldstring, const std::string& newstring)
+            {
+                int pos = s.find(oldstring);
+                while (pos >= 0)
+                {
+                    s.erase(pos, oldstring.length());
+                    s.insert(pos, newstring);
+                    pos = s.find(oldstring, pos + newstring.length());
+                }
+            };
+            replaceAllString(l1, "_", "");
+            replaceAllString(r1, "_", "");
+            std::transform(l1.begin(), l1.end(), l1.begin(), ::tolower);
+            std::transform(r1.begin(), r1.end(), r1.begin(), ::tolower);
+            return l1 < r1;
+        }
+    };
     std::map<std::string, std::map<std::string, int, CompareNoUnderline>> enum_map_;
     std::map<std::string, std::map<int, std::string>> enum_map_reverse_;
     //注册枚举值
@@ -94,7 +115,10 @@ public:
 public:
     //先读公共块，再读指定块
 #define GET_VALUE2(type, name) \
-    type name##2(const std::string& s, const std::string& k, type v) { return name(s, k, name("train", k, v)); }
+    type name##2(const std::string& s, const std::string& k, type v) \
+    { \
+        return name(s, k, name("train", k, v)); \
+    }
 
     GET_VALUE2(int, getInt)
     GET_VALUE2(real, getReal)
