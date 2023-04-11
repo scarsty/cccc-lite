@@ -122,7 +122,7 @@ protected:
 #define OPTION_GET_NUMVECTOR(a, v, n, d) \
     do { \
         a.clear(); \
-        convert::findNumbers(option_->getString(section_, #a, v), a); \
+        strfunc::findNumbers(option_->getString(section_, #a, v), a); \
         a.resize(n, d); \
         LOG("  {} = {}\n", NAME_STR(a), a); \
     } while (0)

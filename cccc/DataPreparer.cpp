@@ -1,5 +1,5 @@
 #include "DataPreparer.h"
-#include "File.h"
+#include "filefunc.h"
 #include <ctime>
 
 namespace cccc
@@ -239,13 +239,13 @@ void DataPreparer::readTxt(const std::string& filename, Matrix& X, Matrix& Y)
 
     int mark = 3;
     //数据格式：前两个是输入变量数和输出变量数，之后依次是每组的输入和输出，是否有回车不重要
-    std::string str = convert::readStringFromFile(filename);
+    std::string str = strfunc::readStringFromFile(filename);
     if (str == "")
     {
         return;
     }
     std::vector<real> v;
-    int n = convert::findNumbers(str, v);
+    int n = strfunc::findNumbers(str, v);
     if (n <= 0)
     {
         return;
@@ -284,11 +284,11 @@ void DataPreparer::readBin(const std::string& file_bin_x, const std::string& fil
 
 void DataPreparer::readOneBin(const std::string& file_bin, Matrix& data)
 {
-    if (!File::fileExist(file_bin))
+    if (!filefunc::fileExist(file_bin))
     {
         return;
     }
-    auto data_bin = File::readFile(file_bin.c_str());
+    auto data_bin = filefunc::readFile(file_bin.c_str());
     //二进制数据文件定义：宽，高，通道，图片数，数据
     int w = *(int*)(data_bin.data());
     int h = *(int*)(data_bin.data() + 4);
@@ -313,7 +313,7 @@ void DataPreparer::writeBin(const std::string& file_bin, const Matrix& data)
     *(int*)(data_bin.data() + 8) = data.getChannel();
     *(int*)(data_bin.data() + 12) = data.getNumber();
     memcpy(data_bin.data() + 16, data.getDataPointer(), data.getDataSizeInByte());
-    File::writeFile(file_bin, data_bin.data(), data_bin.size());
+    filefunc::writeFile(file_bin, data_bin.data(), data_bin.size());
 }
 
 //若读取数据失败，依据网络的输入和输出创建一个，避免后续的错误，无太大的意义

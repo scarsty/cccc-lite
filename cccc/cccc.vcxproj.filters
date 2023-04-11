@@ -47,7 +47,7 @@
     <Filter Include="solver">
       <UniqueIdentifier>{5fef8200-bbaa-48fe-9413-48c583ea301f}</UniqueIdentifier>
     </Filter>
-    <Filter Include="nb">
+    <Filter Include="mlcc">
       <UniqueIdentifier>{e12d9f9d-dbb5-4ea1-a636-3ce3e6908db5}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
@@ -85,12 +85,6 @@
     <ClCompile Include="cublas_real.cpp">
       <Filter>math</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\nb\convert.cpp">
-      <Filter>nb</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\nb\File.cpp">
-      <Filter>nb</Filter>
-    </ClCompile>
     <ClCompile Include="NetLayer.cpp">
       <Filter>net</Filter>
     </ClCompile>
@@ -99,9 +93,6 @@
     </ClCompile>
     <ClCompile Include="NetCifa.cpp">
       <Filter>net</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\nb\Cifa.cpp">
-      <Filter>nb</Filter>
     </ClCompile>
     <ClCompile Include="CudaControl.cpp">
       <Filter>cuda</Filter>
@@ -120,6 +111,15 @@
     </ClCompile>
     <ClCompile Include="cuda_lib.cpp">
       <Filter>cuda</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\mlcc\Cifa.cpp">
+      <Filter>mlcc</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\mlcc\filefunc.cpp">
+      <Filter>mlcc</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\mlcc\strfunc.cpp">
+      <Filter>mlcc</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -177,27 +177,6 @@
     <ClInclude Include="cuda_half_hack.h">
       <Filter>cuda</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\nb\ConsoleControl.h">
-      <Filter>nb</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\nb\convert.h">
-      <Filter>nb</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\nb\DynamicLibrary.h">
-      <Filter>nb</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\nb\File.h">
-      <Filter>nb</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\nb\INIReader.h">
-      <Filter>nb</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\nb\Random.h">
-      <Filter>nb</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\nb\Timer.h">
-      <Filter>nb</Filter>
-    </ClInclude>
     <ClInclude Include="dll_export.h">
       <Filter>base</Filter>
     </ClInclude>
@@ -209,9 +188,6 @@
     </ClInclude>
     <ClInclude Include="NetCifa.h">
       <Filter>net</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\nb\Cifa.h">
-      <Filter>nb</Filter>
     </ClInclude>
     <ClInclude Include="CudaControl.h">
       <Filter>cuda</Filter>
@@ -230,9 +206,6 @@
     </ClInclude>
     <ClInclude Include="cuda_lib.h">
       <Filter>cuda</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\nb\Format1.h">
-      <Filter>nb</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

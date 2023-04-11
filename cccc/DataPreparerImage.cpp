@@ -1,7 +1,7 @@
 #include "DataPreparerImage.h"
-#include "File.h"
+#include "filefunc.h"
 #include "Timer.h"
-#include "convert.h"
+#include "strfunc.h"
 #include <atomic>
 #include <ctime>
 #include <iostream>

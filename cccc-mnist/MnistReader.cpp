@@ -1,6 +1,6 @@
 #include "MnistReader.h"
-#include "File.h"
 #include "Log.h"
+#include "filefunc.h"
 
 namespace cccc
 {
@@ -11,10 +11,10 @@ MnistReader::MnistReader()
 
 void MnistReader::getDataSize(const std::string& file_image, int* w, int* h, int* n)
 {
-    auto content = File::readFile(file_image, 16);
-    File::reverse(content.data() + 4, 4);
-    File::reverse(content.data() + 8, 4);
-    File::reverse(content.data() + 12, 4);
+    auto content = filefunc::readFile(file_image, 16);
+    reverse(content.data() + 4, 4);
+    reverse(content.data() + 8, 4);
+    reverse(content.data() + 12, 4);
     if (n)
     {
         *n = *(int*)(content.data() + 4);
@@ -32,8 +32,8 @@ void MnistReader::getDataSize(const std::string& file_image, int* w, int* h, int
 void MnistReader::readLabelFile(const std::string& filename, real* y_data)
 {
     int s = 10;
-    auto content = File::readFile(filename);
-    File::reverse(content.data() + 4, 4);
+    auto content = filefunc::readFile(filename);
+    reverse(content.data() + 4, 4);
     int n = *(int*)(content.data() + 4);
     memset(y_data, 0, sizeof(real) * n * s);
     for (int i = 0; i < n; i++)
@@ -45,10 +45,10 @@ void MnistReader::readLabelFile(const std::string& filename, real* y_data)
 
 void MnistReader::readImageFile(const std::string& filename, real* x_data)
 {
-    auto content = File::readFile(filename);
-    File::reverse(content.data() + 4, 4);
-    File::reverse(content.data() + 8, 4);
-    File::reverse(content.data() + 12, 4);
+    auto content = filefunc::readFile(filename);
+    reverse(content.data() + 4, 4);
+    reverse(content.data() + 8, 4);
+    reverse(content.data() + 12, 4);
     int n = *(int*)(content.data() + 4);
     int w = *(int*)(content.data() + 8);
     int h = *(int*)(content.data() + 12);
@@ -72,6 +72,17 @@ void MnistReader::readData(const std::string& file_label, const std::string& fil
     readLabelFile(file_label, Y.getDataPointer());
 }
 
+void MnistReader::reverse(char* c, int n)
+{
+    for (int i = 0; i < n / 2; i++)
+    {
+        auto& a = *(c + i);
+        auto& b = *(c + n - 1 - i);
+        auto t = b;
+        b = a;
+        a = t;
+    }
+}
 void MnistReader::load(Matrix& X, Matrix& Y, std::string path /*= "mnist"*/, int data_type /*= 1*/)
 {
     if (path.back() != '/' || path.back() != '\\')

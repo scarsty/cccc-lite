@@ -1,5 +1,5 @@
 #include "DataPreparerTxt.h"
-#include "File.h"
+#include "filefunc.h"
 #include "VectorMath.h"
 
 namespace cccc
@@ -18,7 +18,7 @@ void DataPreparerTxt::init2()
     input_ = VectorMath::multiply(dim0_, dim0_.size() - 1);
     output_ = VectorMath::multiply(dim1_, dim1_.size() - 1);
     std::string filename = option_->getString(section_, "file", "file.txt");
-    content_ = convert::readStringFromFile(filename);
+    content_ = strfunc::readStringFromFile(filename);
 }
 
 void DataPreparerTxt::fillData(Matrix& X, Matrix& Y)

@@ -1,6 +1,6 @@
 #include "Net.h"
 #include "ConsoleControl.h"
-#include "File.h"
+#include "filefunc.h"
 #include "Layer.h"
 #include "Timer.h"
 #include "VectorMath.h"
@@ -121,7 +121,7 @@ int Net::saveWeight(const std::string& filename)
         return -1;
     }
     LOG("Save net to {}... ", filename);
-    File::makePath(File::getFilePath(filename));
+    filefunc::makePath(filefunc::getParentPath(filename));
 
     int sum = 0;
     for (auto& m : weights_)
@@ -142,7 +142,7 @@ int Net::saveWeight(const std::string& filename)
         buffer += "save_sign\n" + suffix + "\n";
     }
 
-    if (convert::writeStringToFile(buffer, filename) > 0)
+    if (strfunc::writeStringToFile(buffer, filename) > 0)
     {
         LOG("done\n");
         LOG("Save sign: {}\n", suffix);
@@ -181,9 +181,9 @@ int Net::loadWeight(const std::string& str, int load_mode)
     }
 
     std::string buffer;
-    if (File::fileExist(str))
+    if (filefunc::fileExist(str))
     {
-        buffer = convert::readStringFromFile(str);
+        buffer = strfunc::readStringFromFile(str);
     }
     else if (load_mode)
     {

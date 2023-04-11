@@ -1,6 +1,6 @@
 #include "NetLayer.h"
 #include "ConsoleControl.h"
-#include "File.h"
+#include "filefunc.h"
 #include "Timer.h"
 #include "VectorMath.h"
 #include <algorithm>
@@ -46,10 +46,10 @@ int NetLayer::createAndConnectLayers()
         for (auto& name_layer : all_layer_map_)
         {
             auto& l = name_layer.second;
-            auto nexts = convert::splitString(option_->getString(l->getName(), "next"), ",");
+            auto nexts = strfunc::splitString(option_->getString(l->getName(), "next"), ",");
             for (auto& next : nexts)
             {
-                convert::replaceAllSubStringRef(next, " ", "");
+                strfunc::replaceAllSubStringRef(next, " ", "");
                 if (next != "" && all_layer_map_.count(next) > 0)
                 {
                     l->addNextLayers(all_layer_map_[next].get());
@@ -108,7 +108,7 @@ int NetLayer::createAndConnectLayers()
     //先把层都创建起来
     for (auto& section : sections)
     {
-        if (convert::toLowerCase(section).find("layer") == 0)
+        if (strfunc::toLowerCase(section).find("layer") == 0)
         {
             LOG("Found layer {}\n", section);
             auto ct = option_->getEnum(section, "type", LAYER_CONNECTION_NONE);
@@ -197,7 +197,7 @@ int NetLayer::createAndConnectLayers()
 
     all_layer_map_.clear();
 
-    auto loss_weight_values = convert::findNumbers<real>(option_->getString(layer_out_name, "loss_weight"));
+    auto loss_weight_values = strfunc::findNumbers<real>(option_->getString(layer_out_name, "loss_weight"));
     if (loss_weight_values.size() > 0)
     {
         LOG("Loss weight {}: {}\n", loss_weight_values.size(), loss_weight_values);
