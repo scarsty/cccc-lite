@@ -16,6 +16,6 @@ if(GCC_VERSION VERSION_GREATER 10)
 endif()
 
 SET(LIBRARY_OUTPUT_PATH ${PROJECT_BINARY_DIR}/../lib)
-cuda_add_library(will-cuda SHARED cuda_functions.cu)
+cuda_add_library(cccc-cuda SHARED cuda_functions.cu)
 
-install(TARGETS will-cuda LIBRARY DESTINATION lib)
+install(TARGETS cccc-cuda LIBRARY DESTINATION lib)
