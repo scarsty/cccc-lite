@@ -11,6 +11,6 @@ include_directories(/usr/local/cuda/include /usr/local/cuda/include/crt ../../nb
 link_directories(/usr/local/cuda/lib64)
 
 add_executable(cccc-windows ${SRC_LIST})
-target_link_libraries(cccc-windows cccc)
+target_link_libraries(cccc-windows cccc cccc-cuda cudnn cudart cublas openblas)
 
 install(TARGETS cccc-windows RUNTIME DESTINATION bin)
