@@ -1,5 +1,6 @@
 #include "Solver.h"
 #include "MatrixEx.h"
+#include <math.h>
 
 namespace cccc
 {
