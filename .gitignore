@@ -56,3 +56,4 @@ woco-test/x64/
 *.pb.*
 *.onnx
 work/cifar10/
+.cache/
