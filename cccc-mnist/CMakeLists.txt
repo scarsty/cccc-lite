@@ -6,7 +6,7 @@ set(CMAKE_CXX_FLAGS "-O3 -std=c++17 -pthread -fopenmp")
 
 aux_source_directory(./ SRC_LIST)
 
-include_directories(../include /usr/local/cuda/include ../src ../../nb ../cccc-cuda ../cccc)
+include_directories(../include /usr/local/cuda/include ../src ../../mlcc ../cccc-cuda ../cccc)
 link_directories(.)
 
 add_library(cccc-mnist SHARED ${SRC_LIST})

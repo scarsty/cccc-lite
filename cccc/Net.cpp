@@ -5,6 +5,7 @@
 #include "Timer.h"
 #include "VectorMath.h"
 #include <algorithm>
+#include <math.h>
 
 namespace cccc
 {

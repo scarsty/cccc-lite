@@ -1,4 +1,5 @@
 #include "Activer.h"
+#include <limits.h>
 
 namespace cccc
 {
