@@ -9,6 +9,8 @@ option(CCCC_CPU "CPU support" ON)
  
 if(NOT CCCC_CPU)
     add_subdirectory(cccc-cuda)
+else()
+    add_definitions(-D NO_CUDA=1)
 endif()
 add_subdirectory(cccc)
 add_subdirectory(cccc-windows)
