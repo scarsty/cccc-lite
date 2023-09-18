@@ -1,6 +1,6 @@
-#include "DataPreparerTxt.h"
-#include "filefunc.h"
+﻿#include "DataPreparerTxt.h"
 #include "VectorMath.h"
+#include "filefunc.h"
 
 namespace cccc
 {
@@ -21,7 +21,7 @@ void DataPreparerTxt::init2()
     content_ = strfunc::readStringFromFile(filename);
 }
 
-void DataPreparerTxt::fillData(Matrix& X, Matrix& Y)
+void DataPreparerTxt::fillData0()
 {
     rand_.set_seed();
 

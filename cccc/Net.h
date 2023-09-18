@@ -1,25 +1,22 @@
-#pragma once
+ï»¿#pragma once
 #include "MatrixOp.h"
-#include "Neural.h"
 #include "Solver.h"
 
 namespace cccc
 {
 
-class Net : public Neural
+class DLL_EXPORT Net
 {
 public:
     Net();
     virtual ~Net();
+    Net(const Net&) = delete;
+    Net& operator=(const Net&) = delete;
 
 protected:
     Option* option_;
 
-    int device_id_ = -1;
-    //int batch_ = 1;
-
     Matrix all_weights_;
-    Matrix workspace_;
 
     Solver solver_;
 
@@ -30,19 +27,18 @@ protected:
 
     MatrixSP X_, A_;
     MatrixSP Y_ = makeMatrixSP();
-    Matrix loss_weight_;    //¸Ã±äÁ¿ÓÃÒÔÇ¿µ÷Ä³Ð©Àà±ð
+    MatrixSP loss_weight_ = makeMatrixSP();    //è¯¥å˜é‡ç”¨ä»¥å¼ºè°ƒæˆ–å¿½è§†æŸäº›æ ·æœ¬
 
-    int batches_for_learn_ = 1;
-    int64_t learned_batches_ = 0;
+    GpuControl* gpu_;
+
+    int seperate_update_weight_ = 0;
 
 public:
-    void setDeviceID(int dev) { device_id_ = CudaControl::setDevice(dev); }
-    int getDeviceID() { return device_id_; }
-    void setDeviceSelf() { CudaControl::setDevice(device_id_); }
+    void setGpu(GpuControl* gpu) { gpu_ = gpu; }
+    GpuControl* getCuda() { return gpu_; }
+    void setDeviceSelf() { gpu_->setAsCurrent(); }
     Matrix& getAllWeights() { return all_weights_; }
-    Matrix& getWorkspace() { return workspace_; }
     void setOption(Option* op) { option_ = op; }
-    //bool hasTrained() { return trained_; }
     int getBatch() { return getX().getNumber(); }
     int init();
     virtual int init2() = 0;
@@ -51,15 +47,22 @@ public:
     Matrix& getX() { return *X_; }
     Matrix& getY() { return *Y_; }
     Matrix& getA() { return *A_; }
+    Matrix& getLossWeight() { return *loss_weight_; }
+    void initLossWeight() { loss_weight_->resize(*Y_); }
 
 public:
-    void active(Matrix* X, Matrix* Y, Matrix* A, bool learn, realc* error);
+    void active(Matrix* X, Matrix* Y, Matrix* A, bool back, realc* error);
 
-    int saveWeight(const std::string& filename);
+    void updateWeight();
+
+    virtual int saveWeight(const std::string& filename, const std::string& sign = "");
     int loadWeight(const std::string& str, int load_mode = 0);
 
-    void calNorm(realc& l1, realc& l2);
-    int checkNorm();
+    int weightDataSize() const;
+    realc weightSumAbs() const;
+    realc weightNorm2() const;
+    void calNorm(int& n, realc& l1, realc& l2) const;
+    void outputNorm() const;
 
 private:
     int resetBatchSize(int n);
@@ -70,16 +73,17 @@ public:
     int test(const std::string& info, Matrix* X, Matrix* Y, Matrix* A, int output_group = 0, int test_type = 0, int attack_times = 0, realc* result = nullptr);
 
 protected:
-    void combineWeights();
+    void combineWeights(std::vector<Matrix*>& weights, Matrix& result);
     void initWeights();
+    std::string ir();
 
 public:
     void attack(Matrix* X, Matrix* Y);
     void groupAttack(Matrix* X, Matrix* Y, int attack_times);
 
 public:
-    realc adjustLearnRate(int ec) { return solver_.adjustLearnRate(ec); }
-    void setLearnRateBase(real lrb) { solver_.setLearnRateBase(lrb); }
+    Solver& getSolver() { return solver_; }
+    virtual void adjustByEpoch(int epoch, int total_epoch);
 
 public:
     //Net* clone(int clone_data = 0);

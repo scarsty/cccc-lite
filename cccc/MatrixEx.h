@@ -1,11 +1,11 @@
-#pragma once
+﻿#pragma once
 #include "Matrix.h"
 
 namespace cccc
 {
 
 //该类中均不是矩阵基本计算，全部为静态函数
-class MatrixEx : public Matrix
+class DLL_EXPORT MatrixEx : public Matrix
 {
 private:
     MatrixEx() = delete;
@@ -44,6 +44,10 @@ public:
     {
         conv_method_count = 8
     };
+    struct ConvMethod
+    {
+        
+    };
     static void convolutionForward(const Matrix& X, const Matrix& W, Matrix& Y, std::vector<int>& methods, std::vector<Matrix>& workspaces,
         const std::vector<int>& stride, const std::vector<int>& padding, realc a = 1, realc r = 0);
     static void convolutionBackward(Matrix& X, Matrix& W, const Matrix& Y, std::vector<int>& methods, std::vector<Matrix>& workspaces,
@@ -71,20 +75,22 @@ public:
 
     static void fill(Matrix& m, RandomFillType random_type, int in, int out);
 
-    static void sin(const Matrix& X, Matrix& Y, real a = 1) {}
-    static void cos(const Matrix& X, Matrix& Y, real a = 1) {}
-    static void zigzag(const Matrix& X, Matrix& Y) {}
-    static void zigzagb(Matrix& X, const Matrix& Y) {}
+    static void sin(const Matrix& X, Matrix& Y, real a = 1);
+    static void cos(const Matrix& X, Matrix& Y, real a = 1);
+    static void zigzag(const Matrix& X, Matrix& Y);
+    static void zigzagb(Matrix& X, const Matrix& Y);
 
-    static void step(const Matrix& X, Matrix& Y) {}
+    static void step(const Matrix& X, Matrix& Y);
 
-    static void leaky_relu(const Matrix& X, Matrix& Y, real l, real a = 1, real b = 0) {}
-    static void leaky_relub(Matrix& X, const Matrix& Y, real l, real a = 1, real b = 0) {}
+    static void leaky_relu(const Matrix& X, Matrix& Y, real l, real a = 1, real b = 0);
+    static void leaky_relub(Matrix& X, const Matrix& Y, real l, real a = 1, real b = 0);
 
     static void correlationForward(const Matrix& X, const Matrix& W, Matrix& Y, std::vector<int>& methods, std::vector<Matrix>& workspaces,
-        const std::vector<int>& stride, const std::vector<int>& padding, realc a = 1, realc r = 0) {}
+        const std::vector<int>& stride, const std::vector<int>& padding, realc a = 1, realc r = 0);
     static void correlationBackward(Matrix& X, Matrix& W, const Matrix& Y, std::vector<int>& methods, std::vector<Matrix>& workspaces,
-        const std::vector<int>& stride, const std::vector<int>& padding, realc a = 1, realc rx = 0, realc rw = 0) {}
+        const std::vector<int>& stride, const std::vector<int>& padding, realc a = 1, realc rx = 0, realc rw = 0);
+    static void matrix_max(const Matrix& X1, const Matrix& X2, Matrix& Y);
+    static void matrix_maxb(Matrix& X1, Matrix& X2, const Matrix& Y, realc a1, realc a2, realc r);
 };
 
 }    // namespace cccc

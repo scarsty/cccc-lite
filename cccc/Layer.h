@@ -1,9 +1,8 @@
-#pragma once
+﻿#pragma once
 #include "Activer.h"
 #include "AdditionalCost.h"
 #include "MatrixEx.h"
 #include "MatrixOp.h"
-#include "Neural.h"
 #include "Option.h"
 #include "Solver.h"
 #include "Timer.h"
@@ -17,17 +16,17 @@ namespace cccc
 
 //神经层
 //下面凡是有两个函数的，在无后缀函数中有公共部分，在带后缀函数中是各自子类的功能
-class Layer : public Neural
+class Layer
 {
 public:
     Layer();
     virtual ~Layer();
+    Layer(const Layer&) = delete;
+    Layer& operator=(const Layer&) = delete;
 
 protected:
     int id_;
     std::string layer_name_;    //本层的名字
-
-    Neural* net_;
 
     Layer* prev_layer_ = nullptr;        //仅合并数据层可以有多个前层，其余层若多于一个会报警
     std::vector<Layer*> prev_layers_;    //除了合并数据层外，该向量仅用于生成网络结构，计算时无用
@@ -41,7 +40,6 @@ protected:
 public:
     //前面一些字段的设置
     void setID(int id) { id_ = id; }
-    void setNet(Neural* net) { net_ = net; }
     int getBatchSize();
     void setVisible(LayerVisibleType vt) { visible_type_ = vt; }
     LayerConnectionType getConnection() { return connetion_type_; }

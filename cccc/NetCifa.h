@@ -1,4 +1,4 @@
-#pragma once
+ï»¿#pragma once
 #include "Cifa.h"
 #include "MatrixOp.h"
 #include "Net.h"
@@ -14,7 +14,7 @@ struct CompareObject
     }
 };
 
-class NetCifa : public Net
+class DLL_EXPORT NetCifa : public Net
 {
 private:
     cifa::Cifa cifa_;
@@ -30,7 +30,7 @@ private:
 
     std::string message_;
 
-    int count_;    //Ã»ÓĞ³õÊ¼»¯£¬°®Õ¦Õ¦µØ
+    int count_;    //æ²¡æœ‰åˆå§‹åŒ–ï¼Œçˆ±å’‹å’‹åœ°
 
 public:
     NetCifa();

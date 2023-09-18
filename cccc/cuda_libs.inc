@@ -1,6 +1,6 @@
-	
 IMPORT(cublasCreate_v2);
 IMPORT(cublasDestroy_v2);
+IMPORT(cublasGetVersion);
 IMPORT(cublasIsamax_v2);
 IMPORT(cublasSasum_v2);
 IMPORT(cublasSdot_v2);
@@ -8,7 +8,6 @@ IMPORT(cublasSetMathMode);
 IMPORT(cublasSgemm_v2);
 IMPORT(cublasSgemv_v2);
 IMPORT(cublasSscal_v2);
-IMPORT(cublasGetVersion);
 IMPORT(cudnnActivationBackward);
 IMPORT(cudnnActivationForward);
 IMPORT(cudnnAddTensor);
@@ -49,7 +48,13 @@ IMPORT(cudnnDropoutGetStatesSize);
 IMPORT(cudnnFindConvolutionBackwardDataAlgorithm);
 IMPORT(cudnnFindConvolutionBackwardFilterAlgorithm);
 IMPORT(cudnnFindConvolutionForwardAlgorithm);
+IMPORT(cudnnGetConvolutionBackwardDataWorkspaceSize);
+IMPORT(cudnnGetConvolutionBackwardFilterWorkspaceSize);
+IMPORT(cudnnGetConvolutionForwardWorkspaceSize);
+IMPORT(cudnnGetErrorString);
 IMPORT(cudnnGetTensor4dDescriptor);
+IMPORT(cudnnGetTensorNdDescriptor);
+IMPORT(cudnnGetVersion);
 IMPORT(cudnnLRNCrossChannelBackward);
 IMPORT(cudnnLRNCrossChannelForward);
 IMPORT(cudnnOpTensor);
@@ -71,4 +76,9 @@ IMPORT(cudnnSetTensor4dDescriptor);
 IMPORT(cudnnSetTensorNdDescriptor);
 IMPORT(cudnnSoftmaxBackward);
 IMPORT(cudnnSoftmaxForward);
-IMPORT(cudnnGetVersion)
+
+IMPORT(nvmlDeviceGetHandleByPciBusId_v2);
+IMPORT(nvmlInit_v2);
+IMPORT(nvmlDeviceGetHandleByIndex_v2);
+IMPORT(nvmlDeviceGetTemperature);
+IMPORT(nvmlDeviceGetMemoryInfo);

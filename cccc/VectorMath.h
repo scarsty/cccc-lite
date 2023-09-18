@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include <cmath>
 #include <cstring>
 
@@ -192,6 +192,19 @@ T multiply(const std::vector<T>& vec, int size = -1)
 
 #undef VECTOR
 #undef VECTOR_B
+
+template <typename T>
+bool vector_have(const std::vector<T>& ops, const T& op)
+{
+    for (auto& o : ops)
+    {
+        if (op == o)
+        {
+            return true;
+        }
+    }
+    return false;
+}
 }    // namespace VectorMath
 
 //极端情况使用vector可能过于臃肿

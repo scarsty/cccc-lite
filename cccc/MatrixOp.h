@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include "Log.h"
 #include "Matrix.h"
 #include "MatrixEx.h"
@@ -21,20 +21,22 @@ enum class MatrixOpType
     CONV,
     CORR,
     RESHAPE,
+    MAX,
     LOSS,
     L2,
 };
 
-class MatrixOp
+class DLL_EXPORT MatrixOp
 {
 private:
     MatrixOpType type_ = MatrixOpType::NONE;
     std::vector<MatrixSP> in_;     //输入数据
     std::vector<MatrixSP> wb_;     //参数，通常是权重和偏置
     std::vector<MatrixSP> out_;    //输出数据
+    //以下参数一般外界不可见
     std::vector<int> para_int_;
     std::vector<real> para_real_;
-    std::vector<Matrix> para_matrix_;    //某些计算需要的额外工作空间
+    std::vector<Matrix> para_matrix_;    //某些计算需要的额外工作空间，因外界没有修改的必要，所以不用MatrixSP
     std::vector<std::vector<int>> para_int_v_;
 
 public:
@@ -62,15 +64,18 @@ public:
     void backwardDataWeight();
     void backwardLoss();
 
-    static void print(const std::vector<MatrixOp>& op_queue);
-    void print() const;
+    static std::string ir(const std::vector<MatrixOp>& op_queue);
+    std::string print() const;
 
     MatrixOpType getType() { return type_; }
     std::vector<MatrixSP>& getMatrixIn() { return in_; }
     std::vector<MatrixSP>& getMatrixWb() { return wb_; }
     std::vector<MatrixSP>& getMatrixOut() { return out_; }
-    const std::vector<int>& getPataInt() { return para_int_; }
-    const std::vector<std::vector<int>>& getPataInt2() { return para_int_v_; }
+    std::vector<int>& getPataInt() { return para_int_; }
+    std::vector<std::vector<int>>& getPataInt2() { return para_int_v_; }
+
+    ActiveFunctionType getActiveType() const;
+    int setActiveType(ActiveFunctionType af);
 
     static void simpleQueue(std::vector<MatrixOp>& op_queue, Matrix& X, Matrix& A);    //仅保留计算图中与X和A有关联的部分
 
@@ -91,6 +96,7 @@ public:
     void as_pool(MatrixSP& X, MatrixSP& Y, PoolingType pooling_type, int reverse, std::vector<int> window, std::vector<int> stride, std::vector<int> padding, realc a = 1);
     void as_conv(MatrixSP& X, MatrixSP& W, MatrixSP& Y, std::vector<int> stride, std::vector<int> padding, int conv_type, realc a = 1);
     void as_reshape(MatrixSP& X, MatrixSP& Y, std::vector<int>& dim);
+    void as_max(MatrixSP& X1, MatrixSP& X2, MatrixSP& Y);
 
     //以下专为处理损失函数
 private:

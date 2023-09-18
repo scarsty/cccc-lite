@@ -20,9 +20,6 @@
     <Filter Include="brain">
       <UniqueIdentifier>{0b817fea-8808-42c4-8adb-6c357148dd45}</UniqueIdentifier>
     </Filter>
-    <Filter Include="cuda">
-      <UniqueIdentifier>{81cb7be8-6daa-48f2-99dd-17f39bfde5bc}</UniqueIdentifier>
-    </Filter>
     <Filter Include="data">
       <UniqueIdentifier>{2a3933f8-115f-45e7-834d-0367a65f965c}</UniqueIdentifier>
       <Extensions>Data*.*</Extensions>
@@ -47,8 +44,17 @@
     <Filter Include="solver">
       <UniqueIdentifier>{5fef8200-bbaa-48fe-9413-48c583ea301f}</UniqueIdentifier>
     </Filter>
+    <Filter Include="log">
+      <UniqueIdentifier>{701564cd-bff1-4f2a-9973-02b5596c730e}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="predict">
+      <UniqueIdentifier>{3f9ecb0c-a7d1-4b0c-b70d-8e209e326922}</UniqueIdentifier>
+    </Filter>
     <Filter Include="mlcc">
       <UniqueIdentifier>{e12d9f9d-dbb5-4ea1-a636-3ce3e6908db5}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="gpu">
+      <UniqueIdentifier>{81cb7be8-6daa-48f2-99dd-17f39bfde5bc}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
@@ -82,9 +88,6 @@
     <ClCompile Include="DataPreparerFactory.cpp">
       <Filter>data</Filter>
     </ClCompile>
-    <ClCompile Include="cublas_real.cpp">
-      <Filter>math</Filter>
-    </ClCompile>
     <ClCompile Include="NetLayer.cpp">
       <Filter>net</Filter>
     </ClCompile>
@@ -94,8 +97,8 @@
     <ClCompile Include="NetCifa.cpp">
       <Filter>net</Filter>
     </ClCompile>
-    <ClCompile Include="CudaControl.cpp">
-      <Filter>cuda</Filter>
+    <ClCompile Include="GpuControl.cpp">
+      <Filter>gpu</Filter>
     </ClCompile>
     <ClCompile Include="Layer.cpp">
       <Filter>layer</Filter>
@@ -109,16 +112,19 @@
     <ClCompile Include="MatrixData.cpp">
       <Filter>matrix</Filter>
     </ClCompile>
-    <ClCompile Include="cuda_lib.cpp">
-      <Filter>cuda</Filter>
+    <ClCompile Include="gpu_lib.cpp">
+      <Filter>gpu</Filter>
+    </ClCompile>
+    <ClCompile Include="predict.cpp">
+      <Filter>predict</Filter>
     </ClCompile>
     <ClCompile Include="..\..\mlcc\Cifa.cpp">
       <Filter>mlcc</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\mlcc\filefunc.cpp">
+    <ClCompile Include="..\..\mlcc\strfunc.cpp">
       <Filter>mlcc</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\mlcc\strfunc.cpp">
+    <ClCompile Include="..\..\mlcc\filefunc.cpp">
       <Filter>mlcc</Filter>
     </ClCompile>
   </ItemGroup>
@@ -147,12 +153,6 @@
     <ClInclude Include="DataPreparerTxt.h">
       <Filter>data</Filter>
     </ClInclude>
-    <ClInclude Include="Neural.h">
-      <Filter>base</Filter>
-    </ClInclude>
-    <ClInclude Include="Log.h">
-      <Filter>base</Filter>
-    </ClInclude>
     <ClInclude Include="Solver.h">
       <Filter>solver</Filter>
     </ClInclude>
@@ -175,7 +175,7 @@
       <Filter>math</Filter>
     </ClInclude>
     <ClInclude Include="cuda_half_hack.h">
-      <Filter>cuda</Filter>
+      <Filter>gpu</Filter>
     </ClInclude>
     <ClInclude Include="dll_export.h">
       <Filter>base</Filter>
@@ -189,8 +189,8 @@
     <ClInclude Include="NetCifa.h">
       <Filter>net</Filter>
     </ClInclude>
-    <ClInclude Include="CudaControl.h">
-      <Filter>cuda</Filter>
+    <ClInclude Include="GpuControl.h">
+      <Filter>gpu</Filter>
     </ClInclude>
     <ClInclude Include="Layer.h">
       <Filter>layer</Filter>
@@ -204,8 +204,57 @@
     <ClInclude Include="MatrixData.h">
       <Filter>matrix</Filter>
     </ClInclude>
-    <ClInclude Include="cuda_lib.h">
-      <Filter>cuda</Filter>
+    <ClInclude Include="gpu_lib.h">
+      <Filter>gpu</Filter>
+    </ClInclude>
+    <ClInclude Include="Log.h">
+      <Filter>log</Filter>
+    </ClInclude>
+    <ClInclude Include="predict.h">
+      <Filter>predict</Filter>
+    </ClInclude>
+    <ClInclude Include="resource.h" />
+    <ClInclude Include="..\..\mlcc\Random.h">
+      <Filter>mlcc</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\mlcc\SimpleBuffer.h">
+      <Filter>mlcc</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\mlcc\Timer.h">
+      <Filter>mlcc</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\mlcc\Cifa.h">
+      <Filter>mlcc</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\mlcc\ConsoleControl.h">
+      <Filter>mlcc</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\mlcc\strfunc.h">
+      <Filter>mlcc</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\mlcc\DynamicLibrary.h">
+      <Filter>mlcc</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\mlcc\filefunc.h">
+      <Filter>mlcc</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\mlcc\fmt1.h">
+      <Filter>mlcc</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\mlcc\INIReader.h">
+      <Filter>mlcc</Filter>
+    </ClInclude>
+    <ClInclude Include="math_supplement.h">
+      <Filter>math</Filter>
+    </ClInclude>
+    <ClInclude Include="rocblas_real.h">
+      <Filter>math</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\mlcc\INIReaderBin.h">
+      <Filter>mlcc</Filter>
+    </ClInclude>
+    <ClInclude Include="hip_libs.inc">
+      <Filter>gpu</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -214,8 +263,11 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="..\..\README.md" />
-    <None Include="cuda_lib.inc">
-      <Filter>cuda</Filter>
+    <None Include="cuda_libs.inc">
+      <Filter>gpu</Filter>
     </None>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="cccc.rc" />
   </ItemGroup>
 </Project>

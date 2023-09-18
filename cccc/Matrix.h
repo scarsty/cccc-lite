@@ -1,20 +1,16 @@
-#pragma once
-#include "CudaControl.h"
+﻿#pragma once
+#include "GpuControl.h"
 #include "MatrixData.h"
 #include "blas_types.h"
-#include "cblas_real.h"
 #include "types.h"
 #include <algorithm>
-#include <cfloat>
-#include <cstdio>
-#include <cstdlib>
-#include <cstring>
-#include <functional>
 #include <memory>
 #include <string>
 #include <vector>
 
 #define MATRIX_OPERATOR
+
+struct cudnnTensorStruct;
 
 namespace cccc
 {
@@ -24,14 +20,16 @@ namespace cccc
 //该类的赋值和构造（浅复制），对于矩阵本身的数据来说，是一个完全的替身，但是可以拥有不同的维度
 //对赋值后的矩阵的数据进行任何修改，包含修改指针位置，均会影响原矩阵！
 //如有特殊需求，请考虑clone
+//NCHW
 
-class Matrix
+class DLL_EXPORT Matrix
 {
 public:
     friend class MatrixEx;
 
 private:
     //这个结构实际上是直接用cudnn的desc，属实验性质
+    //不调用创建描述符，因为写复制构造太麻烦
     struct TensorDesc
     {
         int64_t unknown_ = 0;
@@ -79,26 +77,31 @@ public:
     //Matrix& operator=(const Matrix& m);
     //Matrix(const Matrix& src);
 
-    Matrix(const std::vector<int>& dim, DeviceType device_type = DeviceType::GPU, bool create_d = true);
-    Matrix(int w, int h, int c, int n, DeviceType device_type = DeviceType::GPU);
-    Matrix(int m, int n, DeviceType device_type = DeviceType::GPU);
-    Matrix(const std::vector<int>& dim, real* data, DeviceType device_type = DeviceType::GPU);
-    Matrix(DeviceType device_type = DeviceType::GPU);
+    Matrix(const std::vector<int>& dim, UnitType device_type = UnitType::GPU, bool create_d = true);
+    Matrix(int w, int h, int c, int n, UnitType device_type = UnitType::GPU);
+    Matrix(int m, int n, UnitType device_type = UnitType::GPU);
+    Matrix(const std::vector<int>& dim, real* data, UnitType device_type = UnitType::GPU);
+    Matrix(UnitType device_type = UnitType::GPU);
     //~Matrix();
-    Matrix clone(DeviceType device_type = DeviceType::GPU) const;
-    Matrix cloneShared() const;
-    Matrix cloneSharedCol(int col = 0) const;
-    Matrix autoShareClone(DeviceType device_type) const;
+    Matrix clone(UnitType device_type = UnitType::GPU) const;
+    Matrix createShared() const;
+    Matrix createSharedCol(int col = 0) const;
+    Matrix autoShareClone(UnitType device_type) const;
+
+    void release();    //会释放所有共享的数据，除非特别需要，一般不要使用
 
 private:
     inline real* data() const { return data_; }
     //bool haveD() const { return d_this_ != nullptr; }
-    const CudaControl* cuda() const { return shared_data_->cuda_; }
-    cudnnTensorDescriptor_t tensor_desc() const { return (cudnnTensorDescriptor_t)&tensor_desc_; }
+    GpuControl* gpu() const { return shared_data_->gpu_; }
+    cudnnTensorStruct* tensor_desc() const { return (cudnnTensorStruct*)&tensor_desc_; }
 
 public:
-    DeviceType getDeviceType() const { return shared_data_->cuda_ == nullptr ? DeviceType::CPU : DeviceType::GPU; }
-    bool inGPU() const { return cuda() != nullptr; }
+    UnitType getDeviceType() const { return shared_data_->gpu_ == nullptr ? UnitType::CPU : UnitType::GPU; }
+    bool inGpu() const { return gpu(); }
+    bool isCuda() const { return gpu() && gpu()->getApiType() == API_CUDA; }
+    bool isHip() const { return gpu() && gpu()->getApiType() == API_HIP; }
+    ApiType getApiType() const { return shared_data_->getApiType(); }
 
 public:
     Matrix& d() const;
@@ -130,6 +133,7 @@ public:
     int getChannel() const { return channel_; }
     int getNumber() const { return number_; }
     int getRow() const { return row_; }
+    int getOneChannelSize() const { return row_ / channel_; }
 
     int64_t getDataSize() const { return data_size_; }
     int64_t getDataSizeInByte() const { return getDataSize() * sizeof(real); }
@@ -141,10 +145,10 @@ public:
     real& getData(int m, int n) const { return data()[mn2i(m, n)]; }
     real& getData(int w, int h, int c, int n) const { return data()[whcn2i(w, h, c, n)]; }
 
-    real* getDataPointer() const { return data(); }
-    real* getDataPointer(int i) const { return &data()[i]; }
-    real* getDataPointer(int m, int n) const { return &data()[mn2i(m, n)]; }
-    real* getDataPointer(int w, int h, int c, int n) const { return &data()[whcn2i(w, h, c, n)]; }
+    real* getDataPtr() const { return data(); }
+    real* getDataPtr(int i) const { return &data()[i]; }
+    real* getDataPtr(int m, int n) const { return &data()[mn2i(m, n)]; }
+    real* getDataPtr(int w, int h, int c, int n) const { return &data()[whcn2i(w, h, c, n)]; }
     //real& operator[](int i) const { return data_[i]; }
 
 public:
@@ -172,7 +176,7 @@ private:
     void copyDataOutToHost(real* dst, int64_t size);
 
 public:
-    static int64_t copyDataPointer(const Matrix& A, const real* A_pointer, Matrix& R, real* R_pointer, int64_t size = -1);
+    static int64_t copyDataPtr(const Matrix& A, const real* A_ptr, Matrix& R, real* R_ptr, int64_t size = -1);
 
 public:
     static void copyData(const Matrix& A, Matrix& R, int64_t size = -1);
@@ -185,9 +189,9 @@ public:
     void shareData(real* data);
 
     //初始化数据后返回自身的引用，可以在一行代码内初始化
-    Matrix& initData(real v, int inc = 0);    //非常慢
-    Matrix& initData(real* data, int64_t size);
-    Matrix& initRandom(int seed = 0);    //调试用
+    Matrix& fillData(real v, real inc = 0);    //非常慢
+    Matrix& loadDataPtr(real* data, int64_t size);
+    Matrix& fillRandom(int seed = 0);    //调试用
 
 public:
     //这两个会修改共享数据，影响所有相关的矩阵
@@ -234,7 +238,7 @@ public:
     //取值和赋值，通常不推荐在c++中使用，仅用于python接口，故安全保护较多
     real getDataValue(int i)
     {
-        if (getDeviceType() == DeviceType::CPU && i >= 0 && i < data_size_)
+        if (getDeviceType() == UnitType::CPU && i >= 0 && i < data_size_)
         {
             return getData(i);
         }
@@ -245,7 +249,7 @@ public:
 
     void setDataValue(float v, int i)
     {
-        if (getDeviceType() == DeviceType::CPU && i >= 0 && i < data_size_)
+        if (getDeviceType() == UnitType::CPU && i >= 0 && i < data_size_)
         {
             getData(i) = v;
         }
@@ -277,6 +281,7 @@ public:
 public:
     static bool checkMatrixDevice(const std::vector<const Matrix*>& v);    //此处用对象会有效率问题
     void message(const std::string& info = "") const;
+    std::string sizeMessage(int include_batch = 1) const;
 };
 
 using MatrixSP = std::shared_ptr<Matrix>;

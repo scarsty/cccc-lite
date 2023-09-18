@@ -31,7 +31,7 @@ void MnistReader::getDataSize(const std::string& file_image, int* w, int* h, int
 
 void MnistReader::readLabelFile(const std::string& filename, real* y_data)
 {
-    int s = 10;
+    int s = label_;
     auto content = filefunc::readFile(filename);
     reverse(content.data() + 4, 4);
     int n = *(int*)(content.data() + 4);
@@ -68,8 +68,8 @@ void MnistReader::readData(const std::string& file_label, const std::string& fil
     X.resize(w, h, 1, n);
     Y.resize(label_, n);
     //train.createA();
-    readImageFile(file_image, X.getDataPointer());
-    readLabelFile(file_label, Y.getDataPointer());
+    readImageFile(file_image, X.getDataPtr());
+    readLabelFile(file_label, Y.getDataPtr());
 }
 
 void MnistReader::reverse(char* c, int n)
@@ -83,6 +83,7 @@ void MnistReader::reverse(char* c, int n)
         a = t;
     }
 }
+
 void MnistReader::load(Matrix& X, Matrix& Y, std::string path /*= "mnist"*/, int data_type /*= 1*/)
 {
     if (path.back() != '/' || path.back() != '\\')

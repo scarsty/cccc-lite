@@ -1,7 +1,9 @@
-#include "Matrix.h"
+﻿#include "Matrix.h"
 #include "Log.h"
 #include "Random.h"
 #include "VectorMath.h"
+#include "cblas_real.h"
+#include "gpu_lib.h"
 #include <cassert>
 
 namespace cccc
@@ -12,9 +14,12 @@ namespace cccc
 
 //任意阶张量
 //描述符最低为4维
-Matrix::Matrix(const std::vector<int>& dim, DeviceType device_type, bool create_d)
+Matrix::Matrix(const std::vector<int>& dim, UnitType device_type, bool create_d)
 {
-    if (device_type == DeviceType::GPU && CudaControl::getGlobalCudaType() == DeviceType::GPU)
+    if (GpuControl::getGlobalCudaType() == UnitType::CPU) { device_type = UnitType::CPU; }
+    auto size = VectorMath::multiply(dim);
+    assert(device_type == UnitType::CPU || device_type == UnitType::GPU && GpuControl::getGlobalCudaType() == UnitType::GPU);
+    if (device_type == UnitType::GPU && GpuControl::getGlobalCudaType() == UnitType::GPU)
     {
         shared_data_->setCudaAsCurrent();
     }
@@ -26,40 +31,40 @@ Matrix::Matrix(const std::vector<int>& dim, DeviceType device_type, bool create_
 }
 
 //4阶张量形式
-Matrix::Matrix(int w, int h, int c, int n, DeviceType device_type) : Matrix(std::vector<int>{ w, h, c, n }, device_type)
+Matrix::Matrix(int w, int h, int c, int n, UnitType device_type) : Matrix(std::vector<int>{ w, h, c, n }, device_type)
 {
 }
 
 //普通二维矩阵构造函数
 //注意这样生成的矩阵在以张量形式处理时认为是4维张量，但是所有张量的row都是前面项的积
-Matrix::Matrix(int m, int n, DeviceType device_type) : Matrix(std::vector<int>{ m, n }, device_type)
+Matrix::Matrix(int m, int n, UnitType device_type) : Matrix(std::vector<int>{ m, n }, device_type)
 {
 }
 
-Matrix::Matrix(const std::vector<int>& dim, real* data, DeviceType device_type) : Matrix(std::vector<int>{ 0, 0 }, device_type)
+Matrix::Matrix(const std::vector<int>& dim, real* data, UnitType device_type) : Matrix(std::vector<int>{ 0, 0 }, device_type)
 {
     data_ = data;
     resize(dim);
 }
 
 //空矩阵，后期再调整
-Matrix::Matrix(DeviceType device_type) : Matrix(std::vector<int>{ 0, 0 }, device_type)
+Matrix::Matrix(UnitType device_type) : Matrix(std::vector<int>{ 0, 0 }, device_type)
 {
 }
 
-Matrix Matrix::clone(DeviceType device_type) const
+Matrix Matrix::clone(UnitType device_type) const
 {
     Matrix M(dim_, device_type);
     copyData(*this, M);
     return M;
 }
 
-Matrix Matrix::cloneShared() const
+Matrix Matrix::createShared() const
 {
     return *this;
 }
 
-Matrix Matrix::cloneSharedCol(int col) const
+Matrix Matrix::createSharedCol(int col) const
 {
     auto dim = dim_;
     dim.back() = 1;
@@ -68,7 +73,7 @@ Matrix Matrix::cloneSharedCol(int col) const
     return M;
 }
 
-Matrix Matrix::autoShareClone(DeviceType device_type) const
+Matrix Matrix::autoShareClone(UnitType device_type) const
 {
     if (device_type == getDeviceType())
     {
@@ -78,6 +83,11 @@ Matrix Matrix::autoShareClone(DeviceType device_type) const
     {
         return clone(device_type);
     }
+}
+
+void Matrix::release()
+{
+    shared_data_->release();
 }
 
 Matrix& Matrix::d() const
@@ -112,11 +122,11 @@ void Matrix::setDim(const std::vector<int>& dim)
     }
     if (dim.size() <= 4)
     {
-        CudaControl::setTensorDesc4D(tensor_desc(), width_, height_, channel_, number_);
+        GpuControl::setTensorDesc4D(tensor_desc(), width_, height_, channel_, number_);
     }
     else
     {
-        CudaControl::setTensorDescND(tensor_desc(), dim);
+        GpuControl::setTensorDescND(tensor_desc(), dim);
     }
 }
 
@@ -248,18 +258,18 @@ void Matrix::printAsMatrix() const
 //{
 //    auto temp = dataMirrorCPU(false);
 //    buffer.load(temp->data_, sizeof(real) * data_size_);
-//    copyDataPointer(DeviceType::CPU, temp->data_, getDeviceType(), getDataPointer(), data_size_);
+//    copyDataPtr(DeviceType::CPU, temp->data_, getDeviceType(), getDataPtr(), data_size_);
 //    return data_size_;
 //}
 
 int64_t Matrix::save(void* buffer, int64_t size) const
 {
-    return MatrixData::copy(getDeviceType(), getDataPointer(), DeviceType::CPU, (real*)buffer, std::min(data_size_, size));
+    return MatrixData::copy(getApiType(), getDataPtr(), API_UNKNOWN, (real*)buffer, std::min(data_size_, size));
 }
 
 int64_t Matrix::load(const void* buffer, int64_t size)
 {
-    return MatrixData::copy(DeviceType::CPU, (real*)buffer, getDeviceType(), getDataPointer(), std::min(data_size_, size));
+    return MatrixData::copy(API_UNKNOWN, (real*)buffer, getApiType(), getDataPtr(), std::min(data_size_, size));
 }
 
 //int Matrix::save(const std::string filename)
@@ -279,7 +289,7 @@ int64_t Matrix::load(const void* buffer, int64_t size)
 //将外界的值复制到矩阵，参数指针必须指向Host内存！
 void Matrix::copyDataInFromHost(real* src, int64_t size)
 {
-    if (inGPU())
+    if (isCuda())
     {
         cudaMemcpy(data(), src, int(sizeof(real) * std::min(size, data_size_)), cudaMemcpyHostToDevice);
     }
@@ -292,7 +302,7 @@ void Matrix::copyDataInFromHost(real* src, int64_t size)
 //将矩阵的值复制到外界，参数指针必须指向Host内存！
 void Matrix::copyDataOutToHost(real* dst, int64_t size)
 {
-    if (inGPU())
+    if (isCuda())
     {
         cudaMemcpy(dst, data(), int(sizeof(real) * std::min(size, data_size_)), cudaMemcpyDeviceToHost);
     }
@@ -303,13 +313,13 @@ void Matrix::copyDataOutToHost(real* dst, int64_t size)
 }
 
 //警告：乱用模式会受惩罚！
-int64_t Matrix::copyDataPointer(const Matrix& A, const real* A_pointer, Matrix& R, real* R_pointer, int64_t size)
+int64_t Matrix::copyDataPtr(const Matrix& A, const real* A_ptr, Matrix& R, real* R_ptr, int64_t size)
 {
     if (size < 0)
     {
         size = std::min(A.getDataSize(), R.getDataSize());
     }
-    return MatrixData::copy(A.getDeviceType(), A_pointer, R.getDeviceType(), R_pointer, size);
+    return MatrixData::copy(A.getApiType(), A_ptr, R.getApiType(), R_ptr, size);
 }
 
 //复制数据，只处理较少的
@@ -319,16 +329,16 @@ void Matrix::copyData(const Matrix& A, Matrix& R, int64_t size)
     {
         return;
     }
-    copyDataPointer(A, A.data(), R, R.data(), size);
+    copyDataPtr(A, A.data(), R, R.data(), size);
 }
 
 void Matrix::copyRows(const Matrix& A, int ra, Matrix& R, int rr, int64_t rows)
 {
-    if (A.row_ != R.row_)
+    if (A.row_ != R.row_ || A.getDataSize() == 0)
     {
         return;
     }
-    MatrixData::copy(A.getDeviceType(), A.getDataPointer(0, ra), R.getDeviceType(), R.getDataPointer(0, rr), A.row_ * rows);
+    MatrixData::copy(A.getApiType(), A.getDataPtr(0, ra), R.getApiType(), R.getDataPtr(0, rr), A.row_ * rows);
 }
 
 void Matrix::copyDataAcrossDevice(const Matrix& A, Matrix& R, int64_t size)
@@ -338,17 +348,17 @@ void Matrix::copyDataAcrossDevice(const Matrix& A, Matrix& R, int64_t size)
         size = std::min(A.getDataSize(), R.getDataSize());
     }
     int64_t size_in_byte = size * sizeof(real);
-    if (R.inGPU() && A.inGPU())
+    if (R.isCuda() && A.isCuda())
     {
-        cudaError state = cudaMemcpyPeer(R.data(), R.cuda()->getDeviceID(), A.data(), A.cuda()->getDeviceID(), size_in_byte);
+        cudaError state = cudaMemcpyPeer(R.data(), R.gpu()->getDeviceID(), A.data(), A.gpu()->getDeviceID(), size_in_byte);
         if (state != cudaSuccess)
         {
-            LOG(2, "Error: cudaMemcpyPeer failed with error code is {}, size in byte is {} ({:g})!\n", state, size_in_byte, 1.0 * size_in_byte);
+            LOG("cudaMemcpyPeer error: {}, size in byte {:g}\n", cudaGetErrorString(state), 1.0 * size_in_byte);
         }
     }
     else
     {
-        copyDataPointer(A, A.data(), R, R.data(), size);
+        copyDataPtr(A, A.data(), R, R.data(), size);
     }
 }
 
@@ -366,13 +376,13 @@ void Matrix::shareData(const Matrix& A, int m, int n)
 void Matrix::shareData(const Matrix& A, int w, int h, int c, int n)
 {
     assert(checkMatrixDevice({ this, &A }));
-    if (cuda() != A.cuda())
+    if (gpu() != A.gpu())
     {
-        LOG(stderr, "Error: share data are on different device ({}, {})!\n", cuda()->getDeviceID(), A.cuda()->getDeviceID());
+        LOG(stderr, "Error: share data are on different device ({}, {})!\n", gpu()->getDeviceID(), A.gpu()->getDeviceID());
     }
     if (getDeviceType() == A.getDeviceType())
     {
-        data_ = A.getDataPointer(w, h, c, n);
+        data_ = A.getDataPtr(w, h, c, n);
         if (shared_data_->data_ != A.shared_data_->data_)
         {
             shared_data_ = A.shared_data_;
@@ -384,20 +394,20 @@ void Matrix::shareData(const Matrix& A, int w, int h, int c, int n)
 void Matrix::shareData(real* data)
 {
     data_ = data;
-    auto cuda = shared_data_->cuda_;
+    auto gpu = shared_data_->gpu_;
     shared_data_ = std::make_shared<MatrixData>();
-    shared_data_->cuda_ = cuda;
+    shared_data_->gpu_ = gpu;
 }
 
 //以同一个值初始化矩阵
 //inc不为零时仅用于测试，不要用于实际计算！
-Matrix& Matrix::initData(real v, int inc /*=0*/)
+Matrix& Matrix::fillData(real v, real inc /*=0*/)
 {
     if (!data())
     {
         return *this;
     }
-    if (inGPU() && inc == 0)
+    if (isCuda() && inc == 0)
     {
         if (v == 0)
         {
@@ -405,7 +415,14 @@ Matrix& Matrix::initData(real v, int inc /*=0*/)
         }
         else
         {
-            cudnnSetTensor(cuda()->cudnn_handle_, tensor_desc(), data(), &v);
+            cudnnSetTensor(gpu()->cudnn_handle_, tensor_desc(), data(), &v);
+        }
+    }
+    else if (isHip() && inc == 0 && v == 0)
+    {
+        if (v == 0)
+        {
+            hipMemset(data(), 0, getDataSizeInByte());
         }
     }
     else
@@ -423,19 +440,19 @@ Matrix& Matrix::initData(real v, int inc /*=0*/)
                 temp->data_[i] = i * inc + v;
             }
         }
-        MatrixData::copy(DeviceType::CPU, temp->data_, getDeviceType(), getDataPointer(), data_size_);
+        MatrixData::copy(API_UNKNOWN, temp->data_, getApiType(), getDataPtr(), data_size_);
     }
     return *this;
 }
 
-Matrix& Matrix::initData(real* data, int64_t size)
+Matrix& Matrix::loadDataPtr(real* data, int64_t size)
 {
-    MatrixData::copy(DeviceType::CPU, data, getDeviceType(), getDataPointer(), std::min(size, data_size_));
+    MatrixData::copy(API_UNKNOWN, data, getApiType(), getDataPtr(), std::min(size, data_size_));
     return *this;
 }
 
 //随机数初始化矩阵，注意这个函数调用次数很少
-Matrix& Matrix::initRandom(int seed /*= 0*/)
+Matrix& Matrix::fillRandom(int seed /*= 0*/)
 {
     if (!data())
     {
@@ -445,14 +462,14 @@ Matrix& Matrix::initRandom(int seed /*= 0*/)
     r.set_seed(seed);
     std::vector<real> temp(data_size_);
     r.rand_data(temp.data(), temp.size());
-    MatrixData::copy(DeviceType::CPU, temp.data(), getDeviceType(), getDataPointer(), data_size_);
+    MatrixData::copy(API_UNKNOWN, temp.data(), getApiType(), getDataPtr(), data_size_);
     return *this;
 }
 
 //内存中的数据转移到显存
 void Matrix::toGPU()
 {
-    if (!inGPU() && CudaControl::getGlobalCudaType() == DeviceType::GPU)
+    if (!isCuda() && GpuControl::getGlobalCudaType() == UnitType::GPU)
     {
         auto temp = shared_data_;
         //std::swap(temp, shared_data_->data_);
@@ -460,7 +477,7 @@ void Matrix::toGPU()
         shared_data_->occupy_data_size_ = 0;
         shared_data_->setCudaAsCurrent();
         shared_data_->resize(data_size_);
-        MatrixData::copy(DeviceType::CPU, temp->data_, DeviceType::GPU, shared_data_->data_, data_size_);
+        MatrixData::copy(API_UNKNOWN, temp->data_, getApiType(), shared_data_->data_, data_size_);
         //delete[] temp;
         data_ = shared_data_->data_;
     }
@@ -469,10 +486,10 @@ void Matrix::toGPU()
 //显存中的数据转移到内存
 void Matrix::toCPU(bool reserve_data)
 {
-    if (inGPU())
+    if (isCuda())
     {
         real* temp = new real[data_size_];
-        MatrixData::copy(DeviceType::GPU, shared_data_->data_, DeviceType::CPU, temp, data_size_);
+        MatrixData::copy(getApiType(), shared_data_->data_, API_UNKNOWN, temp, data_size_);
         //shared_data_->free();
         shared_data_ = std::make_shared<MatrixData>();
         shared_data_->setCuda(nullptr);
@@ -485,16 +502,16 @@ void Matrix::toCPU(bool reserve_data)
 //flip和transpose暂时仅用于cpu
 void Matrix::flip(int flip_flag)
 {
-    if (inGPU())
+    if (isCuda())
     {
         return;
     }
-    Matrix temp(width_, height_, DeviceType::CPU);
+    Matrix temp(width_, height_, UnitType::CPU);
     for (int c = 0; c < channel_; c++)
     {
         for (int n = 0; n < number_; n++)
         {
-            Matrix::copyDataPointer(*this, getDataPointer(0, 0, c, n), temp, temp.getDataPointer());
+            Matrix::copyDataPtr(*this, getDataPtr(0, 0, c, n), temp, temp.getDataPtr());
             switch (flip_flag)
             {
             case 1:
@@ -533,11 +550,11 @@ void Matrix::flip(int flip_flag)
 
 void Matrix::transpose()
 {
-    if (inGPU())
+    if (isCuda())
     {
         return;
     }
-    auto temp = clone(DeviceType::CPU);
+    auto temp = clone(UnitType::CPU);
     if (row_ != channel_)
     {
         resize(height_, width_, channel_, number_);
@@ -571,13 +588,13 @@ void Matrix::transpose()
 //生成一个数据在cpu中的镜像
 std::shared_ptr<MatrixData> Matrix::dataMirrorCPU(bool reserve_data) const
 {
-    if (inGPU())
+    if (inGpu())
     {
         auto new_shared_data = std::make_shared<MatrixData>();
         new_shared_data->resize(data_size_);
         if (reserve_data)
         {
-            MatrixData::copy(DeviceType::GPU, shared_data_->data_, DeviceType::CPU, new_shared_data->data_, data_size_);
+            MatrixData::copy(getApiType(), shared_data_->data_, API_UNKNOWN, new_shared_data->data_, data_size_);
         }
         return new_shared_data;
     }
@@ -590,19 +607,22 @@ std::shared_ptr<MatrixData> Matrix::dataMirrorCPU(bool reserve_data) const
 //将前面几列复制到整个矩阵
 void Matrix::repeat(int c)
 {
-    if (inGPU())
+    if (isCuda())
     {
         for (int i = c; i < number_; i *= 2)
         {
-            cudaMemcpy(getDataPointer(0, i), getDataPointer(0, 0), sizeof(real) * row_ * std::min(i, number_ - i), cudaMemcpyDeviceToDevice);
+            cudaMemcpy(getDataPtr(0, i), getDataPtr(0, 0), sizeof(real) * row_ * std::min(i, number_ - i), cudaMemcpyDeviceToDevice);
         }
+    }
+    else if (isHip())
+    {
     }
     else
     {
         //#pragma loop(hint_parallel(8))
         for (int i = c; i < number_; i *= 2)
         {
-            memcpy(getDataPointer(0, i), getDataPointer(0, 0), sizeof(real) * row_ * std::min(i, number_ - i));
+            memcpy(getDataPtr(0, i), getDataPtr(0, 0), sizeof(real) * row_ * std::min(i, number_ - i));
         }
     }
 }
@@ -610,22 +630,30 @@ void Matrix::repeat(int c)
 //一列中最大值的序号
 int Matrix::indexColMaxAbs(int c) const
 {
-    if (inGPU())
+    if (isCuda())
     {
-        return cuda()->cublas_->iamax(row_, getDataPointer(0, c), 1);
+        return gpu()->cublas_->iamax(row_, getDataPtr(0, c), 1);
+    }
+    else if (isHip())
+    {
+        return gpu()->rocblas_->iamax(row_, getDataPtr(0, c), 1);
     }
     else
     {
-        return Cblas::iamax(row_, getDataPointer(0, c), 1);
+        return Cblas::iamax(row_, getDataPtr(0, c), 1);
     }
 }
 
 //绝对值求和（直接调用的blas，注意这里实际上需要的功能只是求和）
 realc Matrix::sumAbs() const
 {
-    if (inGPU())
+    if (isCuda())
     {
-        return cuda()->cublas_->asum(data_size_, data(), 1);
+        return gpu()->cublas_->asum(data_size_, data(), 1);
+    }
+    else if (isHip())
+    {
+        return gpu()->rocblas_->asum(data_size_, data(), 1);
     }
     else
     {
@@ -636,29 +664,36 @@ realc Matrix::sumAbs() const
 //一列的绝对值和
 realc Matrix::sumAbsCol(int c) const
 {
-    if (inGPU())
+    if (isCuda())
     {
-        return cuda()->cublas_->asum(row_, getDataPointer(0, c), 1);
+        return gpu()->cublas_->asum(row_, getDataPtr(0, c), 1);
+    }
+    else if (isHip())
+    {
+        return gpu()->rocblas_->asum(row_, getDataPtr(0, c), 1);
     }
     else
     {
-        return Cblas::asum(row_, getDataPointer(0, c), 1);
+        return Cblas::asum(row_, getDataPtr(0, c), 1);
     }
 }
 
 realc Matrix::sum() const
 {
     Matrix temp1(data_size_, 1);
-    temp1.initData(1);
+    temp1.fillData(1);
     real r = dot(*this, temp1);
     return r;
 }
 
 void Matrix::sectionLimit(real v0, real v1)
 {
-    if (inGPU())
+    if (isCuda())
     {
         cuda_sectionlimit(data(), nullptr, data(), data_size_, v0, v1);
+    }
+    else if (isHip())
+    {
     }
     else
     {
@@ -679,12 +714,16 @@ void Matrix::scale(real v)
     }
     if (v == 0)
     {
-        initData(0);
+        fillData(0);
         return;
     }
-    if (inGPU())
+    if (isCuda())
     {
-        cuda()->cublas_->scal(data_size_, v, data(), 1);
+        gpu()->cublas_->scal(data_size_, v, data(), 1);
+    }
+    else if (isHip())
+    {
+        gpu()->rocblas_->scal(data_size_, v, data(), 1);
     }
     else
     {
@@ -706,13 +745,17 @@ void Matrix::scaleCol(real v, int c)
     {
         return;
     }
-    if (inGPU())
+    if (isCuda())
     {
-        cuda()->cublas_->scal(row_, v, getDataPointer(0, c), 1);
+        gpu()->cublas_->scal(row_, v, getDataPtr(0, c), 1);
+    }
+    else if (isHip())
+    {
+        gpu()->rocblas_->scal(row_, v, getDataPtr(0, c), 1);
     }
     else
     {
-        Cblas::scal(row_, v, getDataPointer(0, c), 1);
+        Cblas::scal(row_, v, getDataPtr(0, c), 1);
     }
 }
 
@@ -729,9 +772,13 @@ void Matrix::mul(const Matrix& A, const Matrix& B, Matrix& R, real a, real r, Ma
     {
         k = A.row_;
     }
-    if (R.inGPU())
+    if (R.isCuda())
     {
-        R.cuda()->cublas_->gemm(ta, tb, m, n, k, a, A.data(), lda, B.data(), ldb, r, R.data(), m);
+        R.gpu()->cublas_->gemm(ta, tb, m, n, k, a, A.data(), lda, B.data(), ldb, r, R.data(), m);
+    }
+    else if (R.isHip())
+    {
+        R.gpu()->rocblas_->gemm(ta, tb, m, n, k, a, A.data(), lda, B.data(), ldb, r, R.data(), m);
     }
     else
     {
@@ -746,9 +793,13 @@ void Matrix::mulVector(Matrix& A, Matrix& B, Matrix& R, real a, real r, MatrixTr
     assert(checkMatrixDevice({ &A, &B, &R }));
     int m = A.row_, n = A.number_;
 
-    if (R.inGPU())
+    if (R.isCuda())
     {
-        R.cuda()->cublas_->gemv(ta, m, n, a, A.data(), A.row_, B.data(), 1, r, R.data(), 1);
+        R.gpu()->cublas_->gemv(ta, m, n, a, A.data(), A.row_, B.data(), 1, r, R.data(), 1);
+    }
+    else if (R.isHip())
+    {
+        R.gpu()->rocblas_->gemv(ta, m, n, a, A.data(), A.row_, B.data(), 1, r, R.data(), 1);
     }
     else
     {
@@ -766,18 +817,21 @@ void Matrix::mulVector2(Matrix& A, Matrix& B, Matrix& R, real a, real r, MatrixT
         std::swap(m, n);
     };
 
-    if (R.inGPU())
+    if (R.isCuda())
     {
         for (int i = 0; i <= R.number_; i++)
         {
-            R.cuda()->cublas_->gemv(ta, m, n, a, A.data(), A.row_, B.data(), 1, r, R.getDataPointer(0, i), 1);
+            R.gpu()->cublas_->gemv(ta, m, n, a, A.data(), A.row_, B.data(), 1, r, R.getDataPtr(0, i), 1);
         }
+    }
+    else if (R.isHip())
+    {
     }
     else
     {
         for (int i = 0; i <= R.number_; i++)
         {
-            Cblas::gemv(ta, m, n, a, A.data(), A.row_, B.data(), 1, r, R.getDataPointer(0, i), 1);
+            Cblas::gemv(ta, m, n, a, A.data(), A.row_, B.data(), 1, r, R.getDataPtr(0, i), 1);
         }
     }
 }
@@ -786,20 +840,24 @@ void Matrix::mulVector2(Matrix& A, Matrix& B, Matrix& R, real a, real r, MatrixT
 void Matrix::elementMul(const Matrix& A, const Matrix& B, Matrix& R, real a, real r)
 {
     assert(checkMatrixDevice({ &A, &B, &R }));
-    if (R.inGPU())
+    if (R.isCuda())
     {
-        cudnnSetOpTensorDescriptor(R.cuda()->op_tensor_desc_, CUDNN_OP_TENSOR_MUL, MYCUDNN_DATA_REAL_C, CUDNN_NOT_PROPAGATE_NAN);
+        int op_desc[64] = { 0 };
+        cudnnSetOpTensorDescriptor((cudnnOpTensorDescriptor_t)op_desc, CUDNN_OP_TENSOR_MUL, MYCUDNN_DATA_REAL_C, CUDNN_NOT_PROPAGATE_NAN);
         //好像B不能与R相同
         if (R.data() != B.data())
         {
-            cudnnOpTensor(R.cuda()->cudnn_handle_, R.cuda()->op_tensor_desc_,
+            cudnnOpTensor(R.gpu()->cudnn_handle_, (cudnnOpTensorDescriptor_t)op_desc,
                 &a, A.tensor_desc(), A.data(), &const_real_1, B.tensor_desc(), B.data(), &r, R.tensor_desc(), R.data());
         }
         else
         {
-            cudnnOpTensor(R.cuda()->cudnn_handle_, R.cuda()->op_tensor_desc_,
+            cudnnOpTensor(R.gpu()->cudnn_handle_, (cudnnOpTensorDescriptor_t)op_desc,
                 &a, B.tensor_desc(), B.data(), &const_real_1, A.tensor_desc(), A.data(), &r, R.tensor_desc(), R.data());
         }
+    }
+    else if (R.isHip())
+    {
     }
     else
     {
@@ -819,14 +877,14 @@ void Matrix::add(const Matrix& A, const Matrix& B, Matrix& R, realc a, realc b, 
         return;
     }
     //注意只使用R的tensor_desc
-    if (R.inGPU())
+    if (R.isCuda())
     {
         if (A.data() == R.data())
         {
             r = r + a;
             if (b != 0 || r != 1)
             {
-                cudnnAddTensor(R.cuda()->cudnn_handle_, &b, R.tensor_desc(), B.data(), &r, R.tensor_desc(), A.data());
+                cudnnAddTensor(R.gpu()->cudnn_handle_, &b, R.tensor_desc(), B.data(), &r, R.tensor_desc(), A.data());
             }
         }
         else if (B.data() == R.data())
@@ -834,17 +892,22 @@ void Matrix::add(const Matrix& A, const Matrix& B, Matrix& R, realc a, realc b, 
             r = r + b;
             if (a != 0 || r != 1)
             {
-                cudnnAddTensor(R.cuda()->cudnn_handle_, &a, R.tensor_desc(), A.data(), &r, R.tensor_desc(), B.data());
+                cudnnAddTensor(R.gpu()->cudnn_handle_, &a, R.tensor_desc(), A.data(), &r, R.tensor_desc(), B.data());
             }
         }
         else
         {
+            int op_desc[64] = { 0 };
             //geam非Blas标准
             //R.cuda()->cublas_->geam(MATRIX_NO_TRANS, MATRIX_NO_TRANS, A.row_, A.number_, a, A.data(), A.row_, b, B.data(), B.row_, R.data(), R.row_);
-            cudnnSetOpTensorDescriptor(R.cuda()->op_tensor_desc_, CUDNN_OP_TENSOR_ADD, MYCUDNN_DATA_REAL_C, CUDNN_NOT_PROPAGATE_NAN);
+            cudnnSetOpTensorDescriptor((cudnnOpTensorDescriptor_t)op_desc, CUDNN_OP_TENSOR_ADD, MYCUDNN_DATA_REAL_C, CUDNN_NOT_PROPAGATE_NAN);
             //这个函数要求R不可等于A或B
-            cudnnOpTensor(R.cuda()->cudnn_handle_, R.cuda()->op_tensor_desc_, &a, R.tensor_desc(), A.data(), &b, R.tensor_desc(), B.data(), &r, R.tensor_desc(), R.data());
+            cudnnOpTensor(R.gpu()->cudnn_handle_, (cudnnOpTensorDescriptor_t)op_desc, &a, R.tensor_desc(), A.data(), &b, R.tensor_desc(), B.data(), &r, R.tensor_desc(), R.data());
         }
+    }
+    else if (R.isHip())
+    {
+        R.gpu()->rocblas_->geam(MATRIX_NO_TRANS, MATRIX_NO_TRANS, A.row_, A.number_, a, A.data(), A.row_, b, B.data(), B.row_, R.data(), R.row_);
     }
     else
     {
@@ -859,13 +922,17 @@ void Matrix::add(const Matrix& A, const Matrix& B, Matrix& R, realc a, realc b, 
 cccc::realc Matrix::dot(const Matrix& A, const Matrix& B)
 {
     assert(checkMatrixDevice({ &A, &B }));
-    if (A.inGPU())
+    if (A.isCuda())
     {
-        return A.cuda()->cublas_->dot(A.data_size_, A.getDataPointer(), 1, B.getDataPointer(), 1);
+        return A.gpu()->cublas_->dot(A.data_size_, A.getDataPtr(), 1, B.getDataPtr(), 1);
+    }
+    else if (A.isHip())
+    {
+        return A.gpu()->rocblas_->dot(A.data_size_, A.getDataPtr(), 1, B.getDataPtr(), 1);
     }
     else
     {
-        return Cblas::dot(A.data_size_, A.getDataPointer(), 1, B.getDataPointer(), 1);
+        return Cblas::dot(A.data_size_, A.getDataPtr(), 1, B.getDataPtr(), 1);
     }
 }
 
@@ -873,22 +940,30 @@ cccc::realc Matrix::dot(const Matrix& A, const Matrix& B)
 cccc::realc Matrix::dotCol(const Matrix& A, int cA, const Matrix& B, int cB)
 {
     assert(checkMatrixDevice({ &A, &B }));
-    if (A.inGPU())
+    if (A.isCuda())
     {
-        return A.cuda()->cublas_->dot(A.row_, A.getDataPointer(0, cA), 1, B.getDataPointer(0, cA), 1);
+        return A.gpu()->cublas_->dot(A.row_, A.getDataPtr(0, cA), 1, B.getDataPtr(0, cA), 1);
+    }
+    else if (A.isHip())
+    {
+        return A.gpu()->rocblas_->dot(A.row_, A.getDataPtr(0, cA), 1, B.getDataPtr(0, cA), 1);
     }
     else
     {
-        return Cblas::dot(A.row_, A.getDataPointer(0, cA), 1, B.getDataPointer(0, cA), 1);
+        return Cblas::dot(A.row_, A.getDataPtr(0, cA), 1, B.getDataPtr(0, cA), 1);
     }
 }
 
 //选择部分点乘
 realc Matrix::dotPart(int size, const Matrix& A, real* a, int cA, real* b, int cB)
 {
-    if (A.inGPU())
+    if (A.isCuda())
     {
-        return A.cuda()->cublas_->dot(size, a, cA, b, cB);
+        return A.gpu()->cublas_->dot(size, a, cA, b, cB);
+    }
+    else if (A.isHip())
+    {
+        return A.gpu()->rocblas_->dot(size, a, cA, b, cB);
     }
     else
     {
@@ -899,9 +974,13 @@ realc Matrix::dotPart(int size, const Matrix& A, real* a, int cA, real* b, int c
 //点乘，即所有元素平方和
 realc Matrix::dotSelf() const
 {
-    if (inGPU())
+    if (isCuda())
     {
-        return cuda()->cublas_->dot(data_size_, data(), 1, data(), 1);
+        return gpu()->cublas_->dot(data_size_, data(), 1, data(), 1);
+    }
+    else if (isHip())
+    {
+        return gpu()->rocblas_->dot(data_size_, data(), 1, data(), 1);
     }
     else
     {
@@ -912,9 +991,12 @@ realc Matrix::dotSelf() const
 //取符号
 void Matrix::sign(Matrix& A, Matrix& R, real v, real section)
 {
-    if (A.inGPU())
+    if (A.isCuda())
     {
         cuda_sign(A.data(), R.data(), A.data_size_, v, section);
+    }
+    else if (A.isHip())
+    {
     }
     else
     {
@@ -937,7 +1019,7 @@ void Matrix::sign(Matrix& A, Matrix& R, real v, real section)
 
 void Matrix::importData(real* v, int64_t n)
 {
-    MatrixData::copy(DeviceType::CPU, v, getDeviceType(), data(), std::min(n, data_size_));
+    MatrixData::copy(API_UNKNOWN, v, getApiType(), data(), std::min(n, data_size_));
     //for (int i = 0; i < n; i++)
     //{
     //    LOG("{}, ", v[i]);
@@ -946,15 +1028,18 @@ void Matrix::importData(real* v, int64_t n)
 
 void Matrix::exportData(real* v, int64_t n)
 {
-    MatrixData::copy(getDeviceType(), data(), DeviceType::CPU, v, std::min(n, data_size_));
+    MatrixData::copy(getApiType(), data(), API_UNKNOWN, v, std::min(n, data_size_));
 }
 
 //求倒数，a = scale ./ a
 void Matrix::reciprocal(real scale)
 {
-    if (inGPU())
+    if (isCuda())
     {
         cuda_reciprocal(data(), data(), data_size_, scale, 0.0);
+    }
+    else if (isHip())
+    {
     }
     else
     {
@@ -968,9 +1053,13 @@ void Matrix::reciprocal(real scale)
 //加上一个数字，a = v + scale .* a;
 void Matrix::addNumber(real v, real scale)
 {
-    if (inGPU())
+    if (isCuda())
     {
         cuda_addnumber(data(), data(), data_size_, v, scale);
+    }
+    else if (isHip())
+    {
+        hip_addnumber(data(), data(), data_size_, v, scale);
     }
     else
     {
@@ -984,9 +1073,13 @@ void Matrix::addNumber(real v, real scale)
 void Matrix::addNumber(const Matrix& A, Matrix& R, real v, real scale)
 {
     assert(checkMatrixDevice({ &A, &R }));
-    if (A.inGPU())
+    if (A.isCuda())
     {
         cuda_addnumber(A.data(), R.data(), A.data_size_, v, scale);
+    }
+    else if (A.isHip())
+    {
+        hip_addnumber(A.data(), R.data(), A.data_size_, v, scale);
     }
     else
     {
@@ -999,9 +1092,13 @@ void Matrix::addNumber(const Matrix& A, Matrix& R, real v, real scale)
 
 void Matrix::addNumberCol(real v, real scale, int c)
 {
-    if (inGPU())
+    if (isCuda())
     {
-        cuda_addnumber(getDataPointer(0, c), getDataPointer(0, c), row_, v, scale);
+        cuda_addnumber(getDataPtr(0, c), getDataPtr(0, c), row_, v, scale);
+    }
+    else if (isHip())
+    {
+        cuda_addnumber(getDataPtr(0, c), getDataPtr(0, c), row_, v, scale);
     }
     else
     {
@@ -1015,9 +1112,12 @@ void Matrix::addNumberCol(real v, real scale, int c)
 void Matrix::elementPow(const Matrix& A, Matrix& R, real e, real bias)
 {
     assert(checkMatrixDevice({ &A, &R }));
-    if (A.inGPU())
+    if (A.isCuda())
     {
         cuda_pow(A.data(), R.data(), A.data_size_, e, bias);
+    }
+    else if (A.isHip())
+    {
     }
     else
     {
@@ -1031,9 +1131,12 @@ void Matrix::elementPow(const Matrix& A, Matrix& R, real e, real bias)
 void Matrix::elementDiv(const Matrix& A, const Matrix& B, Matrix& R, real a, real b, real scale)
 {
     assert(checkMatrixDevice({ &A, &B, &R }));
-    if (A.inGPU())
+    if (A.isCuda())
     {
         cuda_div(A.data(), B.data(), R.data(), A.data_size_, a, b, scale);
+    }
+    else if (A.isHip())
+    {
     }
     else
     {
@@ -1047,9 +1150,12 @@ void Matrix::elementDiv(const Matrix& A, const Matrix& B, Matrix& R, real a, rea
 void Matrix::crossEntropy(const Matrix& A, const Matrix& Y, Matrix& R, real a, real scale)
 {
     assert(checkMatrixDevice({ &A, &Y, &R }));
-    if (A.inGPU())
+    if (A.isCuda())
     {
         cuda_cross_entropy(A.data(), Y.data(), R.data(), A.data_size_, a, scale);
+    }
+    else if (A.isHip())
+    {
     }
     else
     {
@@ -1064,9 +1170,12 @@ void Matrix::crossEntropy(const Matrix& A, const Matrix& Y, Matrix& R, real a, r
 void Matrix::crossEntropy2(const Matrix& A, const Matrix& Y, Matrix& R, real a, real scale)
 {
     assert(checkMatrixDevice({ &A, &Y, &R }));
-    if (A.inGPU())
+    if (A.isCuda())
     {
         cuda_cross_entropy2(A.data(), Y.data(), R.data(), A.data_size_, a, scale);
+    }
+    else if (A.isHip())
+    {
     }
     else
     {
@@ -1086,18 +1195,18 @@ bool Matrix::checkMatrixDevice(const std::vector<const Matrix*>& v)
     }
     else
     {
-        const CudaControl* cuda = nullptr;
+        const GpuControl* gpu = nullptr;
         for (int i = 0; i < v.size(); i++)
         {
             if (v[i]->data_size_ > 0)
             {
-                cuda = v[i]->cuda();
+                gpu = v[i]->gpu();
                 break;
             }
         }
         for (int i = 0; i < v.size(); i++)
         {
-            if (v[i]->data_size_ > 0 && cuda != v[i]->cuda())
+            if (v[i]->data_size_ > 0 && gpu != v[i]->gpu())
             {
                 LOG(stderr, "Matrices are not in the same device!\n");
                 return false;
@@ -1112,33 +1221,43 @@ void Matrix::message(const std::string& info) const
 {
     //int w, h, c, n, t;
     //cudnnDataType_t tt;
-    LOG("{}:", info);
-    if (inGPU())
+    LOG(stdout, "{}:", info);
+    if (isCuda())
     {
-        LOG(" GPU({}),", cuda()->getDeviceID());
+        LOG(stdout, " GPU({}, CUDA),", gpu()->getDeviceID());
+    }
+    else if (isHip())
+    {
+        LOG(stdout, " GPU({}, HIP),", gpu()->getDeviceID());
     }
     else
     {
-        LOG(" CPU,");
+        LOG(stdout, " CPU,");
     }
-    LOG(" dim =");
-    for (auto& i : dim_)
-    {
-        LOG(" {}", i);
-    }
-    //LOG(", address = %p\n", getDataPointer());
-    LOG(", norm^2 = {}\n", dotSelf());
+    LOG(stdout, " dim = {}\n", dim_);
+    LOG(stdout, ", norm^2 = {}\n", dotSelf());
     //cudnnDataType_t t;
     //int n;
     //int d1[8];
     //int s1[8];
     //cudnnGetTensorNdDescriptor(tensor_desc(), 8, &t, &n, d1, s1);
-    //LOG("%d %d\n", t, n);
+    //LOG(stdout, " {} {}\n", int(t), n);
     //for (int i = 0; i < 8; i++)
     //{
-    //    LOG("%d %d\n", d1[i], s1[i]);
+    //    LOG(stdout, " {} {}\n", d1[i], s1[i]);
     //}
     //cudnnSetTensorNdDescriptor(tensor_desc_, t, n, d1, s1);
-}    // namespace cccc
+}
 
+std::string Matrix::sizeMessage(int include_batch) const
+{
+    if (include_batch)
+    {
+        return fmt1::format("Matrix({}, {}, {}, {})", width_, height_, channel_, number_, getDataPtr());
+    }
+    else
+    {
+        return fmt1::format("Matrix({}, {}, {}, batch)", width_, height_, channel_);
+    }
+}
 }    // namespace cccc

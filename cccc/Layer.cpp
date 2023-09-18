@@ -1,4 +1,4 @@
-#include "Layer.h"
+﻿#include "Layer.h"
 #include "MatrixEx.h"
 #include "Random.h"
 #include "VectorMath.h"
@@ -127,7 +127,8 @@ void Layer::makeMatrixOp(std::vector<MatrixOp>& op_queue)
     case LAYER_CONNECTION_CORRELATION:
     {
         MatrixOp op;
-        int out_channel = option_->getInt(layer_name_, "channel", 1);
+        int node = option_->getInt(layer_name_, "node", 1);
+        int out_channel = option_->getInt(layer_name_, "channel", node);
         auto prev_dim = prev_layer_->A_->getDim();
         auto prev_dim_window = prev_dim;
         int window_dim_size = prev_dim.size() - 2;
@@ -181,7 +182,8 @@ void Layer::makeMatrixOp(std::vector<MatrixOp>& op_queue)
         }
         VectorMath::force_resize(padding, window_dim_size, 0);
         int reverse = option_->getInt(layer_name_, "reverse", 0);
-        op.as_pool(prev_layer_->A_, A_, POOLING_MAX, reverse, window, stride, padding);
+        auto pool_type = option_->getEnum<PoolingType>(layer_name_, "pool_type", POOLING_MAX);
+        op.as_pool(prev_layer_->A_, A_, pool_type, reverse, window, stride, padding);
         op_queue.push_back(op);
         break;
     }

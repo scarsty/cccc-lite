@@ -18,13 +18,13 @@
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
-    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
     <PlatformToolset>v143</PlatformToolset>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
-    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
     <PlatformToolset>v143</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
@@ -45,6 +45,7 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LinkIncremental>true</LinkIncremental>
     <OutDir>$(SolutionDir)$(Platform)\$(Configuration)\</OutDir>
+    <EnableClangTidyCodeAnalysis>true</EnableClangTidyCodeAnalysis>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LinkIncremental>false</LinkIncremental>
@@ -56,22 +57,23 @@
       </PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
-      <PreprocessorDefinitions>_DEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>.;./layer;../include;../include/cuda;../cccc-cuda;$(CUDA_PATH)/include;$(USR_LOCAL)\include;../../mlcc;$(VCPKG_LIB_PATH)\x64-windows\include</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>_DEBUG;_WINDOWS;__HIP_PLATFORM_AMD__;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>.;./layer;../include;../include/cuda;../cccc-cuda;../cccc-hip;$(CUDA_PATH)/include;$(HIP_PATH)/include;../../mlcc;$(VCPKG_LIB_PATH)\x64-windows\include</AdditionalIncludeDirectories>
       <PreprocessToFile>false</PreprocessToFile>
       <OpenMPSupport>false</OpenMPSupport>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
-      <AdditionalOptions>/source-charset:utf-8 %(AdditionalOptions)</AdditionalOptions>
+      <LanguageStandard>stdcpplatest</LanguageStandard>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>./lib</AdditionalLibraryDirectories>
-      <AdditionalDependencies>%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(CUDA_PATH)/lib/x64;$(HIP_PATH)/lib;../lib/x64;$(SolutionDir)$(Platform)\$(Configuration)\</AdditionalLibraryDirectories>
       <ForceSymbolReferences>%(ForceSymbolReferences)</ForceSymbolReferences>
+      <Profile>true</Profile>
+      <AdditionalDependencies>cccc-cuda.lib;openblas.lib;nvml.lib;cudart.lib;cublas.lib;cudnn_adv_infer.lib;cudnn_adv_train.lib;cudnn_cnn_infer.lib;cudnn_cnn_train.lib;cudnn_ops_infer.lib;cudnn_ops_train.lib;cccc-hip.lib;rocblas.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <Lib>
-      <AdditionalDependencies>cccc-cuda.lib;openblas.lib;nvml.lib;cudart_static.lib;cublas.lib;cudnn_adv_infer.lib;cudnn_adv_train.lib;cudnn_cnn_infer.lib;cudnn_cnn_train.lib;cudnn_ops_infer.lib;cudnn_ops_train.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>cccc-cuda.lib;openblas.lib;nvml.lib;cudart.lib;cublas.lib;cudnn_adv_infer.lib;cudnn_adv_train.lib;cudnn_cnn_infer.lib;cudnn_cnn_train.lib;cudnn_ops_infer.lib;cudnn_ops_train.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Lib>
     <Lib>
       <AdditionalLibraryDirectories>$(CUDA_PATH)/lib/x64;../lib/x64;$(SolutionDir)$(Platform)\$(Configuration)\</AdditionalLibraryDirectories>
@@ -85,42 +87,47 @@
       <Optimization>MaxSpeed</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
-      <PreprocessorDefinitions>NNO_CUDA;NDEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>.;./layer;../include;../include/cuda;../../mlcc;../cccc-cuda;$(CUDA_PATH)/include;$(USR_LOCAL)\include;$(VCPKG_LIB_PATH)\x64-windows\include</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>NNO_CUDA;NDEBUG;_WINDOWS;DISABLE_OUTOUT_NET;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>.;./layer;../include;../include/cuda;../../mlcc;../cccc-cuda;../cccc-hip;$(CUDA_PATH)/include;$(HIP_PATH)/include;$(VCPKG_LIB_PATH)\x64-windows\include</AdditionalIncludeDirectories>
       <EnableParallelCodeGeneration>true</EnableParallelCodeGeneration>
       <OpenMPSupport>true</OpenMPSupport>
       <PreprocessToFile>false</PreprocessToFile>
       <FloatingPointModel>Precise</FloatingPointModel>
       <SDLCheck>false</SDLCheck>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
-      <AdditionalOptions>/source-charset:utf-8 %(AdditionalOptions)</AdditionalOptions>
+      <LanguageStandard>stdcpplatest</LanguageStandard>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>./lib;$(SolutionDir)$(Platform)\$(Configuration)\</AdditionalLibraryDirectories>
-      <AdditionalDependencies>cccc-cuda.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(CUDA_PATH)/lib/x64;$(HIP_PATH)/lib;../lib/x64;$(SolutionDir)$(Platform)\$(Configuration)\</AdditionalLibraryDirectories>
+      <AdditionalDependencies>cccc-cuda.lib;openblas.lib;cudart_static.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <ForceSymbolReferences>%(ForceSymbolReferences)</ForceSymbolReferences>
       <ModuleDefinitionFile>
       </ModuleDefinitionFile>
+      <Profile>true</Profile>
+      <IgnoreSpecificDefaultLibraries>amdhip64.lib</IgnoreSpecificDefaultLibraries>
     </Link>
     <Lib>
-      <AdditionalDependencies>cccc-cuda.lib;openblas.lib;nvml.lib;cudart_static.lib</AdditionalDependencies>
+      <AdditionalDependencies>cccc-cuda.lib;openblas.lib;nvml.lib;cudart.lib;cublas.lib;cudnn_adv_infer.lib;cudnn_adv_train.lib;cudnn_cnn_infer.lib;cudnn_cnn_train.lib;cudnn_ops_infer.lib;cudnn_ops_train.lib</AdditionalDependencies>
     </Lib>
     <Lib>
-      <AdditionalLibraryDirectories>$(CUDA_PATH)/lib/x64;../lib/x64;$(SolutionDir)$(Platform)\$(Configuration)\;$(VCPKG_LIB_PATH)\x64-windows\lib</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>$(CUDA_PATH)/lib/x64;../lib/x64;$(SolutionDir)$(Platform)\$(Configuration)\</AdditionalLibraryDirectories>
     </Lib>
+    <PreBuildEvent>
+      <Command>
+      </Command>
+    </PreBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="..\..\mlcc\Cifa.cpp" />
-    <ClCompile Include="..\..\mlcc\filefunc.cpp" />
     <ClCompile Include="..\..\mlcc\strfunc.cpp" />
+    <ClCompile Include="..\..\mlcc\filefunc.cpp" />
     <ClCompile Include="Activer.cpp" />
-    <ClCompile Include="cublas_real.cpp" />
-    <ClCompile Include="CudaControl.cpp" />
-    <ClCompile Include="cuda_lib.cpp" />
+    <ClCompile Include="GpuControl.cpp" />
+    <ClCompile Include="gpu_lib.cpp" />
     <ClCompile Include="DataPreparerFactory.cpp" />
     <ClCompile Include="DataPreparerImage.cpp" />
     <ClCompile Include="DataPreparerTxt.cpp" />
@@ -135,16 +142,30 @@
     <ClCompile Include="NetLayer.cpp" />
     <ClCompile Include="Option.cpp" />
     <ClCompile Include="Brain.cpp" />
+    <ClCompile Include="predict.cpp" />
     <ClCompile Include="Solver.cpp" />
     <ClCompile Include="AdditionalCost.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="..\..\mlcc\Cifa.h" />
+    <ClInclude Include="..\..\mlcc\ConsoleControl.h" />
+    <ClInclude Include="..\..\mlcc\INIReaderBin.h" />
+    <ClInclude Include="..\..\mlcc\strfunc.h" />
+    <ClInclude Include="..\..\mlcc\DynamicLibrary.h" />
+    <ClInclude Include="..\..\mlcc\filefunc.h" />
+    <ClInclude Include="..\..\mlcc\fmt1.h" />
+    <ClInclude Include="..\..\mlcc\INIReader.h" />
+    <ClInclude Include="..\..\mlcc\Random.h" />
+    <ClInclude Include="..\..\mlcc\SimpleBuffer.h" />
+    <ClInclude Include="..\..\mlcc\Timer.h" />
     <ClInclude Include="Activer.h" />
     <ClInclude Include="blas_types.h" />
     <ClInclude Include="cblas_real.h" />
+    <ClInclude Include="hip_libs.inc" />
+    <ClInclude Include="math_supplement.h" />
     <ClInclude Include="cublas_real.h" />
-    <ClInclude Include="CudaControl.h" />
-    <ClInclude Include="cuda_lib.h" />
+    <ClInclude Include="GpuControl.h" />
+    <ClInclude Include="gpu_lib.h" />
     <ClInclude Include="DataPreparerFactory.h" />
     <ClInclude Include="DataPreparerImage.h" />
     <ClInclude Include="DataPreparerTxt.h" />
@@ -160,7 +181,9 @@
     <ClInclude Include="dll_export.h" />
     <ClInclude Include="Matrix.h" />
     <ClInclude Include="MatrixEx.h" />
-    <ClInclude Include="Neural.h" />
+    <ClInclude Include="predict.h" />
+    <ClInclude Include="resource.h" />
+    <ClInclude Include="rocblas_real.h" />
     <ClInclude Include="Solver.h" />
     <ClInclude Include="AdditionalCost.h" />
     <ClInclude Include="VectorMath.h" />
@@ -170,11 +193,14 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="..\..\README.md" />
-    <None Include="cuda_lib.inc" />
+    <None Include="cuda_libs.inc" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="..\CMakeLists.txt" />
     <Text Include="CMakeLists.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="cccc.rc" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

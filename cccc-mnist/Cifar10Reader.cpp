@@ -1,6 +1,6 @@
 #include "Cifar10Reader.h"
-#include "filefunc.h"
 #include "Log.h"
+#include "filefunc.h"
 
 namespace cccc
 {
@@ -64,7 +64,7 @@ void Cifar10Reader::load(Matrix& X, Matrix& Y, std::string path /*= "cifa10"*/, 
     {
         X.resize(32, 32, 3, 50000);
         Y.resize(10, 50000);
-        Y.initData(0);
+        Y.fillData(0);
         LOG("Loading Cifar10 train data... ");
         readData(X, Y, path + "data_batch_1.bin", 0);
         readData(X, Y, path + "data_batch_2.bin", 10000);
@@ -77,7 +77,7 @@ void Cifar10Reader::load(Matrix& X, Matrix& Y, std::string path /*= "cifa10"*/, 
     {
         X.resize(32, 32, 3, 10000);
         Y.resize(10, 10000);
-        Y.initData(0);
+        Y.fillData(0);
         LOG("Loading Cifar10 test data... ");
         readData(X, Y, path + "test_batch.bin", 0);
         LOG("done\n");

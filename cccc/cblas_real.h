@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include "blas_types.h"
 #include "cblas.h"
 
@@ -314,6 +314,19 @@ public:
     CBLAS_FUNCTION void trsm(const MatrixSideType Side, const MatrixFillType Uplo, const MatrixTransType TransA, const MatrixDiagType Diag, const int M, const int N, const double alpha, const double* A, const int lda, double* B, const int ldb)
     {
         cblas_dtrsm(CblasColMajor, get_side(Side), get_uplo(Uplo), get_trans(TransA), get_diag(Diag), M, N, alpha, A, lda, B, ldb);
+    }
+    // extension of cublas and rocblas, an empty function is defined here to avoid compilation error
+    CBLAS_FUNCTION void geam(const MatrixTransType TransA, const MatrixTransType TransB, int m, int n, const float alpha, const float* A, int lda, const float beta, const float* B, int ldb, float* C, int ldc)
+    {
+    }
+    CBLAS_FUNCTION void geam(const MatrixTransType TransA, const MatrixTransType TransB, int m, int n, const double alpha, const double* A, int lda, const double beta, const double* B, int ldb, double* C, int ldc)
+    {
+    }
+    CBLAS_FUNCTION void dgem(MatrixSideType Side, int m, int n, const float* A, int lda, const float* x, int incx, float* C, int ldc)
+    {
+    }
+    CBLAS_FUNCTION void dgem(MatrixSideType Side, int m, int n, const double* A, int lda, const double* x, int incx, double* C, int ldc)
+    {
     }
 };
 

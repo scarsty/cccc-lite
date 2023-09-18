@@ -1,18 +1,27 @@
-#include "MatrixOp.h"
+﻿#include "MatrixOp.h"
+#include "Timer.h"
 #include "VectorMath.h"
+#include "strfunc.h"
+#include <functional>
 #include <map>
 
 namespace cccc
 {
+inline std::string to_string(const std::string& fmt, const cccc::MatrixSP& m)
+{
+    return fmt1::sprintf2(fmt, "M%p", m.get());
+}
 
 void MatrixOp::forward(std::vector<MatrixOp>& op_queue)
 {
+    //Timer t;
     for (auto& op : op_queue)
     {
         //op.in_[0]->message("in");
         op.forwardData();
         //op.out_[0]->message("out");
     }
+    //LOG("forward time: {} s\n", t.getElapsedTime());
 }
 
 void MatrixOp::backward(std::vector<MatrixOp>& op_queue, std::vector<MatrixOp>& loss, bool clear_d)
@@ -79,14 +88,16 @@ void MatrixOp::forwardData()
         MatrixEx::activeForward(X, Y, ActiveFunctionType(para_int_.back()), para_int_, para_real_, para_matrix_);
         break;
     case MatrixOpType::POOL:
-        MatrixEx::poolingForward(X, Y, PoolingType(para_int_[1]), para_int_[2],
-            para_int_v_[0], para_int_v_[1], para_int_v_[2], para_real_[0]);
+        MatrixEx::poolingForward(X, Y, PoolingType(para_int_[1]), para_int_[2], para_int_v_[0], para_int_v_[1], para_int_v_[2], para_real_[0]);
         break;
     case MatrixOpType::CONV:
         MatrixEx::convolutionForward(X, *wb_[0], Y, para_int_, para_matrix_, para_int_v_[0], para_int_v_[1], para_real_[0]);
         break;
     case MatrixOpType::CORR:
         MatrixEx::correlationForward(X, *wb_[0], Y, para_int_, para_matrix_, para_int_v_[0], para_int_v_[1], para_real_[0]);
+        break;
+    case MatrixOpType::MAX:
+        MatrixEx::matrix_max(*in_[0], *in_[1], Y);
         break;
     }
 }
@@ -114,11 +125,7 @@ void MatrixOp::backwardDataWeight()
         }
         if (wb_[0]->needReverse())
         {
-            //Y.d().message();
-            //(*in_[0]).message();
-            //wb_[0]->d().message();
             Matrix::mul(Y.d(), *in_[0], wb_[0]->d(), para_real_[0], data_weight, MATRIX_NO_TRANS, MATRIX_TRANS);
-            //wb_[0]->d().message();
         }
         break;
     case MatrixOpType::ELE_MUL:
@@ -146,8 +153,7 @@ void MatrixOp::backwardDataWeight()
     case MatrixOpType::POOL:
         if (in_[0]->needReverse())
         {
-            MatrixEx::poolingBackward(*in_[0], Y, PoolingType(para_int_[1]), para_int_[2],
-                para_int_v_[0], para_int_v_[1], para_int_v_[2], para_real_[0], in_[0]->keepWeight());
+            MatrixEx::poolingBackward(*in_[0], Y, PoolingType(para_int_[1]), para_int_[2], para_int_v_[0], para_int_v_[1], para_int_v_[2], para_real_[0], in_[0]->keepWeight());
         }
         break;
     case MatrixOpType::CONV:
@@ -159,6 +165,8 @@ void MatrixOp::backwardDataWeight()
     case MatrixOpType::RESHAPE:
         Matrix::copyData(Y.d(), in_[0]->d());
         break;
+    case MatrixOpType::MAX:
+        MatrixEx::matrix_maxb(*in_[0], *in_[1], Y, in_[0]->keepWeight(), in_[1]->keepWeight(), 1);
     }
     for (auto& m : in_)
     {
@@ -174,18 +182,18 @@ void MatrixOp::backwardLoss()
     case MatrixOpType::LOSS:
         if (scale_ != 0)
         {
-            //此处直接相减，表示欧氏距离平方，若配合前一层的softmax_ce或sigmoid_ce则表示交叉熵
-            //in_[0]->message();
-            //in_[1]->message("answer");
-            //in_[0]->d().message("0");
-            Matrix::add(*in_[0], *in_[1], in_[0]->d(), scale_, -scale_, in_[0]->keepWeight());
-            //in_[0]->d().message("loss1");
-            //printf("%f\n", in_[0].keepWeight());
-            if (para_matrix_.size() >= 1 && para_matrix_[0].getDataSize() == in_[0]->getDataSize())    //调整loss的强调权重
+            if (in_.size() >= 3 && in_[2]->getDataSize() == in_[0]->getDataSize())
             {
-                Matrix::elementMul(in_[0]->d(), para_matrix_[0], in_[0]->d());
-                //in_[1]->printAsMatrix();
-                //in_[0]->d().printAsMatrix();
+                //有损失权重的情况
+                //注意这里使用in_[2]->d()作为了中间变量
+                Matrix::add(*in_[0], *in_[1], in_[2]->d(), scale_, -scale_, 0);
+                Matrix::elementMul(in_[2]->d(), *in_[2], in_[0]->d(), 1, in_[0]->keepWeight());
+            }
+            else
+            {
+                //没有损失权重的情况，也是一般的情况
+                //此处直接相减，表示欧氏距离平方，若配合前一层的softmax_ce或sigmoid_ce则表示交叉熵
+                Matrix::add(*in_[0], *in_[1], in_[0]->d(), scale_, -scale_, in_[0]->keepWeight());
             }
         }
         break;
@@ -199,46 +207,90 @@ void MatrixOp::backwardLoss()
     in_[0]->setKeepWeight(1);
 }
 
-void MatrixOp::print(const std::vector<MatrixOp>& op_queue)
+std::string MatrixOp::ir(const std::vector<MatrixOp>& op_queue)
 {
-    LOG("begin->");
+    std::string content;
+    content += fmt1::format("{} = {};", op_queue.front().in_[0], op_queue.front().in_[0]->sizeMessage(0));
     for (const auto& op : op_queue)
     {
-        op.print();
+        content += op.print();
     }
-    LOG("end\n");
+    content += fmt1::format("setXY({}, {});", op_queue.front().in_[0], op_queue.back().out_[0]);
+    return content;
 }
 
-void MatrixOp::print() const
+std::string MatrixOp::print() const
 {
-    std::vector<std::string> strs = {
-        "none",
-        "add",
-        "mul",
-        "ele_mul",
-        "add_bias",
-        "concat",
-        "active",
-        "pool",
-        "conv",
-        "reshape",
-        "loss",
-        "l2",
-    };
+    std::string line;
+    switch (type_)
+    {
+    case MatrixOpType::ADD:
+        line = fmt1::format("{} = add({}, {});", out_[0], in_[0], in_[1]);
+        break;
+    case MatrixOpType::MUL:
+        line = fmt1::format("{} = mul({}, {}, [{}, {}, {}, batch]);", out_[0], wb_[0], in_[0],
+            out_[0]->getWidth(), out_[0]->getHeight(), out_[0]->getChannel());
+        break;
+    case MatrixOpType::ELE_MUL:
+        break;
+    case MatrixOpType::ADD_BIAS:
+        line = fmt1::format("{} = addBias({}, {});", out_[0], in_[0], wb_[0]);
+        break;
+    case MatrixOpType::CONCAT:
+        line = fmt1::format("{} = concat({});", out_[0], in_);
+        break;
+    case MatrixOpType::ACTIVE:
+        line = fmt1::format("{} = active({}, {}, {}, {});", out_[0], in_[0], para_int_.back(), para_int_v_);
+        break;
+    case MatrixOpType::POOL:
+        if (para_int_[2] == 0)
+        {
+            line = fmt1::format("{} = pool({}, {}, {}, {}, {});", out_[0], in_[0], para_int_[1], para_int_v_[0], para_int_v_[1], para_int_v_[2]);
+        }
+        else
+        {
+            line = fmt1::format("{} = reversepool({}, {}, {}, {});", out_[0], in_[0], para_int_v_[0], para_int_v_[1], para_int_v_[2]);
+        }
+        break;
+    case MatrixOpType::CONV:
+        line = fmt1::format("{} = conv({}, {}, {}, {});", out_[0], in_[0], wb_[0], para_int_v_[0], para_int_v_[1]);
+        break;
+    case MatrixOpType::CORR:
+        line = fmt1::format("{} = corr({}, {}, {}, {});", out_[0], in_[0], wb_[0], para_int_v_[0], para_int_v_[1]);
+        break;
+    case MatrixOpType::MAX:
+        line = fmt1::format("{} = max({}, {});", out_[0], in_[0], in_[1]);
+        break;
+    }
+    strfunc::replaceAllSubStringRef(line, "[", "{");
+    strfunc::replaceAllSubStringRef(line, "]", "}");
+    line += fmt1::format("/*out {}*/;", out_[0]->sizeMessage());
+    return line;
+}
 
-    LOG("{}->", strs[int(type_)]);
-#ifdef _DEBUG
-    //LOG( "\n");
-    //for (const auto& m : matrix_in_)
-    //{
-    //    m.message();
-    //}
-    //for (const auto& m : matrix_out_)
-    //{
-    //    m.message();
-    //}
-    //LOG("\n");
-#endif
+ActiveFunctionType MatrixOp::getActiveType() const
+{
+    if (type_ == MatrixOpType::ACTIVE)
+    {
+        return (ActiveFunctionType)para_int_.back();
+    }
+    else
+    {
+        return ACTIVE_FUNCTION_NONE;
+    }
+}
+
+int MatrixOp::setActiveType(ActiveFunctionType af)
+{
+    if (type_ == MatrixOpType::ACTIVE)
+    {
+        para_int_.back() = (int)af;
+        return 0;
+    }
+    else
+    {
+        return -1;
+    }
 }
 
 void MatrixOp::simpleQueue(std::vector<MatrixOp>& op_queue, Matrix& X, Matrix& A)
@@ -267,7 +319,7 @@ void MatrixOp::simpleQueue(std::vector<MatrixOp>& op_queue, Matrix& X, Matrix& A
             }
             for (auto& m : *v1)
             {
-                if (m->getDataPointer() == M.getDataPointer())
+                if (m->getDataPtr() == M.getDataPtr())
                 {
                     connect[i]++;
                     for (auto& m : *v2)
@@ -295,6 +347,14 @@ void MatrixOp::simpleQueue(std::vector<MatrixOp>& op_queue, Matrix& X, Matrix& A
             ++it;
         }
         i++;
+    }
+    //repair sigmoid or softmax at the last layer but no cross entropy
+    if (op_queue.back().type_ == MatrixOpType::ACTIVE)
+    {
+        auto active_type = ActiveFunctionType(op_queue.back().para_int_.back());
+        if (active_type == ACTIVE_FUNCTION_SIGMOID) { active_type = ACTIVE_FUNCTION_SIGMOID_CE; }
+        if (active_type == ACTIVE_FUNCTION_SOFTMAX) { active_type = ACTIVE_FUNCTION_SOFTMAX_CE; }
+        op_queue.back().para_int_.back() = int(active_type);
     }
 }
 
@@ -354,7 +414,7 @@ void MatrixOp::as_add(std::vector<MatrixSP>& X_vector, MatrixSP& Y)
 void MatrixOp::as_addBias(MatrixSP& X, MatrixSP& bias, MatrixSP& Y, realc a, realc b)
 {
     //Matrix as_1(A.getNumber(), 1);
-    //as_1.initData(1);
+    //as_1.fillData(1);
     //需要注意cudnn自带的只支持到5维，若需更多维可以在这里修改写入op_queue的矩阵的维度
     Y->shareData(*X);    //需注意偏移操作是特殊处理的
     Y->resize(*X);
@@ -443,6 +503,8 @@ void MatrixOp::as_conv(MatrixSP& X, MatrixSP& W, MatrixSP& Y, std::vector<int> s
     {
         t = MatrixOpType::CORR;
     }
+    //在卷积计算开始之前，会查找最快的算法，v中依次保存了前向、反向数据、反向权重的算法编号、张量参数（mathtype）、组数
+    //组数不同会导致工作空间尺寸不同，实际上此处只三个工作空间只用了一个，另两个未使用
     set(t, { X }, { W }, { Y }, v, { a }, { Matrix(), Matrix(), Matrix() }, { stride, padding });
 }
 
@@ -451,6 +513,12 @@ void MatrixOp::as_reshape(MatrixSP& X, MatrixSP& Y, std::vector<int>& dim)
     Y->shareData(*X);
     Y->resize(dim);
     set(MatrixOpType::RESHAPE, { X }, {}, { Y });
+}
+
+void MatrixOp::as_max(MatrixSP& X1, MatrixSP& X2, MatrixSP& Y)
+{
+    Y->resize(*X1);
+    set(MatrixOpType::MAX, { X1, X2 }, {}, { Y });
 }
 
 std::vector<MatrixOp> operator+(const std::vector<MatrixOp>& A, const std::vector<MatrixOp>& B)

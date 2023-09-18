@@ -1,4 +1,4 @@
-#include "DataPreparerFactory.h"
+ï»¿#include "DataPreparerFactory.h"
 #include "DataPreparerImage.h"
 #include "DataPreparerTxt.h"
 #include "DynamicLibrary.h"
@@ -30,18 +30,10 @@ DataPreparer* DataPreparerFactory::create(Option* op, const std::string& section
 #endif
     auto function_name = op->getString(section, "function", "dp_ext");
 
-    if (library_name.find(".") == std::string::npos)
-    {
-#ifdef _WIN32
-        library_name = library_name + ".dll";
-#else
-        library_name = "lib" + library_name + ".so";
-#endif
-    }
     LOG("Try to create data preparer with section \"{}\"\n", section);
     if (!library_name.empty() && !function_name.empty())
     {
-        //´Ë´¦Çë×¢Òâ£º64Î»ÏµÍ³ÖÐdllµÄº¯ÊýÃûÐÎÊ½ÉÏÓë__cdeclÒ»ÖÂ¡£Éî¶ÈÑ§Ï°ºÄ·ÑÄÚ´æ½Ï´ó£¬¹Ê´Ë´¦²»ÔÙ¶Ô32Î»ÏµÍ³½øÐÐ´¦Àí
+        //æ­¤å¤„è¯·æ³¨æ„ï¼š64ä½ç³»ç»Ÿä¸­dllçš„å‡½æ•°åå½¢å¼ä¸Šä¸Ž__cdeclä¸€è‡´ã€‚æ·±åº¦å­¦ä¹ è€—è´¹å†…å­˜è¾ƒå¤§ï¼Œæ•…æ­¤å¤„ä¸å†å¯¹32ä½ç³»ç»Ÿè¿›è¡Œå¤„ç†
         using MYFUNC = void* (*)();
         MYFUNC func = nullptr;
         func = (MYFUNC)DynamicLibrary::getFunction(library_name, function_name);
@@ -87,30 +79,6 @@ DataPreparer* DataPreparerFactory::create(Option* op, const std::string& section
     dp->init();
 
     return dp;
-}
-
-void DataPreparerFactory::destroy(DataPreparer* dp)
-{
-    if (dp)
-    {
-        if (dp->create_by_dll_.empty())
-        {
-            delete dp;
-        }
-        else
-        {
-            //Çë¾¡Á¿Ê¹ÓÃ¾²Ì¬·½Ê½
-            //dp->destroy();
-            //using MYFUNC = void (*)(void*);
-            //MYFUNC func = nullptr;
-            //func = (MYFUNC)DynamicLibrary::getFunction(dp->create_by_dll_, "destroy");
-            //if (func)
-            //{
-            //    func(dp);
-            //}
-        }
-        dp = nullptr;
-    }
 }
 
 }    // namespace cccc

@@ -1,4 +1,4 @@
-#include "NetCifa.h"
+ï»¿#include "NetCifa.h"
 #include "Log.h"
 #include "Option.h"
 
@@ -90,16 +90,10 @@ int NetCifa::init2()
         LOG("Error in script!\n");
         return -1;
     }
-    MatrixOp::simpleQueue(op_queue_, getX(), getA());
-    if (op_queue_.size() == 0)
-    {
-        LOG("Empty compute queue!\n");
-        return -2;
-    }
     map_matrix_.clear();
 #ifdef _DEBUG
-    MatrixOp::print(op_queue_);
-    MatrixOp::print(loss_);
+    //LOG("{}\n", MatrixOp::ir(op_queue_));
+    //MatrixOp::ir(loss_);
 #endif
     if (X_ && A_)
     {
@@ -125,16 +119,19 @@ int NetCifa::runScript(const std::string& script)
 
     auto lines = strfunc::splitString(strfunc::replaceAllSubString(script, "\r", ""), "\n");
     int i = 1;
-    LOG::setLevel(option_->getInt("train", "output_net", 1));
-    for (auto& l : lines)
+    if (option_->getInt("train", "output_net", 1))
     {
-        LOG("{:3}\t{}\n", i++, l);
+        for (auto& l : lines)
+        {
+            LOG("{:3}\t{}\n", i++, l);
+        }
+        LOG("\n");
     }
-    LOG("\n");
+    cifa_.setOutputError(false);
     auto o = cifa_.run_script(script);
-    LOG::restoreLevel();
     if (o.type == "Error")
     {
+        LOG("{}", o.content);
         return -1;
     }
     return 0;
@@ -194,13 +191,13 @@ int NetCifa::registerFunctions()
         });
     cifa_.register_function("setXY", [this](cifa::ObjectVector& v)
         {
-            //Îª·½±ãÀí½â£¬×¢ÒâÃû×ÖµÄÇø±ð
+            //ä¸ºæ–¹ä¾¿ç†è§£ï¼Œæ³¨æ„åå­—çš„åŒºåˆ«
             setXA(map_matrix_[v[0]], map_matrix_[v[1]]);
             return cifa::Object();
         });
     cifa_.register_function("setLossWeight", [this](cifa::ObjectVector& v)
         {
-            loss_weight_ = *map_matrix_[v[0]];
+            loss_weight_ = map_matrix_[v[0]];
             return cifa::Object();
         });
     cifa_.register_function("clearWeight", [this](cifa::ObjectVector& v)
@@ -216,14 +213,29 @@ int NetCifa::registerFunctions()
             }
             return cifa::Object();
         });
-
+    cifa_.register_function("addBias", [this](cifa::ObjectVector& v)
+        {
+            MatrixOp op;
+            auto o = registerMatrix(makeMatrixSP());
+            op.as_addBias(map_matrix_[v[0]], map_matrix_[v[1]], map_matrix_[o]);
+            op_queue_.push_back(op);
+            return o;
+        });
+    cifa_.register_function("add", [this](cifa::ObjectVector& v)
+        {
+            MatrixOp op;
+            auto o = registerMatrix(makeMatrixSP());
+            op.as_add(map_matrix_[v[0]], map_matrix_[v[1]], map_matrix_[o]);
+            op_queue_.push_back(op);
+            return o;
+        });
     cifa_.user_add = [this](const cifa::Object& l, const cifa::Object& r)
     {
         if (l.type == "Matrix" && r.type == "Matrix")
         {
             MatrixOp op;
             auto o = registerMatrix(makeMatrixSP());
-            if (map_matrix_[r]->getNumber() == 1 && map_matrix_[r]->getDataSize() != map_matrix_[l]->getDataSize())
+            if (map_matrix_[r]->getNumber() == 1 && map_matrix_[r]->getDataSize() != map_matrix_[l]->getDataSize())    //æ³¨æ„è¿™ä¸ªåˆ¤æ–­ä¸ä¸¥æ ¼
             {
                 op.as_addBias(map_matrix_[l], map_matrix_[r], map_matrix_[o]);
             }
@@ -285,6 +297,17 @@ int NetCifa::registerFunctions()
             op_queue_.push_back(op);
             return o;
         });
+    cifa_.register_function("pool", [this](cifa::ObjectVector& v)
+        {
+            auto window = getIntVector(v, 2);
+            auto stride = getIntVector(v, 3);
+            auto padding = getIntVector(v, 4);
+            MatrixOp op;
+            auto o = registerMatrix(makeMatrixSP());
+            op.as_pool(map_matrix_[v[0]], map_matrix_[o], PoolingType(int(v[1])), 0, window, stride, padding);
+            op_queue_.push_back(op);
+            return o;
+        });
     cifa_.register_function("maxpool", [this](cifa::ObjectVector& v)
         {
             auto window = getIntVector(v, 1);
@@ -293,6 +316,17 @@ int NetCifa::registerFunctions()
             MatrixOp op;
             auto o = registerMatrix(makeMatrixSP());
             op.as_pool(map_matrix_[v[0]], map_matrix_[o], POOLING_MAX, 0, window, stride, padding);
+            op_queue_.push_back(op);
+            return o;
+        });
+    cifa_.register_function("averagepool", [this](cifa::ObjectVector& v)
+        {
+            auto window = getIntVector(v, 1);
+            auto stride = getIntVector(v, 2);
+            auto padding = getIntVector(v, 3);
+            MatrixOp op;
+            auto o = registerMatrix(makeMatrixSP());
+            op.as_pool(map_matrix_[v[0]], map_matrix_[o], POOLING_AVERAGE_NOPADDING, 0, window, stride, padding);
             op_queue_.push_back(op);
             return o;
         });
@@ -308,13 +342,21 @@ int NetCifa::registerFunctions()
             return o;
         });
     cifa_.register_function("width", [this](cifa::ObjectVector& v)
-        { return cifa::Object(map_matrix_[v[0]]->getWidth()); });
+        {
+            return cifa::Object(map_matrix_[v[0]]->getWidth());
+        });
     cifa_.register_function("height", [this](cifa::ObjectVector& v)
-        { return cifa::Object(map_matrix_[v[0]]->getHeight()); });
+        {
+            return cifa::Object(map_matrix_[v[0]]->getHeight());
+        });
     cifa_.register_function("row", [this](cifa::ObjectVector& v)
-        { return cifa::Object(map_matrix_[v[0]]->getRow()); });
+        {
+            return cifa::Object(map_matrix_[v[0]]->getRow());
+        });
     cifa_.register_function("channel", [this](cifa::ObjectVector& v)
-        { return cifa::Object(map_matrix_[v[0]]->getChannel()); });
+        {
+            return cifa::Object(map_matrix_[v[0]]->getChannel());
+        });
     cifa_.register_function("reshape", [this](cifa::ObjectVector& v)
         {
             auto dim = getIntVector(v, 1);
@@ -355,7 +397,14 @@ int NetCifa::registerFunctions()
             op_queue_.push_back(op);
             return o;
         });
-
+    cifa_.register_function("max", [this](cifa::ObjectVector& v)
+        {
+            MatrixOp op;
+            auto o = registerMatrix(makeMatrixSP());
+            op.as_max(map_matrix_[v[0]], map_matrix_[v[1]], map_matrix_[o]);
+            op_queue_.push_back(op);
+            return o;
+        });
     cifa_.register_function("addLoss", [this](cifa::ObjectVector& v)
         {
             for (auto& o : v)
@@ -367,25 +416,34 @@ int NetCifa::registerFunctions()
     //cifa_.register_function("crossEntropy", [this](cifa::ObjectVector& v)
     //    { return registerLoss(crossEntropy(map_matrix_[v[0]], map_matrix_[v[1]])); });
     cifa_.register_function("L2", [this](cifa::ObjectVector& v)
-        { return registerLoss(L2(map_matrix_[v[0]])); });
+        {
+            return registerLoss(L2(map_matrix_[v[0]]));
+        });
 
     for (int i = -1; i < 100; i++)
     {
         auto str = option_->getStringFromEnum(ActiveFunctionType(i));
-        if (str == "")
+        if (str != "")
         {
-            continue;
+            cifa_.register_parameter("active_" + str, i);
+            cifa_.register_function(str, [this, i](cifa::ObjectVector& v)
+                {
+                    MatrixOp op;
+                    auto o = registerMatrix(makeMatrixSP());
+                    auto& Y = map_matrix_[o];
+                    op.as_active(map_matrix_[v[0]], Y, ActiveFunctionType(i), getIntVector(v, 1), getRealVector(v, 2), {});
+                    op_queue_.push_back(op);
+                    return o;
+                });
         }
-        cifa_.register_parameter("active_" + str, i);
-        cifa_.register_function(str, [this, i](cifa::ObjectVector& v)
-            {
-                MatrixOp op;
-                auto o = registerMatrix(makeMatrixSP());
-                auto& Y = map_matrix_[o];
-                op.as_active(map_matrix_[v[0]], Y, ActiveFunctionType(i), getIntVector(v, 1), getRealVector(v, 2), {});
-                op_queue_.push_back(op);
-                return o;
-            });
+    }
+    for (int i = -1; i < 100; i++)
+    {
+        auto str = option_->getStringFromEnum(PoolingType(i));
+        if (str != "")
+        {
+            cifa_.register_parameter("pool_" + str, i);
+        }
     }
 
     return 0;

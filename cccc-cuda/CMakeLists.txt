@@ -1,4 +1,4 @@
-project(will-cuda)
+project(cccc-cuda)
 cmake_minimum_required(VERSION 2.6)
 find_package(CUDA QUIET REQUIRED)
 

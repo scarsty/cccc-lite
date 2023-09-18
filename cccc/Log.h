@@ -1,48 +1,35 @@
-#pragma once
+﻿#pragma once
 #include "fmt1.h"
 
 namespace cccc
 {
 
-class LOG
+inline int& errorCount()
 {
-public:
-    template <typename... Args>
-    LOG(Args&&... args)
+    static int ec = 0;
+    return ec;
+}
+
+template <typename... Args>
+void LOG(Args&&... args)
+{
+    fmt1::print(args...);
+}
+template <typename... Args>
+void LOG(FILE* fout, Args&&... args)
+{
+    if (fout == stderr)
     {
-        if (current_level() >= 1)
+        fflush(stdout);
+        errorCount()++;
+        //fmt1::print("{}\n", errorCount());
+        if (errorCount() >= 2000)
         {
-            fmt1::print(args...);
+            fmt1::print(stderr, "Too many errors, exit program.\n");
+            exit(0);
         }
     }
-    template <typename... Args>
-    LOG(int level, Args&&... args)
-    {
-        if (current_level() >= level)
-        {
-            fmt1::print(args...);
-        }
-    }
-
-    static void setLevel(int level)
-    {
-        prev_level() = current_level();
-        current_level() = level;
-    }
-    static int getLevel() { return current_level(); }
-    static void restoreLevel() { current_level() = prev_level(); }
-
-private:
-    static int& current_level()
-    {
-        static int cl = 1;
-        return cl;
-    }
-    static int& prev_level()
-    {
-        static int pl = 1;
-        return pl;
-    }
-};
+    fmt1::print(fout, args...);
+}
 
 }    // namespace cccc

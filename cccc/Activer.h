@@ -1,18 +1,19 @@
-#pragma once
+﻿#pragma once
 #include "Matrix.h"
 #include "MatrixEx.h"
-#include "Neural.h"
 #include "Option.h"
 #include "Random.h"
 
 namespace cccc
 {
 
-class Activer : public Neural
+class Activer
 {
 public:
     Activer();
     virtual ~Activer();
+    Activer(const Activer&) = delete;
+    Activer& operator=(const Activer&) = delete;
 
 protected:
     //激活函数相关

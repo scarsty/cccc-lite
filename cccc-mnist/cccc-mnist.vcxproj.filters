@@ -37,6 +37,12 @@
     <ClCompile Include="MnistReader.cpp">
       <Filter>sources</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\mlcc\filefunc.cpp">
+      <Filter>sources</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\mlcc\strfunc.cpp">
+      <Filter>sources</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <Text Include="CMakeLists.txt" />

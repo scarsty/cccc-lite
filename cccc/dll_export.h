@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #ifndef DLL_EXPORT
 #ifdef _WIN32

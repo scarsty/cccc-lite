@@ -1,30 +1,34 @@
-#pragma once
-#include "CudaControl.h"
-#include "types.h"
+ï»¿#pragma once
+#include "GpuControl.h"
 #include <memory>
 
 namespace cccc
 {
 
-//Òò´æÔÚ¶àÉè±¸¿ÉÄÜ£¬Êı¾İĞëÍ¬Ê±±£´æÆäÉè±¸Ö¸Õë£¬ĞèÒÔ¹²ÏíÖ¸ÕëÊ¹ÓÃ´ËÀà
+//å› å­˜åœ¨å¤šè®¾å¤‡å¯èƒ½ï¼Œæ•°æ®é¡»åŒæ—¶ä¿å­˜å…¶è®¾å¤‡æŒ‡é’ˆï¼Œéœ€ä»¥å…±äº«æŒ‡é’ˆä½¿ç”¨æ­¤ç±»
 struct MatrixData
 {
-    CudaControl* cuda_ = nullptr;    //Îª¿Õ±íÊ¾ÔÚcpuÖĞ£¬Ò²¼´Ä¬ÈÏÇé¿ö
+    GpuControl* gpu_ = nullptr;    //ä¸ºç©ºè¡¨ç¤ºåœ¨cpuä¸­ï¼Œä¹Ÿå³é»˜è®¤æƒ…å†µ
     real* data_ = nullptr;
-    int64_t occupy_data_size_ = 0;    //Êµ¼ÊÕ¼ÓÃµÄÊı¾İ³¤¶È£¬µ±ÖØÉèÖÃ³ß´ç²»´óÓÚ´ËÖµµÄÊ±ºò²»»áÖØĞÂ·ÖÅäÄÚ´æ
+    int64_t occupy_data_size_ = 0;    //å®é™…å ç”¨çš„æ•°æ®é•¿åº¦ï¼Œå½“é‡è®¾ç½®å°ºå¯¸ä¸å¤§äºæ­¤å€¼çš„æ—¶å€™ä¸ä¼šé‡æ–°åˆ†é…å†…å­˜
 public:
     MatrixData() = default;
-    ~MatrixData() { free(); }
+    ~MatrixData() { release(); }
     MatrixData(const MatrixData&) = delete;
     MatrixData& operator=(const MatrixData) = delete;
-    void setCuda(CudaControl* cuda) { cuda_ = cuda; }
-    void setCudaAsCurrent() { cuda_ = CudaControl::getCurrentCuda(); }
-    real* resize(int64_t size, bool reserve_data = true, bool force = false);    //resizeÇ°Ó¦setCuda
+    void setCuda(GpuControl* gpu) { gpu_ = gpu; }
+    void setCudaAsCurrent() { gpu_ = GpuControl::getCurrentCuda(); }
+    real* resize(int64_t size, bool reserve_data = true, bool force = false);    //resizeå‰åº”setCuda
     std::shared_ptr<real*> make_shared_data() { return std::make_shared<real*>(data_); }
-    void free();
+    void release();
+    ApiType getApiType()
+    {
+        if (gpu_) { return gpu_->getApiType(); }
+        return API_UNKNOWN;
+    }
 
 public:
-    static int64_t copy(DeviceType dt_src, const real* src, DeviceType dt_dst, real* dst, int64_t size);
+    static int64_t copy(ApiType dt_src, const real* src, ApiType dt_dst, real* dst, int64_t size);
 };
 
 }    // namespace cccc

@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 namespace cccc
 {
@@ -117,4 +117,4 @@ class Blas
 };
 #endif
 
-}    // namespace cccc
+};    // namespace cccc

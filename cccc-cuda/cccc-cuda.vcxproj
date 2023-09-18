@@ -22,7 +22,6 @@
   <PropertyGroup Label="Globals">
     <ProjectGuid>{41A4761D-BA0D-47FF-83CA-F4445F7AEDE0}</ProjectGuid>
     <RootNamespace>will_cuda</RootNamespace>
-    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
@@ -40,7 +39,7 @@
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
   <ImportGroup Label="ExtensionSettings">
-    <Import Project="$(VCTargetsPath)\BuildCustomizations\CUDA 11.6.props" />
+    <Import Project="$(VCTargetsPath)\BuildCustomizations\CUDA 12.2.props" />
   </ImportGroup>
   <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
@@ -70,7 +69,7 @@
     </PostBuildEvent>
     <CudaCompile>
       <TargetMachinePlatform>64</TargetMachinePlatform>
-      <CodeGeneration>compute_86,sm_86;compute_75,sm_75;compute_61,sm_61;compute_37,sm_37</CodeGeneration>
+      <CodeGeneration>compute_89,sm_89;compute_86,sm_86;compute_75,sm_75;compute_61,sm_61</CodeGeneration>
       <Defines>
       </Defines>
       <CudaRuntime>Static</CudaRuntime>
@@ -100,12 +99,12 @@
       <TargetMachinePlatform>64</TargetMachinePlatform>
       <Defines>
       </Defines>
-      <CodeGeneration>compute_86,sm_86;compute_75,sm_75;compute_61,sm_61;compute_37,sm_37</CodeGeneration>
+      <CodeGeneration>compute_89,sm_89;compute_86,sm_86;compute_75,sm_75;compute_61,sm_61</CodeGeneration>
     </CudaCompile>
   </ItemDefinitionGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
-    <Import Project="$(VCTargetsPath)\BuildCustomizations\CUDA 11.6.targets" />
+    <Import Project="$(VCTargetsPath)\BuildCustomizations\CUDA 12.2.targets" />
   </ImportGroup>
   <ProjectExtensions>
     <VisualStudio>

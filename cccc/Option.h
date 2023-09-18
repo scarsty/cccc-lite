@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include "INIReader.h"
 #include "Log.h"
 #include "strfunc.h"
@@ -21,19 +21,7 @@ public:
     Option(const std::string& filename);
 
 public:
-    template <typename T>
-    std::vector<T> getVector(const std::string& section, const std::string& key, const std::vector<T>& default_value = {})
-    {
-        std::vector<T> v;
-        auto str = getString(section, key);
-        strfunc::findNumbers(str, v);
-        return v;
-    }
-
-    void setKeys(const std::string& section, const std::string& pairs);
-    void setKeys(const std::string& section, const std::vector<std::string>& pairs);
-
-    std::string dealString(std::string str, int to_filename = 0);
+    std::string dealString(std::string str, bool allow_path);
 
     //以下为枚举值的处理
 private:
@@ -111,23 +99,6 @@ public:
     {
         return enum_map_reverse_[typeid(T).name()][e];
     }
-
-public:
-    //先读公共块，再读指定块
-#define GET_VALUE2(type, name) \
-    type name##2(const std::string& s, const std::string& k, type v) \
-    { \
-        return name(s, k, name("train", k, v)); \
-    }
-
-    GET_VALUE2(int, getInt)
-    GET_VALUE2(real, getReal)
-    GET_VALUE2(std::string, getString)
-
-    template <typename T>
-    GET_VALUE2(T, getEnum)
-
-#undef GET_VALUE2
 };
 
 //#define OPTION_GET_VALUE_INT(op, v, default_v) v = op->getInt("train", #v, default_v)

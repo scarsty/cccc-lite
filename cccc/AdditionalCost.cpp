@@ -1,4 +1,4 @@
-#include "AdditionalCost.h"
+﻿#include "AdditionalCost.h"
 #include "MatrixEx.h"
 
 namespace cccc
@@ -17,26 +17,26 @@ void AdditionalCost::init(Option* op, std::string section, Matrix& A)
 {
     batch_ = A.getNumber();
 
-    sparse_beta_ = op->getReal2(section, "sparse_beta", 0);
+    sparse_beta_ = op->getReal(section, "sparse_beta", 0);
     if (sparse_beta_ != 0)
     {
-        sparse_rou_ = op->getReal2(section, "sparse_rou", 0.1);
+        sparse_rou_ = op->getReal(section, "sparse_rou", 0.1);
         sparse_rou_hat_.resize(A);
         sparse_rou_hat_vector_.resize(A.getRow(), 1);
         as_sparse_.resize(batch_, 1);
-        as_sparse_.initData(1);
+        as_sparse_.fillData(1);
     }
 
-    diverse_beta_ = op->getReal2(section, "diverse_beta", 0);
+    diverse_beta_ = op->getReal(section, "diverse_beta", 0);
     if (diverse_beta_ != 0)
     {
-        diverse_epsilon_ = op->getReal2(section, "diverse_epsilon", 1e-8);
+        diverse_epsilon_ = op->getReal(section, "diverse_epsilon", 1e-8);
         diverse_aver_.resize(A);
         diverse_aver2_.resize(A);
         diverse_aver3_.resize(A);
         as_diverse_aver_.resize(1, 1, A.getChannel() * A.getNumber(), 1);
-        as_diverse_aver_.initData(1);
-        diverse_A_ = A.cloneShared();
+        as_diverse_aver_.fillData(1);
+        diverse_A_ = A.createShared();
         diverse_A_.resize(1, 1, A.getChannel() * A.getNumber(), 1);
         diverse_workspace_.resize(1, int(1e6));
     }

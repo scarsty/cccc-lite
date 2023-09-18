@@ -1,16 +1,17 @@
-#pragma once
+﻿#pragma once
 #include "Matrix.h"
-#include "Neural.h"
 #include "Option.h"
 
 namespace cccc
 {
 
-class AdditionalCost : public Neural
+class AdditionalCost
 {
 public:
     AdditionalCost();
     virtual ~AdditionalCost();
+    AdditionalCost(const AdditionalCost&) = delete;
+    AdditionalCost& operator=(const AdditionalCost&) = delete;
 
 private:
     real sparse_beta_ = 0;

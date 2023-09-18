@@ -1,8 +1,8 @@
-#include "NetLayer.h"
+﻿#include "NetLayer.h"
 #include "ConsoleControl.h"
-#include "filefunc.h"
 #include "Timer.h"
 #include "VectorMath.h"
+#include "filefunc.h"
 #include <algorithm>
 
 namespace cccc
@@ -20,9 +20,7 @@ NetLayer::~NetLayer()
 int NetLayer::init2()
 {
     //batch在一开始会用来设置网络的初始大小
-    LOG::setLevel(option_->getInt("train", "output_net", 1));
     int state = createAndConnectLayers();
-    LOG::restoreLevel();
     if (state)
     {
         LOG("Net structure is wrong!\n");
@@ -60,7 +58,9 @@ int NetLayer::createAndConnectLayers()
     };
     //lambda函数：层是否已经在向量中
     auto contains = [&](std::vector<Layer*>& v, Layer* l) -> bool
-    { return std::find(v.begin(), v.end(), l) != v.end(); };
+    {
+        return std::find(v.begin(), v.end(), l) != v.end();
+    };
     //lambda函数：递归将层压入向量
     //最后一个参数为假，仅计算是否存在连接，为真则是严格计算传导顺序
     std::function<void(Layer*, int, std::vector<Layer*>&, bool)> push_cal_stack = [&](Layer* layer, int direct, std::vector<Layer*>& stack, bool turn)
@@ -110,13 +110,12 @@ int NetLayer::createAndConnectLayers()
     {
         if (strfunc::toLowerCase(section).find("layer") == 0)
         {
-            LOG("Found layer {}\n", section);
+            //LOG("Found layer {}\n", section);
             auto ct = option_->getEnum(section, "type", LAYER_CONNECTION_NONE);
             auto l = std::make_shared<Layer>();
             l->setConnection(ct);
             l->setOption(option_);
             l->setName(section);
-            l->setNet(this);
 
             //此处检查是否某些层是否实际上无输出，注意并不严格，网络的正确性应由用户验证
             auto dim = option_->getVector<int>(section, "node");
@@ -160,7 +159,7 @@ int NetLayer::createAndConnectLayers()
     {
         all_layer_map_.erase(name_layer.first);
         //safe_delete(name_layer.second);
-        LOG("Remove bad layer {}\n", name_layer.first);
+        //LOG("Remove bad layer {}\n", name_layer.first);
     }
     for (auto& l : all_layer_vector)
     {
@@ -183,15 +182,19 @@ int NetLayer::createAndConnectLayers()
     }
 
     //初始化
-    int index = 0;
     for (auto& layer : layer_vector)
     {
-        LOG("---------- Layer {:3} ----------\n", index);
         layer->makeMatrixOp(op_queue_);
-        layer->message();
-        index++;
     }
-
+    int index = 0;
+    if (option_->getInt("train", "output_net", 1))
+    {
+        for (auto& layer : layer_vector)
+        {
+            LOG("---------- Layer {:3} ----------\n", index++);
+            layer->message();
+        }
+    }
     X_ = layer_vector.front()->A_;
     A_ = layer_vector.back()->A_;
 
@@ -202,8 +205,10 @@ int NetLayer::createAndConnectLayers()
     {
         LOG("Loss weight {}: {}\n", loss_weight_values.size(), loss_weight_values);
     }
-    loss_weight_.resize(loss_weight_values.size(), 1);
-    loss_weight_.importData(loss_weight_values.data(), loss_weight_values.size());
+    loss_weight_->resize(loss_weight_values.size(), 1);
+    loss_weight_->importData(loss_weight_values.data(), loss_weight_values.size());
+    loss_weight_->resizeNumber(A_->getNumber());
+    loss_weight_->repeat(1);
     return 0;
 }
 

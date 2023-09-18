@@ -26,7 +26,7 @@ void Application::run()
     {
         if (!filefunc::fileExist(filename))
         {
-            LOG(stderr, "%s doesn't exist!\n", filename.c_str());
+            LOG(stderr, "{} doesn't exist!\n", filename.c_str());
         }
         auto ini_str = strfunc::readStringFromFile(filename);
         //Ìæ»»µôÒ»Ð©×Ö·û

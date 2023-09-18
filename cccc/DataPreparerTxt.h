@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include "DataPreparer.h"
 #include <string>
 
@@ -17,10 +17,13 @@ public:
     virtual ~DataPreparerTxt();
 
     void init2() override;
-    void fillData(Matrix& X, Matrix& Y) override;
+    void fillData0() override;
 
 private:
     float getContent(int i);
+    
+private:
+    Random<double> rand_;
 };
 
 }    // namespace cccc

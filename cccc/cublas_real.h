@@ -1,7 +1,8 @@
-#pragma once
-#ifndef NO_CUDA
+﻿#pragma once
 #include "blas_types.h"
-#include "cuda_lib.h"
+
+#ifdef ENABLE_CUDA
+#include "cublas_v2.h"
 
 namespace cccc
 {
@@ -54,7 +55,7 @@ public:
         }
     }
     CUBLAS_FUNCTION void set_handle(cublasHandle_t h) { handle_ = h; }
-    CUBLAS_FUNCTION int get_version() 
+    CUBLAS_FUNCTION int get_version()
     {
         int ver;
         cublasGetVersion(handle_, &ver);
@@ -370,12 +371,16 @@ public:
     }
 
 protected:
-#ifdef STATIC_BLAS
-    static cublasHandle_t handle_ = nullptr;
-#else
     cublasHandle_t handle_ = nullptr;
-#endif
 };
 
 }    // namespace cccc
+#else 
+#include "cblas_real.h"
+namespace cccc
+{
+class Cublas : public Cblas
+{
+};
+}    //namespace cccc
 #endif

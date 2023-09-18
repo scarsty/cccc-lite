@@ -1,4 +1,4 @@
-#include "Option.h"
+﻿#include "Option.h"
 #include <algorithm>
 
 namespace cccc
@@ -14,27 +14,27 @@ Option::Option(const std::string& filename) : Option()
     loadFile(filename);
 }
 
-void Option::setKeys(const std::string& section, const std::string& pairs)
-{
-    setKeys(section, strfunc::splitString(pairs, ";"));
-}
+//void Option::setKeys(const std::string& section, const std::string& pairs)
+//{
+//    setKeys(section, strfunc::splitString(pairs, ";"));
+//}
+//
+//void Option::setKeys(const std::string& section, const std::vector<std::string>& pairs)
+//{
+//    for (auto pair : pairs)
+//    {
+//        strfunc::replaceAllSubStringRef(pair, " ", "");
+//        auto p = pair.find("=");
+//        if (p != std::string::npos)
+//        {
+//            auto key = pair.substr(0, p);
+//            auto value = pair.substr(p + 1);
+//            setKey(section, key, value);
+//        }
+//    }
+//}
 
-void Option::setKeys(const std::string& section, const std::vector<std::string>& pairs)
-{
-    for (auto pair : pairs)
-    {
-        strfunc::replaceAllSubStringRef(pair, " ", "");
-        auto p = pair.find("=");
-        if (p != std::string::npos)
-        {
-            auto key = pair.substr(0, p);
-            auto value = pair.substr(p + 1);
-            setKey(section, key, value);
-        }
-    }
-}
-
-std::string Option::dealString(std::string str, int to_filename /*= 0*/)
+std::string Option::dealString(std::string str, bool allow_path)
 {
     size_t p = 0;
     while ((p = str.find("{", p)) != std::string::npos)
@@ -56,11 +56,16 @@ std::string Option::dealString(std::string str, int to_filename /*= 0*/)
         if (hasKey(section, key))
         {
             std::string sub = getString(section, key);
-            if (to_filename)
+            if (!allow_path)
             {
-                strfunc::replaceAllSubStringRef(sub, ":", "");
+#ifdef _WIN32
                 strfunc::replaceAllSubStringRef(sub, "\\", "");
+#endif
                 strfunc::replaceAllSubStringRef(sub, "/", "");
+            }
+            if (sub.length() > 50)
+            {
+                sub = sub.substr(0, 50);
             }
             strfunc::replaceAllSubStringRef(str, str.substr(p0, p - p0), sub);
             p = p0 + sub.size();
@@ -111,6 +116,8 @@ void Option::initEnums()
             { "abs", ACTIVE_FUNCTION_ABS },
             { "sinp", ACTIVE_FUNCTION_SIN_PLUS },
             { "silu", ACTIVE_FUNCTION_SILU },
+            { "sigmoid3", ACTIVE_FUNCTION_SIGMOID3 },
+            { "softmax3", ACTIVE_FUNCTION_SOFTMAX3 },
         });
 
     registerEnum<LayerConnectionType>(
@@ -148,6 +155,7 @@ void Option::initEnums()
             { "average", POOLING_AVERAGE_NOPADDING },
             { "average_no_padding", POOLING_AVERAGE_NOPADDING },
             { "average_padding", POOLING_AVERAGE_PADDING },
+            { "ma", POOLING_MA },
         });
 
     registerEnum<CombineType>(
@@ -170,6 +178,8 @@ void Option::initEnums()
             { "fixed", ADJUST_LEARN_RATE_FIXED },
             { "scale_inter", ADJUST_LEARN_RATE_SCALE_INTER },
             { "linear_inter", ADJUST_LEARN_RATE_LINEAR_INTER },
+            { "steps", ADJUST_LEARN_RATE_STEPS },
+            { "steps_warm", ADJUST_LEARN_RATE_STEPS_WARM },
         });
 
     registerEnum<BatchNormalizationType>(

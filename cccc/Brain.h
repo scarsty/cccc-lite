@@ -1,23 +1,21 @@
-#pragma once
+﻿#pragma once
 #include "DataPreparerFactory.h"
 #include "Net.h"
 #include "Timer.h"
 #include <atomic>
-#include <cmath>
-#include <cstdio>
-#include <cstring>
-#include <thread>
 #include <vector>
 
 namespace cccc
 {
 
 //总调度
-class Brain : public Neural
+class DLL_EXPORT Brain
 {
 public:
     Brain();
     virtual ~Brain();
+    Brain(const Brain&) = delete;
+    Brain& operator=(const Brain&) = delete;
 
 public:
     int brain_id_;
@@ -29,15 +27,12 @@ protected:
     Timer timer_total_;
     int MP_count_ = 1;
     std::vector<std::unique_ptr<Net>> nets_;
+    std::vector<GpuControl> gpus_;
     WorkModeType work_mode_ = WORK_MODE_NORMAL;
 
 public:
     void setCallback(std::function<void(Brain*)> f) { running_callback_ = f; }
     Option* getOption() { return &option_; }
-    void setOption(Option* op)
-    {
-        option_ = *op;
-    }
 
 protected:
     //epoch和iter的统计
@@ -49,28 +44,6 @@ public:
     void setIterCount(int ic) { iter_count_ = ic; }
 
 public:
-    //real scale_data_x_ = 1;   //x参与计算之前先乘以此数，太麻烦，不搞了
-    //real train_accuracy_ = 0;    //训练集上准确率
-    //real test_accuracy_ = 0;     //测试集上准确率
-
-public:
-    //训练集
-    //这里采取的是变换之后将数据传入显存的办法，每个epoch都需要有这一步
-    //这里理论上会降低速度，如果在显存里保存两份数据交替使用可以增加效率
-    //此处并未使用，给GPU一些休息的时间
-
-    //原始数据组数为cpu的数据的整数倍，通常为1倍，准备器中train_queue的变换保证数据被选中的机会一致
-    //如果每次原始数据都是即时生成，算法并无变化，但最好设置为等同于cpu数据组数，以使数据充分被利用
-
-    //原始训练集
-    Matrix X_train_, Y_train_;
-    //经变换后的训练集，与上面的区别是顺序被随机打乱，以及可能增加了一定的干扰，其后会被直接上传至gpu
-    Matrix X_train_cpu_, Y_train_cpu_;
-    //原始测试集
-    Matrix X_test_, Y_test_;
-    //经变换后的测试集，不同之处同训练集
-    Matrix X_test_cpu_, Y_test_cpu_;
-
     DataPreparerFactory::UniquePtr data_preparer_;    //训练集准备器
     DataPreparerFactory::UniquePtr& getDataPreparer() { return data_preparer_; }
 
@@ -88,9 +61,11 @@ public:
     virtual void initDataPreparer();
     void initTrainData();
     void initTestData();
+    std::string makeSaveSign();
 
 public:
-    void train(std::vector<std::unique_ptr<Net>>& nets, DataPreparer* data_preparer, int epochs);
+    //以下构成一组调度范例
+    void train(std::vector<std::unique_ptr<Net>>& nets, DataPreparer* data_preparer, int total_epochs);
     //void train(std::vector<std::unique_ptr<Net>>& net, DataPreparer* data_preparer, int epochs) { train({ net }, data_preparer, epochs); }
 
 private:
@@ -102,6 +77,7 @@ private:
         std::atomic<int> stop;                    //结束信息
         std::atomic<int> trained;                 //已经训练完成的网络个数
         std::atomic<int> parameters_collected;    //数据同步完毕
+        std::atomic<int> need_reset;              //需要重置求解器的信号
         void reset()
         {
             data_prepared = 0;
@@ -111,13 +87,12 @@ private:
             parameters_collected = 0;
         }
         TrainInfo() { reset(); }
-        ~TrainInfo() {}
     };
-    void trainOneNet(std::vector<std::unique_ptr<Net>>& nets, int net_id, TrainInfo& train_info, int epoch0, int epochs);
+    void trainOneNet(std::vector<std::unique_ptr<Net>>& nets, int net_id, TrainInfo& train_info, int total_epochs);
 
 public:
     //获取网络的时候，应注意当前的gpu
-    Net* getNet(int i = 0)
+    Net* getNet(int i = 0) const
     {
         if (nets_.size() > i)
         {
@@ -127,23 +102,15 @@ public:
     }
     const std::vector<std::unique_ptr<Net>>& getNets() { return nets_; }
 
+    bool checkNetWeights(int n, realc l1, realc l2, realc l1p, realc l2p);
+
 public:
-    //以下构成一组调度范例
     void run(int train_epochs = -1);
     void testData(Net* net, int force_output = 0, int test_type = 0);
     void extraTest(Net* net, const std::string& section, int force_output = 0, int test_type = 0);
 
 public:
     int testExternalData(void* x, void* y, void* a, int n, int attack_times = 0, realc* error = nullptr);
-
-public:
-    void setLearnRateBase(real lrb)
-    {
-        for (auto& n : nets_)
-        {
-            n->setLearnRateBase(lrb);
-        }
-    }
 };
 
 }    // namespace cccc

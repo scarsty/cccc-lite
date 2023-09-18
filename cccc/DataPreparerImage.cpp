@@ -1,6 +1,6 @@
-#include "DataPreparerImage.h"
-#include "filefunc.h"
+﻿#include "DataPreparerImage.h"
 #include "Timer.h"
+#include "filefunc.h"
 #include "strfunc.h"
 #include <atomic>
 #include <ctime>
@@ -28,8 +28,8 @@ void DataPreparerImage::init2()
     OPTION_GET_INT(d_channel_);
     OPTION_GET_REAL(d_noise_);
 
-    OPTION_GET_NUMVECTOR(d_contrast_, "0,0", 2, 0);
-    OPTION_GET_NUMVECTOR(d_brightness_, "0,0", 2, 0);
+    OPTION_GET_NUMVECTOR(d_contrast_, 2, 0);
+    OPTION_GET_NUMVECTOR(d_brightness_,  2, 0);
 
     //LOG("Options for image processing {} end\n\n", section_);
 }
@@ -57,7 +57,7 @@ void DataPreparerImage::transOne(Matrix& X1, Matrix& Y1)
     }
 
     //噪点
-    if (d_noise_ != 0 && X1.getDeviceType() == DeviceType::CPU)
+    if (d_noise_ != 0 && X1.getDeviceType() == UnitType::CPU)
     {
         need_limit = true;
         for (int i = 0; i < X1.getDataSize(); i++)

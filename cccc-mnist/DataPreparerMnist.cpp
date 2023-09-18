@@ -18,6 +18,66 @@ DataPreparerMnist::~DataPreparerMnist()
     //LOG("Destory MNIST with section [{}]\n", section_);
 }
 
+//one example to deal MNIST
+void DataPreparerMnist::initData()
+{
+    std::string format = option_->getString(section_, "format", "mnist");
+    if (format == "mnist")
+    {
+        //使用MNIST库，通常用来测试网络
+        MnistReader loader;
+        std::string path = option_->getString(section_, "path", "mnist");
+        loader.load(X0, Y0, path, type_);
+    }
+    else if (format == "cifar10")
+    {
+        Cifar10Reader loader;
+        std::string path = option_->getString(section_, "path", "cifar10");
+        loader.load(X0, Y0, path, type_);
+    }
+
+    //data.save(mnist_path+"/train.bin");
+    if (remove59_)
+    {
+        //如果需要进行旋转和转置的实验，则5和9不适合留在数据集
+        int count = 0;
+        for (int i = 0; i < X0.getNumber(); i++)
+        {
+            if (Y0.getData(0, 0, 5, i) == 1 || Y0.getData(0, 0, 9, i) == 1)
+            {
+                count++;
+            }
+        }
+        auto X1 = X0.clone();
+        auto Y1 = Y0.clone();
+        auto new_number = X0.getNumber() - count;
+        X0.resizeNumber(new_number);
+        Y0.resizeNumber(new_number);
+        int k = 0;
+        for (int i = 0; i < X1.getNumber(); i++)
+        {
+            if (Y1.getData(0, 0, 5, i) != 1 && Y1.getData(0, 0, 9, i) != 1)
+            {
+                Matrix::copyRows(X1, i, X, k, 1);
+                Matrix::copyRows(Y1, i, Y, k, 1);
+                k++;
+            }
+        }
+    }
+
+    if (reverse_color_)
+    {
+        for (int i = 0; i < X0.getDataSize(); i++)
+        {
+            X0.getData(i) = 1 - X0.getData(i);
+        }
+    }
+    LOG("Recheck fill_group: ");
+    fill_group_ = X0.getNumber();
+    OPTION_GET_INT(fill_group_);
+    DataPreparer::initData();
+}
+
 void DataPreparerMnist::init2()
 {
     DataPreparerImage::init2();
@@ -31,73 +91,17 @@ void DataPreparerMnist::init2()
     OPTION_GET_INT(reverse_color_);
 }
 
-//one example to deal MNIST
-void DataPreparerMnist::fillData(Matrix& X, Matrix& Y)
+void DataPreparerMnist::fillData0()
 {
-    if (fill_times_ == 0)
-    {
-        std::string format = option_->getString(section_, "format", "mnist");
-        if (format == "mnist")
-        {
-            //使用MNIST库，通常用来测试网络
-            MnistReader loader;
-            std::string path = option_->getString(section_, "path", "mnist");
-            loader.load(X, Y, path, type_);
-        }
-        else if (format == "cifar10")
-        {
-            Cifar10Reader loader;
-            std::string path = option_->getString(section_, "path", "cifar10");
-            loader.load(X, Y, path, type_);
-        }
-
-        //data.save(mnist_path+"/train.bin");
-        if (remove59_)
-        {
-            //如果需要进行旋转和转置的实验，则5和9不适合留在数据集
-            int count = 0;
-            for (int i = 0; i < X.getNumber(); i++)
-            {
-                if (Y.getData(0, 0, 5, i) == 1 || Y.getData(0, 0, 9, i) == 1)
-                {
-                    count++;
-                }
-            }
-            auto X1 = X.clone();
-            auto Y1 = Y.clone();
-            auto new_number = X.getNumber() - count;
-            X.resizeNumber(new_number);
-            Y.resizeNumber(new_number);
-            int k = 0;
-            for (int i = 0; i < X1.getNumber(); i++)
-            {
-                if (Y1.getData(0, 0, 5, i) != 1 && Y1.getData(0, 0, 9, i) != 1)
-                {
-                    Matrix::copyRows(X1, i, X, k, 1);
-                    Matrix::copyRows(Y1, i, Y, k, 1);
-                    k++;
-                }
-            }
-        }
-
-        if (reverse_color_)
-        {
-            for (int i = 0; i < X.getDataSize(); i++)
-            {
-                X.getData(i) = 1 - X.getData(i);
-            }
-        }
-    }
-    fill_times_++;
 }
 
 void DataPreparerMnist::transOne(Matrix& X1, Matrix& Y1)
 {
-    if (random_diff_ && X1.getDeviceType() == DeviceType::CPU)
+    if (random_diff_ && X1.getDeviceType() == UnitType::CPU)
     {
         int diff_x_ = rand_.rand() * 9 - 4, diff_y_ = rand_.rand() * 9 - 4;
-        Matrix x1c = X1.clone(DeviceType::CPU);
-        X1.initData(0);
+        Matrix x1c = X1.clone(UnitType::CPU);
+        X1.fillData(0);
         for (int ix = 0; ix < 20; ix++)
         {
             for (int iy = 0; iy < 20; iy++)
@@ -123,7 +127,7 @@ void DataPreparerMnist::transOne(Matrix& X1, Matrix& Y1)
 
     此处需特别注意clone的操作，clone的默认操作是优先复制到GPU，但是核心库静态链接时，CudaDevice的全局变量在插件dll中包含一个副本
     此时clone的默认操作是复制到CPU，若改为动态链接则是复制到GPU，故此处应明确写出参数
-    
+
     在不同操作系统中，全局变量的链接行为也可能存在区别，请参考相关的文档
 */
 }    // namespace cccc
