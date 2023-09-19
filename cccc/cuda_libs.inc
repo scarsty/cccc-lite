@@ -84,7 +84,7 @@ IMPORT(nvmlDeviceGetTemperature)
 IMPORT(nvmlDeviceGetMemoryInfo)
 
 IMPORT(cudaMemset)
-IMPORT(cudaGetDeviceProperties)
+IMPORT(cudaGetDeviceProperties_v2)
 IMPORT(cudaGetErrorString)
 IMPORT(cudaMalloc)
 IMPORT(cudaSetDevice)

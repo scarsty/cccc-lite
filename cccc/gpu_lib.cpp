@@ -49,7 +49,7 @@ public:
 #undef IMPORT
         for (auto& lu : libs_used)
         {
-            //LOG("Loaded dynamic library {}\n", lu.first);
+            LOG("Loaded dynamic library {} for {} functions\n", lu.first, lu.second);
         }
     }
 
