@@ -25,20 +25,25 @@ class cuda_assist_class_t
 public:
     cuda_assist_class_t()
     {
+        // Look for the name with "_v2" first (NVIDIA's habit), then without it
+        // Note that sometimes func is a macro to define to ignore the suffix, the searching string will be expanded without it
+        // If NVIDIA updates the library, the suffix may be changed to "_v3", so we can update the list here
 #define IMPORT(func) \
     for (auto& lib : libs) \
     { \
-        func = (func##_t)DynamicLibrary::getFunction(lib, #func); \
+        auto str = #func; \
+        func = (func##_t)DynamicLibrary::getFunction(lib, str); \
         if (func) \
         { \
-            LOG("Found {} in {}\n", #func, lib); \
-            libs_used[lib]++; \
+            /*LOG("Found {} in {}\n", str, lib);*/ \
+            libs_used[lib].push_back(str); \
             break; \
         } \
     } \
     if (func == nullptr) \
     { \
-        LOG(stderr, "Failed to found {}!\n", #func); \
+        /*LOG(stderr, "Failed to found {}!\n", #func);*/ \
+        func_failed.push_back(#func); \
     }
 #if ENABLE_CUDA
 #include "cuda_libs.inc"
@@ -47,10 +52,13 @@ public:
 #include "hip_libs.inc"
 #endif
 #undef IMPORT
+        int sum = 0;
         for (auto& lu : libs_used)
         {
-            LOG("Loaded dynamic library {} for {} functions\n", lu.first, lu.second);
+            //LOG("Loaded dynamic library {} for {} functions\n", lu.first, lu.second.size());
+            sum += lu.second.size();
         }
+        LOG("Found {} functions, {} failed\n", sum, func_failed.size());
     }
 
 private:
@@ -73,7 +81,9 @@ private:
         "rocblas",
         "cccc-hip",
     };
-    std::map<std::string, int> libs_used;
+    std::vector<std::string> suffix = { "", "_v2" };
+    std::map<std::string, std::vector<std::string>> libs_used;
+    std::vector<std::string> func_failed;
 };
 static cuda_assist_class_t cuda_assist_class;
 

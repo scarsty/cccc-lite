@@ -213,6 +213,7 @@
     <ClInclude Include="predict.h">
       <Filter>predict</Filter>
     </ClInclude>
+    <ClInclude Include="resource.h" />
     <ClInclude Include="..\..\mlcc\Random.h">
       <Filter>mlcc</Filter>
     </ClInclude>
@@ -265,5 +266,8 @@
     <None Include="cuda_libs.inc">
       <Filter>gpu</Filter>
     </None>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="cccc.rc" />
   </ItemGroup>
 </Project>

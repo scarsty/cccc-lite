@@ -4,7 +4,7 @@
 #define ENABLE_CUDA 1
 #endif
 #ifndef ENABLE_HIP
-#define ENABLE_HIP 0
+#define ENABLE_HIP 1
 #endif
 
 #if ENABLE_CUDA
@@ -57,7 +57,6 @@ namespace cccc
 #endif
 #undef IMPORT
 #undef IMPORT2
-
 #endif
 
 #define IMPORT(func) \
