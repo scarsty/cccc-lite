@@ -1,7 +1,7 @@
 ﻿#pragma once
 #include "blas_types.h"
 
-#ifdef ENABLE_CUDA
+#if ENABLE_CUDA
 #include "cublas_v2.h"
 
 namespace cccc

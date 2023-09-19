@@ -101,6 +101,10 @@
       </Defines>
       <CodeGeneration>compute_89,sm_89;compute_86,sm_86;compute_75,sm_75;compute_61,sm_61</CodeGeneration>
     </CudaCompile>
+    <Lib>
+      <AdditionalDependencies>cudart_static.lib</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(CUDA_PATH)/lib/x64</AdditionalLibraryDirectories>
+    </Lib>
   </ItemDefinitionGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

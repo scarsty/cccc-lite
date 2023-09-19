@@ -1,7 +1,7 @@
 #pragma once
 #include "blas_types.h"
 
-#ifdef ENABLE_HIP
+#if ENABLE_HIP
 #include "rocblas/rocblas.h"
 
 namespace cccc

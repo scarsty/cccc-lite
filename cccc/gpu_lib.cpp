@@ -9,11 +9,13 @@
 namespace cccc
 {
 
+#define IMPORT2(func)
+
 #define IMPORT(func) func##_t func = nullptr;
-#ifdef ENABLE_CUDA
+#if ENABLE_CUDA
 #include "cuda_libs.inc"
 #endif
-#ifdef ENABLE_HIP
+#if ENABLE_HIP
 #include "hip_libs.inc"
 #endif
 #undef IMPORT
@@ -38,10 +40,10 @@ public:
     { \
         LOG(stderr, "Failed to found {}!\n", #func); \
     }
-#ifdef ENABLE_CUDA
+#if ENABLE_CUDA
 #include "cuda_libs.inc"
 #endif
-#ifdef ENABLE_HIP
+#if ENABLE_HIP
 #include "hip_libs.inc"
 #endif
 #undef IMPORT
@@ -53,6 +55,9 @@ public:
 
 private:
     std::vector<std::string> libs = {
+        "cudart64_12",
+        "cudart64_110",
+        "cudart64_100",
         "cublas64_12",
         "cublas64_11",
         "cublas64_100",

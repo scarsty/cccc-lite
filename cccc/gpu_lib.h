@@ -1,35 +1,39 @@
 ﻿#pragma once
 
 #ifndef ENABLE_CUDA
-#define ENABLE_CUDA
+#define ENABLE_CUDA 1
 #endif
 #ifndef ENABLE_HIP
-#define ENABLE_HIP_
+#define ENABLE_HIP 0
 #endif
 
-#ifdef ENABLE_CUDA
+#if ENABLE_CUDA
+#include "cuda_runtime_api.h"
+#define __CUDA_RUNTIME_H__
 #include "cublas_v2.h"
 #include "cuda_functions.h"
-#include "cuda_runtime.h"
 #include "cudnn.h"
 #if defined(_WIN32)
 #include <nvml.h>
 #endif
 #endif
 
-#if defined(ENABLE_CUDA) && defined(ENABLE_HIP)
+#if (ENABLE_CUDA) && (ENABLE_HIP)
 #include "hip_runtime_api_part.h"
 #endif
 
-#if defined(ENABLE_CUDA) && !defined(ENABLE_HIP)
+#if (ENABLE_CUDA) && !(ENABLE_HIP)
 #include "hip_runtime_type_part.h"
 #endif
 
-#if !defined(ENABLE_CUDA) && defined(ENABLE_HIP)
+#if !(ENABLE_CUDA) && (ENABLE_HIP)
+#define __HIP_PLATFORM_AMD__
+#define __HIP_DISABLE_CPP_FUNCTIONS__
 #include "hip/hip_runtime_api.h"
+#include "cuda_type_fake.h"
 #endif
 
-#ifdef ENABLE_HIP
+#if ENABLE_HIP
 #include "rocblas/rocblas.h"
 #include "hip_functions.h"
 #endif
@@ -44,26 +48,30 @@ namespace cccc
 #define IMPORT(func) \
     using func##_t = decltype(&func); \
     extern func##_t func;
-#ifdef ENABLE_CUDA
+#define IMPORT2(func)
+#if ENABLE_CUDA
 #include "cuda_libs.inc"
 #endif
-#ifdef ENABLE_HIP
+#if ENABLE_HIP
 #include "hip_libs.inc"
 #endif
 #undef IMPORT
+#undef IMPORT2
 
 #endif
 
 #define IMPORT(func) \
     template <typename... Args> \
     inline int func(Args&&... args) { return 0; }
-#ifndef ENABLE_CUDA
+#define IMPORT2(func) IMPORT(func)
+#if !ENABLE_CUDA
 #include "cuda_libs.inc"
 #endif
-#ifndef ENABLE_HIP
+#if !ENABLE_HIP
 #include "hip_libs.inc"
 #endif
 #undef IMPORT
+#undef IMPORT2
 
 };    //namespace cccc
 
