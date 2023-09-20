@@ -33,7 +33,7 @@ int main(int argc, char* argv[])
     else if (cmd.exist("version"))
     {
         cccc::LOG("CCCC (A Deep Neural Net library) command line interface\n");
-        cccc::LOG("Float precision is %d (", cccc::Application::getFloatPresicion() * 8);
+        cccc::LOG("Float precision is {} (", cccc::Application::getFloatPresicion() * 8);
         switch (cccc::Application::getFloatPresicion())
         {
         case 2:
@@ -51,11 +51,11 @@ int main(int argc, char* argv[])
         cccc::LOG(")\n");
         cccc::LOG("Built with ");
 #if defined(_MSC_VER)
-        cccc::LOG("Microsoft Visual Studio %d\n", _MSC_VER);
+        cccc::LOG("Microsoft Visual Studio {}\n", _MSC_VER);
 #elif defined(__clang__)
-        cccc::LOG("Clang %s\n", __clang_version__);
+        cccc::LOG("Clang {}\n", __clang_version__);
 #elif defined(__GNUC__)
-        cccc::LOG("GNU C %s\n", __VERSION__);
+        cccc::LOG("GNU C {}\n", __VERSION__);
 #else
         cccc::LOG("Unknown complier\n");
 #endif

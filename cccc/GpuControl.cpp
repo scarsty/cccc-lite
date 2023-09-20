@@ -30,6 +30,58 @@ GpuControl::~GpuControl()
     destroy();
 }
 
+void GpuControl::checkDevices()
+{
+    if (device_count_ >= 0)
+    {
+        return;
+    }
+
+    int ver_r, ver_d;
+    device_count_c_ = 0;
+#if ENABLE_CUDA
+    ver_r = 0;
+    ver_d = 0;
+    cudaGetDeviceCount(&device_count_c_);
+    if (cudaRuntimeGetVersion(&ver_r) != cudaSuccess)
+    {
+        LOG("Get runtime state failed, please check hardware or driver!\n");
+    }
+    if (cudaDriverGetVersion(&ver_d) != cudaSuccess)
+    {
+        LOG("Get driver state failed, please check hardware or driver!\n");
+    }
+    LOG("CUDA version: Runtime {}, Driver {} (R must <= D)\n", ver_r, ver_d);
+#endif
+
+    device_count_h_ = 0;
+#if ENABLE_HIP
+    ver_r = 0;
+    ver_d = 0;
+    hipGetDeviceCount(&device_count_h_);
+    if (hipRuntimeGetVersion(&ver_r) != hipSuccess)
+    {
+        LOG("Get runtime state failed, please check hardware or driver!\n");
+    }
+    if (hipDriverGetVersion(&ver_d) != hipSuccess)
+    {
+        LOG("Get driver state failed, please check hardware or driver!\n");
+    }
+    LOG("HIP version: Runtime {}, Driver {} (R must <= D)\n", ver_r, ver_d);
+#endif
+
+    device_count_ = device_count_c_ + device_count_h_;
+    if (device_count_ > 0)
+    {
+        LOG("Found {} GPU device(s), {} CUDA, {} HIP\n", device_count_, device_count_c_, device_count_h_);
+    }
+    else
+    {
+        LOG("Error: No GPU devices!!\n");
+    }
+    evaluateDevices();
+}
+
 //返回0正常，其他情况都有问题
 int GpuControl::init(int dev_id /*= -1*/)
 {
@@ -153,63 +205,6 @@ int GpuControl::memcpy(void* dst, const void* src, size_t count, memcpyKind kind
         return hipMemcpy(dst, src, count, hipMemcpyKind(kind));
     }
     return 1;
-}
-
-void GpuControl::checkDevices()
-{
-#ifdef NO_CUDA
-    return;
-#else
-    if (device_count_ >= 0)
-    {
-        return;
-    }
-
-    int ver_r = 0, ver_d = 0;
-    device_count_c_ = 0;
-    if (cudaGetDeviceCount)
-    {
-        cudaGetDeviceCount(&device_count_c_);
-        if (cudaRuntimeGetVersion(&ver_r) != cudaSuccess)
-        {
-            LOG("Get runtime state failed, please check hardware or driver!\n");
-        }
-        if (cudaDriverGetVersion(&ver_d) != cudaSuccess)
-        {
-            LOG("Get driver state failed, please check hardware or driver!\n");
-        }
-        LOG("CUDA version: Runtime {}, Driver {} (R must <= D)\n", ver_r, ver_d);
-    }
-
-    ver_r = 0;
-    ver_d = 0;
-    device_count_h_ = 0;
-    if (hipGetDeviceCount)
-    {
-        hipGetDeviceCount(&device_count_h_);
-        if (hipRuntimeGetVersion(&ver_r) != hipSuccess)
-        {
-            LOG("Get runtime state failed, please check hardware or driver!\n");
-        }
-        if (hipDriverGetVersion(&ver_d) != hipSuccess)
-        {
-            LOG("Get driver state failed, please check hardware or driver!\n");
-        }
-        LOG("HIP version: Runtime {}, Driver {} (R must <= D)\n", ver_r, ver_d);
-    }
-
-    device_count_ = device_count_c_ + device_count_h_;
-    if (device_count_ > 0)
-    {
-        LOG("Found {} GPU device(s), {} CUDA, {} HIP\n", device_count_, device_count_c_, device_count_h_);
-    }
-    else
-    {
-        LOG("Error: No GPU devices!!\n");
-    }
-    evaluateDevices();
-
-#endif
 }
 
 int GpuControl::getDeviceCount()
