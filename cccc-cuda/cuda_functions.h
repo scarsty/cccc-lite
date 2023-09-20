@@ -1,9 +1,11 @@
 #pragma once
 
+#ifndef C_EXPORT
 #ifdef _WIN32
-#define DLL_EXPORT extern "C" __declspec(dllexport)
+#define C_EXPORT extern "C" __declspec(dllexport)
 #else
-#define DLL_EXPORT extern "C"
+#define C_EXPORT extern "C"
+#endif
 #endif
 
 #ifndef REAL_PRECISION
@@ -20,25 +22,21 @@ typedef half realc;
 #endif
 
 /*
-    for convenience, all functions use similar parameters CUDA_FUNCTION{X}{Y}{H}, for examples:
-
+    for convenience, all functions use similar parameters CUDA_FUNCTION{X}{Y}{H}
     where X refers number of pointers and Y refers number of real parameters
-
     "H" means declaration, and here the semicolon should be followed at the end of the line
-
     please read the example to get more information
-
     add new macros if needed.
 */
 
-#define CUDA_FUNCTION22H(name) DLL_EXPORT int cuda_##name(realc* p1, realc* p2, unsigned int size, realc a1, realc a2)
-#define CUDA_FUNCTION23H(name) DLL_EXPORT int cuda_##name(realc* p1, realc* p2, unsigned int size, realc a1, realc a2, realc a3)
-#define CUDA_FUNCTION32H(name) DLL_EXPORT int cuda_##name(realc* p1, realc* p2, realc* p3, unsigned int size, realc a1, realc a2)
-#define CUDA_FUNCTION33H(name) DLL_EXPORT int cuda_##name(realc* p1, realc* p2, realc* p3, unsigned int size, realc a1, realc a2, realc a3)
-#define CUDA_FUNCTION42H(name) DLL_EXPORT int cuda_##name(realc* p1, realc* p2, realc* p3, realc* p4, unsigned int size, realc a1, realc a2)
-#define CUDA_FUNCTION43H(name) DLL_EXPORT int cuda_##name(realc* p1, realc* p2, realc* p3, realc* p4, unsigned int size, realc a1, realc a2, realc a3)
-#define CUDA_FUNCTION44H(name) DLL_EXPORT int cuda_##name(realc* p1, realc* p2, realc* p3, realc* p4, unsigned int size, realc a1, realc a2, realc a3, realc a4)
-#define CUDA_FUNCTION63H(name) DLL_EXPORT int cuda_##name(realc* p1, realc* p2, realc* p3, realc* p4, realc* p5, realc* p6, unsigned int size, realc a1, realc a2, realc a3)
+#define CUDA_FUNCTION22H(name) C_EXPORT int cuda_##name(realc* p1, realc* p2, unsigned int size, realc a1, realc a2)
+#define CUDA_FUNCTION23H(name) C_EXPORT int cuda_##name(realc* p1, realc* p2, unsigned int size, realc a1, realc a2, realc a3)
+#define CUDA_FUNCTION32H(name) C_EXPORT int cuda_##name(realc* p1, realc* p2, realc* p3, unsigned int size, realc a1, realc a2)
+#define CUDA_FUNCTION33H(name) C_EXPORT int cuda_##name(realc* p1, realc* p2, realc* p3, unsigned int size, realc a1, realc a2, realc a3)
+#define CUDA_FUNCTION42H(name) C_EXPORT int cuda_##name(realc* p1, realc* p2, realc* p3, realc* p4, unsigned int size, realc a1, realc a2)
+#define CUDA_FUNCTION43H(name) C_EXPORT int cuda_##name(realc* p1, realc* p2, realc* p3, realc* p4, unsigned int size, realc a1, realc a2, realc a3)
+#define CUDA_FUNCTION44H(name) C_EXPORT int cuda_##name(realc* p1, realc* p2, realc* p3, realc* p4, unsigned int size, realc a1, realc a2, realc a3, realc a4)
+#define CUDA_FUNCTION63H(name) C_EXPORT int cuda_##name(realc* p1, realc* p2, realc* p3, realc* p4, realc* p5, realc* p6, unsigned int size, realc a1, realc a2, realc a3)
 
 CUDA_FUNCTION22H(reciprocal);
 CUDA_FUNCTION22H(addnumber);
