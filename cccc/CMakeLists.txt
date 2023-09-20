@@ -17,7 +17,7 @@ add_definitions(-DENABLE_CUDA=1 -DENABLE_HIP=0)
 include_directories(/usr/local/cuda/include /usr/local/cuda/include/crt ../../mlcc ../include . ./layer ../cccc-cuda ../cccc-hip)
 link_directories(/usr/local/cuda/lib64)
 
-set(LINK_LIBRARIES cudnn cudart cublas)
+set(LINK_LIBRARIES cudnn cudart cublas openblas)
 if(NOT CCCC_CPU)
     include_directories(../cccc-cuda)
     list(APPEND LINK_LIBRARIES cccc-cuda)
