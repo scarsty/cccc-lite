@@ -265,11 +265,6 @@ std::string Brain::makeSaveSign()
     return sign;
 }
 
-bool Brain::checkNetWeights(int n, realc l1, realc l2, realc l1p, realc l2p)
-{
-    return std::isnan(l1) || std::isnan(l2);    // || l2 >= l1 || l1 > n || l2 > n;
-}
-
 //运行，注意容错保护较弱
 //注意通常情况下是使用第一个网络测试数据
 void Brain::run(int train_epochs /*= -1*/)
@@ -582,33 +577,8 @@ void Brain::trainOneNet(std::vector<std::unique_ptr<Net>>& nets, int net_id, Tra
                                 }
                             }
                         }
-                        if (test_error == 0)
-                        {
-                            effective_epoch_count += test_epoch;
-                        }
-                        bool t_check = test_error > 0 && effective_epoch_count > 0;    //网络曾经测试正常，但某次测试不正常，此时可能已经出现数值崩溃
-
-                        int n;
-                        realc l1, l2;
-                        net->calNorm(n, l1, l2);
-                        LOG("N = {}, L1 = {}, L2 = {}\n", n, l1, l2);
-                        bool l_check = checkNetWeights(n, l1, l2, l1p, l2p);
-                        l1p = l1;
-                        l2p = l2;
-                        if (t_check || l_check)
-                        {
-                            LOG("Numerical fault! Load previous weight!\n");
-                            Matrix::copyData(weight_backup, net->getAllWeights());
-                            Matrix::copyData(weight_backup.d(), net->getAllWeights().d());
-                            net->getSolver().reset();
-                            //train_info.need_reset = MP_count_ - 1;
-                            //net->checkNorm();
-                        }
-                        else
-                        {
-                            Matrix::copyData(net->getAllWeights(), weight_backup);
-                            Matrix::copyData(net->getAllWeights().d(), weight_backup.d());
-                        }
+                        Matrix::copyData(net->getAllWeights(), weight_backup);
+                        Matrix::copyData(net->getAllWeights().d(), weight_backup.d());
                         auto time_test = timer_test.getElapsedTime();
                         time_per_epoch = (time_test - time_test0) / test_epoch;
                         time_test0 = time_test;
@@ -631,10 +601,6 @@ void Brain::trainOneNet(std::vector<std::unique_ptr<Net>>& nets, int net_id, Tra
                 //更新到自己的权重
                 Matrix::copyDataAcrossDevice(nets[0]->getAllWeights(), net->getAllWeights());
                 Matrix::copyDataAcrossDevice(nets[0]->getAllWeights().d(), net->getAllWeights().d());
-                //for (int i = 0; i < net->getSolverMatrix().size(); i++)
-                //{
-                //    Matrix::copyDataAcrossDevice(nets[0]->getSolverMatrix()[i], net->getSolverMatrix()[i]);
-                //}
             }
         }
         //主网络负责保存，判断结束条件

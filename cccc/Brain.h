@@ -102,8 +102,6 @@ public:
     }
     const std::vector<std::unique_ptr<Net>>& getNets() { return nets_; }
 
-    bool checkNetWeights(int n, realc l1, realc l2, realc l1p, realc l2p);
-
 public:
     void run(int train_epochs = -1);
     void testData(Net* net, int force_output = 0, int test_type = 0);
