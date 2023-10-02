@@ -103,7 +103,7 @@ HIP_FUNCTION44(adam_update,
         realc& t = a4;
         p1[i] = p1[i] * beta1 + p3[i] * (realc(1) - beta1);
         p2[i] = p2[i] * beta2 + p3[i] * p3[i] * (realc(1) - beta2);
-        p4[i] = p3[i] / (realc(1) - pow(beta1, t)) / (sqrt(p2[i] / (realc(1) - pow(beta2, t))) + epsilon);
+        p4[i] = p1[i] / (realc(1) - pow(beta1, t)) / (sqrt(p2[i] / (realc(1) - pow(beta2, t))) + epsilon);
     });
 
 static __global__ void addbiaskernel(realc* m, realc* b, realc* r, unsigned int size_m, unsigned int size_mchannel, unsigned int size_b, realc a1, realc a2)

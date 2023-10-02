@@ -226,7 +226,7 @@ CUDA_FUNCTION44(adam_update,
         realc& t = a4;
         p1[i] = p1[i] * beta1 + p3[i] * (realc(1) - beta1);
         p2[i] = p2[i] * beta2 + p3[i] * p3[i] * (realc(1) - beta2);
-        p4[i] = p3[i] / (realc(1) - pow(beta1, t)) / (sqrt(p2[i] / (realc(1) - pow(beta2, t))) + epsilon);
+        p4[i] = p1[i] / (realc(1) - pow(beta1, t)) / (sqrt(p2[i] / (realc(1) - pow(beta2, t))) + epsilon);
     });
 
 CUDA_FUNCTION32(rms_prop_update,

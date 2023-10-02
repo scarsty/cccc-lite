@@ -8,12 +8,6 @@
       <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
       <Extensions>cpp;c;cc;cxx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
     </Filter>
-    <Filter Include="activer">
-      <UniqueIdentifier>{e6774d57-4d70-4792-a040-b99f0a412e23}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="additional_cost">
-      <UniqueIdentifier>{f9a6bb75-96d2-402a-89c9-76e36f18d77d}</UniqueIdentifier>
-    </Filter>
     <Filter Include="base">
       <UniqueIdentifier>{e6a60d5c-664d-4817-bcf1-85ab3ff8dc78}</UniqueIdentifier>
     </Filter>
@@ -76,14 +70,8 @@
     <ClCompile Include="DataPreparerTxt.cpp">
       <Filter>data</Filter>
     </ClCompile>
-    <ClCompile Include="Activer.cpp">
-      <Filter>activer</Filter>
-    </ClCompile>
     <ClCompile Include="Solver.cpp">
       <Filter>solver</Filter>
-    </ClCompile>
-    <ClCompile Include="AdditionalCost.cpp">
-      <Filter>additional_cost</Filter>
     </ClCompile>
     <ClCompile Include="DataPreparerFactory.cpp">
       <Filter>data</Filter>
@@ -155,12 +143,6 @@
     </ClInclude>
     <ClInclude Include="Solver.h">
       <Filter>solver</Filter>
-    </ClInclude>
-    <ClInclude Include="Activer.h">
-      <Filter>activer</Filter>
-    </ClInclude>
-    <ClInclude Include="AdditionalCost.h">
-      <Filter>additional_cost</Filter>
     </ClInclude>
     <ClInclude Include="DataPreparerFactory.h">
       <Filter>data</Filter>

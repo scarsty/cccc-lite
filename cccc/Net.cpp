@@ -120,7 +120,6 @@ void Net::updateWeight()
     {
         solver_.updateWeights(all_weights_, getX().getNumber());
     }
-    solver_.actMomentum(all_weights_);
 }
 
 //保存权重，需配合ini中的网络结构

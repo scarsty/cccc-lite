@@ -26,6 +26,8 @@ real Solver::getMomentum() const
 //求解器，即如何更新参数的定义
 void Solver::init(Option* op, std::string section, Matrix& W)
 {
+    dW_.resize(W);
+    dW_.fillData(0);
     //batch_ = batch;
     weight_decay_ = op->getReal(section, "weight_decay", 0);
     weight_decay_l1_ = op->getReal(section, "weight_decay_l1", 0);
@@ -212,10 +214,10 @@ void Solver::updateWeightBiasPre(Matrix& W)
 void Solver::updateWeights(Matrix& W, int batch)
 {
     time_step_ = time_step_ + 1;
-    auto& dW = W.d();
 
     if (restrict_dweight_[0] != 0 || restrict_dweight_[1] != 0)
     {
+        auto& dW = W.d();
         auto l1w = W.sumAbs();
         auto l1dw = dW.sumAbs() / batch;
         //LOG("a {}\n", l1dw / l1w);
@@ -237,7 +239,8 @@ void Solver::updateWeights(Matrix& W, int batch)
     {
     case SOLVER_SGD:
     case SOLVER_NAG:
-        Matrix::add(W, dW, W, 1 - weight_decay_ * learn_rate_, -learn_rate_ * lr_weight_scale_ / batch);
+        Matrix::add(W.d(), dW_, dW_, 1, momentum_, 0);
+        Matrix::add(W, dW_, W, 1 - weight_decay_ * learn_rate_, -learn_rate_ * lr_weight_scale_ / batch);
         //LOG("check dweight = {}, {}, {}\n", W.sumAbs(), dW.sumAbs() / batch, dW.sumAbs() / W.sumAbs() / batch);
         if (weight_decay_l1_ != 0)
         {
@@ -252,18 +255,15 @@ void Solver::updateWeights(Matrix& W, int batch)
     case SOLVER_ADA_DELTA:
         //LOG("ADADELTA\n");
         //使用第0个矩阵作为真正的更新量，下同
-        dW.scale(1.0 / batch);
-        MatrixEx::adaDeltaUpdate(W_vector_[1], W_vector_[2], dW, W_vector_[0], real_vector_[1], real_vector_[0]);
-        Matrix::add(W, W_vector_[0], W, 1 - weight_decay_ * learn_rate_, -1);
+        MatrixEx::adaDeltaUpdate(W_vector_[1], W_vector_[2], W.d(), W_vector_[0], real_vector_[1], real_vector_[0]);
+        Matrix::add(W, W_vector_[0], W, 1 - weight_decay_ * learn_rate_, -1.0);
         break;
     case SOLVER_ADAM:
-        dW.scale(1.0 / batch);
-        MatrixEx::adamUpdate(W_vector_[1], W_vector_[2], dW, W_vector_[0], real_vector_[2], real_vector_[3], real_vector_[0], time_step_);
+        MatrixEx::adamUpdate(W_vector_[1], W_vector_[2], W.d(), W_vector_[0], real_vector_[2], real_vector_[3], real_vector_[0], time_step_);
         Matrix::add(W, W_vector_[0], W, 1 - weight_decay_ * learn_rate_, -learn_rate_ * lr_weight_scale_);
         break;
     case SOLVER_RMS_PROP:
-        dW.scale(1.0 / batch);
-        MatrixEx::adaRMSPropUpdate(W_vector_[1], dW, W_vector_[0], real_vector_[1], real_vector_[0]);
+        MatrixEx::adaRMSPropUpdate(W_vector_[1], W.d(), W_vector_[0], real_vector_[1], real_vector_[0]);
         Matrix::add(W, W_vector_[0], W, 1, -learn_rate_ * lr_weight_scale_);
         break;
     }

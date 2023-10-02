@@ -1142,11 +1142,11 @@ void MatrixEx::convolutionBackward(Matrix& X, Matrix& W, const Matrix& Y, std::v
     {
         if (X.needReverse())
         {
-            //hip_conv2db_d(X.d().data(), W.data(), Y.d().data(), X.width_, X.height_, X.channel_, X.number_, Y.width_, Y.height_, Y.channel_, W.width_, W.height_, stride[0], padding[0], a, rx);
+            hip_conv2db_d(X.d().data(), W.data(), Y.d().data(), X.width_, X.height_, X.channel_, X.number_, Y.width_, Y.height_, Y.channel_, W.width_, W.height_, stride[0], padding[0], a, rx);
         }
         if (W.needReverse())
         {
-            //hip_conv2db_w(X.data(), W.d().data(), Y.d().data(), X.width_, X.height_, X.channel_, X.number_, Y.width_, Y.height_, Y.channel_, W.width_, W.height_, stride[0], padding[0], a, rw);
+            hip_conv2db_w(X.data(), W.d().data(), Y.d().data(), X.width_, X.height_, X.channel_, X.number_, Y.width_, Y.height_, Y.channel_, W.width_, W.height_, stride[0], padding[0], a, rw);
         }
     }
     else
@@ -1443,7 +1443,7 @@ void MatrixEx::adamUpdate(Matrix& mean_d, Matrix& mean_d2, Matrix& d, Matrix& ad
         {
             p1[i] = p1[i] * beta1 + p3[i] * (1 - beta1);
             p2[i] = p2[i] * beta2 + p3[i] * p3[i] * (1 - beta2);
-            p4[i] = p3[i] / (1 - pow(beta1, t)) / (sqrt(p2[i] / (1 - pow(beta2, t))) + epsilon);
+            p4[i] = p1[i] / (1 - pow(beta1, t)) / (sqrt(p2[i] / (1 - pow(beta2, t))) + epsilon);
         }
     }
 }

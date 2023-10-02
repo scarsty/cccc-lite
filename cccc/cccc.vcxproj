@@ -128,7 +128,6 @@
     <ClCompile Include="..\..\mlcc\Cifa.cpp" />
     <ClCompile Include="..\..\mlcc\strfunc.cpp" />
     <ClCompile Include="..\..\mlcc\filefunc.cpp" />
-    <ClCompile Include="Activer.cpp" />
     <ClCompile Include="GpuControl.cpp" />
     <ClCompile Include="gpu_lib.cpp" />
     <ClCompile Include="DataPreparerFactory.cpp" />
@@ -147,7 +146,6 @@
     <ClCompile Include="Brain.cpp" />
     <ClCompile Include="predict.cpp" />
     <ClCompile Include="Solver.cpp" />
-    <ClCompile Include="AdditionalCost.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\mlcc\Cifa.h" />
@@ -161,7 +159,6 @@
     <ClInclude Include="..\..\mlcc\Random.h" />
     <ClInclude Include="..\..\mlcc\SimpleBuffer.h" />
     <ClInclude Include="..\..\mlcc\Timer.h" />
-    <ClInclude Include="Activer.h" />
     <ClInclude Include="blas_types.h" />
     <ClInclude Include="cblas_real.h" />
     <ClInclude Include="hip_libs.inc" />
@@ -188,7 +185,6 @@
     <ClInclude Include="resource.h" />
     <ClInclude Include="rocblas_real.h" />
     <ClInclude Include="Solver.h" />
-    <ClInclude Include="AdditionalCost.h" />
     <ClInclude Include="VectorMath.h" />
     <ClInclude Include="Brain.h" />
     <ClInclude Include="Option.h" />

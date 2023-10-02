@@ -1,6 +1,4 @@
 ﻿#pragma once
-#include "Activer.h"
-#include "AdditionalCost.h"
 #include "MatrixEx.h"
 #include "MatrixOp.h"
 #include "Option.h"

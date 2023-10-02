@@ -105,7 +105,7 @@ void MatrixOp::forwardData()
 void MatrixOp::backwardDataWeight()
 {
     auto& Y = *out_[0];
-    real data_weight = 1;
+    real data_weight = 0;
     //若反向过程需更新多个矩阵，则在函数内部判断needUpdate
     switch (type_)
     {
@@ -139,7 +139,7 @@ void MatrixOp::backwardDataWeight()
         }
         break;
     case MatrixOpType::ADD_BIAS:
-        MatrixEx::addBiasBackward(*in_[0], *wb_[0], Y, 0, 1);
+        MatrixEx::addBiasBackward(*in_[0], *wb_[0], Y, 0, data_weight);
         break;
     case MatrixOpType::CONCAT:
         MatrixEx::concatByChannelBackward(in_, Y);
@@ -157,10 +157,10 @@ void MatrixOp::backwardDataWeight()
         }
         break;
     case MatrixOpType::CONV:
-        MatrixEx::convolutionBackward(*in_[0], *wb_[0], Y, para_int_, para_matrix_, para_int_v_[0], para_int_v_[1], para_real_[0], in_[0]->keepWeight(), 1);
+        MatrixEx::convolutionBackward(*in_[0], *wb_[0], Y, para_int_, para_matrix_, para_int_v_[0], para_int_v_[1], para_real_[0], in_[0]->keepWeight(), data_weight);
         break;
     case MatrixOpType::CORR:
-        MatrixEx::correlationBackward(*in_[0], *wb_[0], Y, para_int_, para_matrix_, para_int_v_[0], para_int_v_[1], para_real_[0], in_[0]->keepWeight(), 1);
+        MatrixEx::correlationBackward(*in_[0], *wb_[0], Y, para_int_, para_matrix_, para_int_v_[0], para_int_v_[1], para_real_[0], in_[0]->keepWeight(), data_weight);
         break;
     case MatrixOpType::RESHAPE:
         Matrix::copyData(Y.d(), in_[0]->d());

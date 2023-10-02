@@ -55,6 +55,8 @@ protected:
     std::vector<int> int_vector_;
     std::vector<Matrix> W_vector_;
 
+    Matrix dW_;    //实际用于更新的权重梯度，包含动量项
+
 public:
     SolverType getSolverType() const { return solver_type_; }
     real getMomentum() const;
@@ -71,7 +73,6 @@ public:
     real adjustLearnRate(int epoch, int total_epoch);
     void updateWeightBiasPre(Matrix& W);
     void updateWeights(Matrix& W, int batch);
-    void actMomentum(Matrix& W) { W.d().scale(momentum_); }
     void reset();
     void cancelRestrictDWeight();
 
