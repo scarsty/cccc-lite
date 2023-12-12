@@ -41,7 +41,7 @@ void MatrixEx::addBias(const Matrix& X, const Matrix& bias, Matrix& Y, realc a /
     }
     else if (X.isHip())
     {
-        hip_addbias(X.data(), bias.data(), Y.data(), X.getDataSize(), Y.row_ / Y.channel_, bias.getDataSize(), a, b);
+        //hip_addbias(X.data(), bias.data(), Y.data(), X.getDataSize(), Y.row_ / Y.channel_, bias.getDataSize(), a, b);
     }
     else
     {
@@ -81,7 +81,7 @@ void MatrixEx::addBiasBackward(Matrix& X, Matrix& bias, const Matrix& Y, realc a
         }
         else if (X.isHip())
         {
-            hip_addbiasb(bias.d().data(), Y.d().data(), X.getDataSize(), Y.row_ / Y.channel_, bias.getDataSize(), const_real_1, b);
+            //hip_addbiasb(bias.d().data(), Y.d().data(), X.getDataSize(), Y.row_ / Y.channel_, bias.getDataSize(), const_real_1, b);
         }
         else
         {
@@ -274,7 +274,7 @@ void MatrixEx::activeForward(const Matrix& X, Matrix& Y, ActiveFunctionType af,
         }
         else if (X.isHip())
         {
-            hip_sigmoid(X.data(), Y.data(), Y.data_size_, a, r);
+            //hip_sigmoid(X.data(), Y.data(), Y.data_size_, a, r);
         }
         else
         {
@@ -290,7 +290,7 @@ void MatrixEx::activeForward(const Matrix& X, Matrix& Y, ActiveFunctionType af,
         }
         else if (X.isHip())
         {
-            hip_relu(X.data(), Y.data(), Y.data_size_, a, r);
+            //hip_relu(X.data(), Y.data(), Y.data_size_, a, r);
         }
         else
         {
@@ -323,7 +323,7 @@ void MatrixEx::activeForward(const Matrix& X, Matrix& Y, ActiveFunctionType af,
         }
         else if (X.isHip())
         {
-            hip_softmax(X.data(), Y.data(), X.getDataSize(), X.getRow(), a, r);
+            //hip_softmax(X.data(), Y.data(), X.getDataSize(), X.getRow(), a, r);
         }
         else
         {
@@ -441,7 +441,7 @@ void MatrixEx::activeBackward(Matrix& X, const Matrix& Y, ActiveFunctionType af,
         }
         else if (X.isHip())
         {
-            hip_sigmoidb(Y.data(), Y.d().data(), X.data(), X.d().data(), X.data_size_, a, r);
+            //hip_sigmoidb(Y.data(), Y.d().data(), X.data(), X.d().data(), X.data_size_, a, r);
         }
         else
         {
@@ -457,7 +457,7 @@ void MatrixEx::activeBackward(Matrix& X, const Matrix& Y, ActiveFunctionType af,
         }
         else if (X.isHip())
         {
-            hip_relub(Y.data(), Y.d().data(), X.data(), X.d().data(), X.data_size_, a, r);
+            //hip_relub(Y.data(), Y.d().data(), X.data(), X.d().data(), X.data_size_, a, r);
         }
         else
         {
@@ -596,11 +596,11 @@ void MatrixEx::poolingForward(const Matrix& X, Matrix& Y, PoolingType pooling_ty
     {
         if (reverse == 0)
         {
-            hip_pool(X.data(), Y.data(), X.width_, X.height_, X.channel_, X.number_, Y.width_, Y.height_, window[0], pooling_type, a, r);
+            //hip_pool(X.data(), Y.data(), X.width_, X.height_, X.channel_, X.number_, Y.width_, Y.height_, window[0], pooling_type, a, r);
         }
         else
         {
-            hip_poolb(Y.data(), Y.data(), X.data(), X.data(), Y.width_, Y.height_, Y.channel_, Y.number_, X.width_, X.height_, window[0], pooling_type, a, r);
+            //hip_poolb(Y.data(), Y.data(), X.data(), X.data(), Y.width_, Y.height_, Y.channel_, Y.number_, X.width_, X.height_, window[0], pooling_type, a, r);
             Y.scale(VectorMath::multiply(window));
         }
     }
@@ -714,11 +714,11 @@ void MatrixEx::poolingBackward(Matrix& X, const Matrix& Y, PoolingType pooling_t
     {
         if (reverse == 0)
         {
-            hip_poolb(X.data(), X.d().data(), Y.data(), Y.d().data(), X.width_, X.height_, X.channel_, X.number_, Y.width_, Y.height_, window[0], pooling_type, a, r);
+            //hip_poolb(X.data(), X.d().data(), Y.data(), Y.d().data(), X.width_, X.height_, X.channel_, X.number_, Y.width_, Y.height_, window[0], pooling_type, a, r);
         }
         else
         {
-            hip_pool(Y.d().data(), X.d().data(), Y.width_, Y.height_, Y.channel_, Y.number_, X.width_, X.height_, window[0], pooling_type, a, r);
+            //hip_pool(Y.d().data(), X.d().data(), Y.width_, Y.height_, Y.channel_, Y.number_, X.width_, X.height_, window[0], pooling_type, a, r);
             X.d().scale(1.0 / VectorMath::multiply(window));
         }
     }
@@ -912,7 +912,7 @@ void MatrixEx::convolutionForward(const Matrix& X, const Matrix& W, Matrix& Y, s
     }
     else if (Y.isHip())
     {
-        hip_conv2d(X.data(), W.data(), Y.data(), X.width_, X.height_, X.channel_, X.number_, Y.width_, Y.height_, Y.channel_, W.width_, W.height_, stride[0], padding[0], a, r);
+        //hip_conv2d(X.data(), W.data(), Y.data(), X.width_, X.height_, X.channel_, X.number_, Y.width_, Y.height_, Y.channel_, W.width_, W.height_, stride[0], padding[0], a, r);
 
         //Conv conv(X.width_, X.height_, X.channel_, Y.channel_, W.width_, W.height_, padding[0], padding[1], stride[0], stride[1], false);
         //if (methods[2] != X.number_)
@@ -1142,11 +1142,11 @@ void MatrixEx::convolutionBackward(Matrix& X, Matrix& W, const Matrix& Y, std::v
     {
         if (X.needReverse())
         {
-            hip_conv2db_d(X.d().data(), W.data(), Y.d().data(), X.width_, X.height_, X.channel_, X.number_, Y.width_, Y.height_, Y.channel_, W.width_, W.height_, stride[0], padding[0], a, rx);
+            //hip_conv2db_d(X.d().data(), W.data(), Y.d().data(), X.width_, X.height_, X.channel_, X.number_, Y.width_, Y.height_, Y.channel_, W.width_, W.height_, stride[0], padding[0], a, rx);
         }
         if (W.needReverse())
         {
-            hip_conv2db_w(X.data(), W.d().data(), Y.d().data(), X.width_, X.height_, X.channel_, X.number_, Y.width_, Y.height_, Y.channel_, W.width_, W.height_, stride[0], padding[0], a, rw);
+            //hip_conv2db_w(X.data(), W.d().data(), Y.d().data(), X.width_, X.height_, X.channel_, X.number_, Y.width_, Y.height_, Y.channel_, W.width_, W.height_, stride[0], padding[0], a, rw);
         }
     }
     else
@@ -1431,7 +1431,7 @@ void MatrixEx::adamUpdate(Matrix& mean_d, Matrix& mean_d2, Matrix& d, Matrix& ad
     }
     else if (d.isHip())
     {
-        hip_adam_update(mean_d.data(), mean_d2.data(), d.data(), ada_d.data(), d.data_size_, beta1, beta2, epsilon, t);
+        //hip_adam_update(mean_d.data(), mean_d2.data(), d.data(), ada_d.data(), d.data_size_, beta1, beta2, epsilon, t);
     }
     else
     {

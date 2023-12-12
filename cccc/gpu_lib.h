@@ -13,9 +13,6 @@
 #include "cublas_v2.h"
 #include "cuda_functions.h"
 #include "cudnn.h"
-#if defined(_WIN32)
-#include <nvml.h>
-#endif
 #endif
 
 #if (ENABLE_CUDA) && (ENABLE_HIP)
@@ -36,10 +33,13 @@
 #if ENABLE_HIP
 #include "rocblas/rocblas.h"
 #include "hip_functions.h"
+#include "miopen/miopen.h"
 #endif
 
+#ifndef _DEBUG
 #ifndef AUTO_LOAD_GPU_FUNCTIONS
 #define AUTO_LOAD_GPU_FUNCTIONS
+#endif
 #endif
 
 namespace cccc
@@ -48,7 +48,7 @@ namespace cccc
 #define IMPORT(func) \
     using func##_t = decltype(&func); \
     extern func##_t func;
-#define IMPORT2(func)
+#define UNIMPORT_OR_BLANKTEMP(func)
 #if ENABLE_CUDA
 #include "cuda_libs.inc"
 #endif
@@ -56,13 +56,13 @@ namespace cccc
 #include "hip_libs.inc"
 #endif
 #undef IMPORT
-#undef IMPORT2
+#undef UNIMPORT_OR_BLANKTEMP
 #endif
 
 #define IMPORT(func) \
     template <typename... Args> \
     inline int func(Args&&... args) { return 0; }
-#define IMPORT2(func) IMPORT(func)
+#define UNIMPORT_OR_BLANKTEMP(func) IMPORT(func)
 #if !ENABLE_CUDA
 #include "cuda_libs.inc"
 #endif
@@ -70,7 +70,7 @@ namespace cccc
 #include "hip_libs.inc"
 #endif
 #undef IMPORT
-#undef IMPORT2
+#undef UNIMPORT_OR_BLANKTEMP
 
 };    //namespace cccc
 

@@ -17,6 +17,7 @@ typedef half realc;
 #endif
 
 #define HIP_FUNCTION22H(name) C_EXPORT int hip_##name(realc* p1, realc* p2, unsigned int size, realc a1, realc a2)
+#define HIP_FUNCTION32H(name) C_EXPORT int hip_##name(realc* p1, realc* p2, realc* p3, unsigned int size, realc a1, realc a2)
 #define HIP_FUNCTION42H(name) C_EXPORT int hip_##name(realc* p1, realc* p2, realc* p3, realc* p4, unsigned int size, realc a1, realc a2)
 #define HIP_FUNCTION44H(name) C_EXPORT int hip_##name(realc* p1, realc* p2, realc* p3, realc* p4, unsigned int size, realc a1, realc a2, realc a3, realc a4)
 
@@ -27,7 +28,10 @@ HIP_FUNCTION42H(relub);
 
 HIP_FUNCTION22H(reciprocal);
 HIP_FUNCTION22H(addnumber);
+HIP_FUNCTION32H(ada_update);
+HIP_FUNCTION42H(ada_delta_update);
 HIP_FUNCTION44H(adam_update);
+HIP_FUNCTION32H(rms_prop_update);
 
 C_EXPORT int hip_addbias(realc* m, realc* b, realc* r, unsigned int size_m, unsigned int size_mchannel, unsigned int size_b, realc a1, realc a2);
 C_EXPORT int hip_addbiasb(realc* bd, realc* rd, unsigned int size_m, unsigned int size_mchannel, unsigned int size_b, realc a1, realc a2);

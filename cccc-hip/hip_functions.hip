@@ -34,6 +34,21 @@ inline int getError(const char* content)
         return getError(#name); \
     }
 
+#define HIP_FUNCTION32(name, function) \
+    static __global__ void name##kernel(realc* p1, realc* p2, realc* p3, unsigned int size, realc a1, realc a2) \
+    { \
+        int i = cal_i(); \
+        if (i < size) \
+        { \
+            function \
+        } \
+    } \
+    int hip_##name(realc* p1, realc* p2, realc* p3, unsigned int size, realc a1, realc a2) \
+    { \
+        name##kernel<<<blockNum(size), blockMax>>>(p1, p2, p3, size, a1, a2); \
+        return getError(#name); \
+    }
+
 #define HIP_FUNCTION42(name, function) \
     static __global__ void name##kernel(realc* p1, realc* p2, realc* p3, realc* p4, unsigned int size, realc a1, realc a2) \
     { \
@@ -95,6 +110,24 @@ HIP_FUNCTION22(reciprocal, { p2[i] = a1 / (p1[i] + a2); });
 
 HIP_FUNCTION22(addnumber, { p2[i] = a1 + p1[i] * a2; });
 
+HIP_FUNCTION32(ada_update,
+    {
+        realc& rou = a1;
+        realc& epsilon = a2;
+        p2[i] = p2[i] * rou + p3[i] * p3[i] * (realc(1) - rou);
+        p3[i] = p3[i] * sqrt((p1[i] + epsilon) / (p2[i] + epsilon));
+        p1[i] = p1[i] * rou + p3[i] * p3[i] * (realc(1) - rou);
+    });
+
+HIP_FUNCTION42(ada_delta_update,
+    {
+        realc& rou = a1;
+        realc& epsilon = a2;
+        p1[i] = p1[i] * rou + p3[i] * p3[i] * (realc(1) - rou);
+        p4[i] = p3[i] * sqrt((p2[i] + epsilon) / (p1[i] + epsilon));
+        p2[i] = p2[i] * rou + p4[i] * p4[i] * (realc(1) - rou);
+    });
+
 HIP_FUNCTION44(adam_update,
     {
         realc& beta1 = a1;
@@ -104,6 +137,14 @@ HIP_FUNCTION44(adam_update,
         p1[i] = p1[i] * beta1 + p3[i] * (realc(1) - beta1);
         p2[i] = p2[i] * beta2 + p3[i] * p3[i] * (realc(1) - beta2);
         p4[i] = p1[i] / (realc(1) - pow(beta1, t)) / (sqrt(p2[i] / (realc(1) - pow(beta2, t))) + epsilon);
+    });
+
+HIP_FUNCTION32(rms_prop_update,
+    {
+        realc& rou = a1;
+        realc& epsilon = a2;
+        p1[i] = p1[i] * rou + p2[i] * p2[i] * (realc(1) - rou);
+        p3[i] = p2[i] / sqrt(p1[i] + epsilon);
     });
 
 static __global__ void addbiaskernel(realc* m, realc* b, realc* r, unsigned int size_m, unsigned int size_mchannel, unsigned int size_b, realc a1, realc a2)
@@ -247,7 +288,7 @@ int hip_poolb(realc* x, realc* dx, realc* y, realc* dy, unsigned int w0, unsigne
     return getError("poolb");
 }
 
-static __global__ void conv2dkernel(realc* x, realc* w, realc* y, int w0, int h0, int c0, int n, int w1, int h1, int c1, int winw, int winh, int stride,int padding, realc a1, realc a2)
+static __global__ void conv2dkernel(realc* x, realc* w, realc* y, int w0, int h0, int c0, int n, int w1, int h1, int c1, int winw, int winh, int stride, int padding, realc a1, realc a2)
 {
     int i = cal_i();
     if (i < w1 * h1 * c1 * n)
