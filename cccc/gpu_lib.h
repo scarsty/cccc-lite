@@ -4,7 +4,11 @@
 #define ENABLE_CUDA 1
 #endif
 #ifndef ENABLE_HIP
-#define ENABLE_HIP 1
+#ifdef _WIN32
+#define ENABLE_HIP 0
+#else
+#define ENABLE_HIP 0
+#endif
 #endif
 
 #if ENABLE_CUDA
@@ -21,6 +25,7 @@
 
 #if (ENABLE_CUDA) && !(ENABLE_HIP)
 #include "hip_runtime_type_part.h"
+#include "hip_type_fake.h"
 #endif
 
 #if !(ENABLE_CUDA) && (ENABLE_HIP)
