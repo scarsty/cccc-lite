@@ -17,7 +17,7 @@ CCCC的功能并不及其他的开源平台，其特色是简单的配置和单�
 
 ### Windows下编译
 
-- 任何支持C++17以上的Visual Studio和可以相互配合的CUDA均可以使用，建议使用较新的版本。
+- 任何支持C++20以上的Visual Studio和可以相互配合的CUDA均可以使用，建议使用较新的版本。
 - 下载cuDNN的开发包，将h文件，lib文件和dll文件复制到cuda工具箱目录中的include，lib/x64和bin目录。或者复制到自己指定的某个目录也可以，但是可能需要自己设置环境变量。
 - 检查环境变量CUDA_PATH的值，通常应该是“C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\vxx.x”（后面的数字为版本号，有可能不同）。
 - 在cccc-cuda.vcproj文件中，有两处涉及cuda版本号，类似“CUDA xx.x.targets/props”，需按照自己的实际情况手动修改。
