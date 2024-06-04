@@ -26,7 +26,7 @@ int NetLayer::init2()
         LOG("Net structure is wrong!\n");
         return 1;
     }
-    Y_->resize(*A_);
+    Y_->resize(A_->getDim());
     return 0;
 }
 
@@ -200,7 +200,7 @@ int NetLayer::createAndConnectLayers()
 
     all_layer_map_.clear();
 
-    auto loss_weight_values = strfunc::findNumbers<real>(option_->getString(layer_out_name, "loss_weight"));
+    auto loss_weight_values = strfunc::findNumbers<float>(option_->getString(layer_out_name, "loss_weight"));
     if (loss_weight_values.size() > 0)
     {
         LOG("Loss weight {}: {}\n", loss_weight_values.size(), loss_weight_values);

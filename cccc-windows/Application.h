@@ -16,7 +16,6 @@ public:
 
 public:
     void run();
-    static int getFloatPresicion();
 };
 
 }    // namespace cccc

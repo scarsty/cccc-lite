@@ -8,16 +8,21 @@ namespace cccc
 namespace VectorMath
 {
 //向量数学类，全部是模板函数
+//cpu计算只使用float
 #define VECTOR(fv, f) \
-    template <typename T> \
-    void fv(const T* A, T* R, int size, real a = 1, real r = 0) \
+    inline void fv(const void* Av, void* Rv, int size, float a = 1, float r = 0) \
     { \
+        auto A = (const float*)Av; \
+        auto R = (float*)Rv; \
         for (int i = 0; i < size; i++) { R[i] = a * f(A[i]) + r * R[i]; } \
     }
 #define VECTOR_B(fv, content) \
-    template <typename T> \
-    void fv(const T* A, const T* DA, const T* R, T* DR, int size, real a = 1, real r = 0) \
+    inline void fv(const void* Av, const void* DAv, const void* Rv, void* DRv, int size, float a = 1, float r = 0) \
     { \
+        auto A = (const float*)Av; \
+        auto DA = (const float*)DAv; \
+        auto R = (const float*)Rv; \
+        auto DR = (float*)DRv; \
         for (int i = 0; i < size; i++) { DR[i] = a * (content) + r * DR[i]; } \
     }
 
@@ -40,9 +45,11 @@ VECTOR(tanh_v, tanh);
 VECTOR(softplus_v, softplus);
 template <typename T>
 void linear_v(T* x, T* a, int size) { memcpy(a, x, sizeof(T) * size); }
-template <typename T>
-void clipped_relu_v(const T* A, T* R, T v, int size, real a = 1, real r = 0)
+
+inline void clipped_relu_v(const void* Av, void* Rv, float v, int size, float a = 1, float r = 0)
 {
+    auto A = (const float*)Av;
+    auto R = (float*)Rv;
     for (int i = 0; i < size; i++)
     {
         if (A[i] > v)
@@ -62,24 +69,27 @@ void clipped_relu_v(const T* A, T* R, T v, int size, real a = 1, real r = 0)
 
 VECTOR_B(exp_vb, A[i]);
 VECTOR_B(sigmoid_vb, A[i] * (1 - A[i]) * DA[i]);    //sigmoid导数直接使用a计算
-VECTOR_B(relu_vb, R[i] > T(0) ? DA[i] : T(0));
+VECTOR_B(relu_vb, R[i] > 0 ? DA[i] : 0);
 VECTOR_B(tanh_vb, (1 - A[i] * A[i]) * DA[i]);
 VECTOR_B(softplus_vb, sigmoid(R[i]));
 VECTOR_B(linear_vb, 1);
 
-template <typename T>
-void clipped_relu_vb(const T* A, const T* DA, const T* R, T* DR, T v, int size, real a = 1, real r = 0)
+inline void clipped_relu_vb(const void* Av, const void* DAv, const void* Rv, void* DRv, float v, int size, float a = 1, float r = 0)
 {
+    auto A = (const float*)Av;
+    auto DA = (const float*)DAv;
+    auto R = (const float*)Rv;
+    auto DR = (float*)DRv;
     for (int i = 0; i < size; i++)
     {
-        DR[i] = a * ((R[i] > T(0)) && (R[i] < v) ? DA[i] : T(0)) + r * DR[i];
+        DR[i] = a * ((R[i] > 0) && (R[i] < v) ? DA[i] : 0) + r * DR[i];
     }
 }
 
 //下面3个都是softmax用的
-template <typename T>
-void minus_max(T* x, int size)
+inline void minus_max(void* xv, int size)
 {
+    auto x = (float*)xv;
     auto m = x[0];
     for (int i = 1; i < size; i++)
     {
@@ -91,18 +101,22 @@ void minus_max(T* x, int size)
     }
 }
 
-template <typename T>
-void softmax_vb_sub(const T* a, const T* da, T v, T* dx, int size)
+inline void softmax_vb_sub(const void* av, const void* dav, float v, void* dxv, int size)
 {
+    auto a = (const float*)av;
+    auto da = (const float*)dav;
+    auto dx = (float*)dxv;
     for (int i = 0; i < size; i++)
     {
         dx[i] = a[i] * (da[i] - v);
     }
 }
 
-template <typename T>
-void softmaxlog_vb_sub(const T* a, const T* da, T v, T* dx, int size)
+inline void softmaxlog_vb_sub(const void* av, const void* dav, float v, void* dxv, int size)
 {
+    auto a = (const float*)av;
+    auto da = (const float*)dav;
+    auto dx = (float*)dxv;
     for (int i = 0; i < size; i++)
     {
         dx[i] = da[i] - v * exp(a[i]);

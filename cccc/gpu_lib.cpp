@@ -11,7 +11,7 @@ namespace cccc
 
 #define UNIMPORT_OR_BLANKTEMP(func)
 
-#define IMPORT(func) func##_t func = nullptr;
+#define IMPORT(func, ...) func##_t func = nullptr;
 #if ENABLE_CUDA
 #include "cuda_libs.inc"
 #endif
@@ -94,6 +94,10 @@ private:
         "cublas64_12",
         "cublas64_11",
         "cublas64_100",
+        "cudnn_graph64_9",
+        "cudnn_adv64_9",
+        "cudnn_cnn64_9",
+        "cudnn_ops64_9",
         "cudnn_adv_infer64_8",
         "cudnn_adv_train64_8",
         "cudnn_cnn_infer64_8",

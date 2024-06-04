@@ -1,5 +1,6 @@
 ﻿#pragma once
 #include "blas_types.h"
+#include "cuda_functions.h"
 
 #if ENABLE_CUDA
 #include "cublas_v2.h"
@@ -369,13 +370,61 @@ public:
     {
         cublasDdgmm(handle_, get_side(Side), m, n, A, lda, x, incx, C, ldc);
     }
+    //half precision
+    CUBLAS_FUNCTION float doth(const int N, const half* X, const int incX, const half* Y, const int incY)
+    {
+        //float r;
+        //cublasDotEx(handle_, N, X, CUDA_R_16F, incX, Y, CUDA_R_16F, incY, &r, CUDA_R_32F, CUDA_R_32F);
+        float* bufferX = nullptr;
+        float* bufferY = nullptr;
+        cudaMalloc((void**)&bufferX, N * incX * sizeof(float));
+        cudaMalloc((void**)&bufferY, N * incY * sizeof(float));
+        cuda_half2float((half*)X, bufferX, N * incX);
+        cuda_half2float((half*)Y, bufferY, N * incY);
+        float r = dot(N, bufferX, incX, bufferY, incY);
+        cudaFree(bufferX);
+        cudaFree(bufferY);
+        return r;
+    }
+    CUBLAS_FUNCTION float asumh(const int N, const half* X, const int incX)
+    {
+        float r = 0;
+        float* buffer = nullptr;
+        cudaMalloc((void**)&buffer, N * incX * sizeof(float));
+        cuda_half2float((half*)X, buffer, N * incX);
+        cublasSasum(handle_, N, buffer, incX, &r);
+        cudaFree(buffer);
+        return r;
+    }
+    CUBLAS_FUNCTION int iamaxh(const int N, const half* X, const int incX)
+    {
+        int r = 1;
+        float* buffer = nullptr;
+        cudaMalloc((void**)&buffer, N * incX * sizeof(float));
+        cuda_half2float((half*)X, buffer, N * incX);
+        cublasIsamax(handle_, N, buffer, incX, &r);
+        cudaFree(buffer);
+        return r - 1;
+    }
+    CUBLAS_FUNCTION void scalh(const int N, const half alpha, half* X, const int incX)
+    {
+        cublasScalEx(handle_, N, &alpha, CUDA_R_16F, X, CUDA_R_16F, incX, CUDA_R_32F);
+    }
+    CUBLAS_FUNCTION void gemvh(const MatrixTransType TransA, const int M, const int N, const half alpha, const half* A, const int lda, const half* X, const int incX, const half beta, half* Y, const int incY)
+    {
+        cublasHgemm(handle_, get_trans(TransA), CUBLAS_OP_N, M, 1, N, (__half*)&alpha, (__half*)A, lda, (__half*)X, N, (__half*)&beta, (__half*)Y, lda);
+    }
+    CUBLAS_FUNCTION void gemmh(const MatrixTransType TransA, const MatrixTransType TransB, const int M, const int N, const int K, const half alpha, const half* A, const int lda, const half* B, const int ldb, const half beta, half* C, const int ldc)
+    {
+        cublasHgemm(handle_, get_trans(TransA), get_trans(TransB), M, N, K, (__half*)&alpha, (__half*)A, lda, (__half*)B, ldb, (__half*)&beta, (__half*)C, ldc);
+    }
 
 protected:
     cublasHandle_t handle_ = nullptr;
 };
 
 }    // namespace cccc
-#else 
+#else
 #include "cblas_real.h"
 namespace cccc
 {

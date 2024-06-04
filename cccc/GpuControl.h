@@ -1,24 +1,18 @@
 ﻿#pragma once
+#include "TensorDesc.h"
 #include "types.h"
 #include <atomic>
 #include <memory>
 #include <mutex>
 #include <vector>
 
-struct cudnnTensorStruct;
 struct cudnnContext;
+struct miopenHandle;
 
 namespace cccc
 {
 class Rocblas;
 class Cublas;
-
-//使用设备的类型，主要决定数据位置
-enum class UnitType
-{
-    CPU = 0,
-    GPU,
-};
 
 enum ApiType
 {
@@ -63,6 +57,7 @@ public:
     GpuControl& operator=(GpuControl&&) = default;
 
 private:
+    //以下静态变量用于记录设备全局信息，相关过程应在主进程中进行
     static int device_count_;
     static int device_count_c_;
     static int device_count_h_;
@@ -73,7 +68,7 @@ public:
     static void checkDevices();
     static int getDeviceCount();
     static GpuControl* getCurrentCuda();
-    static void setCurrentCuda(GpuControl* gpu);
+    //static void setCurrentCuda(GpuControl* gpu);
     static void setUseCPU();
 
     static UnitType getGlobalCudaType();
@@ -108,26 +103,24 @@ public:
     cudnnContext* cudnn_handle_ = nullptr;
 
     Rocblas* rocblas_ = nullptr;
+    miopenHandle* miopen_handle_ = nullptr;
 
     size_t memory_used_ = 0;
 
 public:
-    //设置张量数据，用于简化代码
-    static void setTensorDesc4D(cudnnTensorStruct* tensor, int w, int h, int c, int n);
-    static void setTensorDescND(cudnnTensorStruct* tensor, std::vector<int> dim);
-
+    OtherDesc other_desc_;
+    template <typename T>
+    T getDesc()
+    {
+        return other_desc_.getDesc<T>();
+    }
     //设置激活函数，用于简化代码
     static void setActivationDesc(void* activation, int mode, double v);
 
-    //private:
-    //copy and modify from helper_cuda.h
-    //Blas* selectBlas(CudaType mc) { return mc == mc_NoCuda ? (Blas*)(cblas) : (Blas*)(cublas); }
-
-    //public:
-    //    std::mutex& getMutex() { return *mutex_; }
-    //
-    //private:
-    //    std::unique_ptr<std::mutex> mutex_ = std::make_unique<std::mutex>();
+public:
+    ActivePhaseType active_phase_ = ACTIVE_PHASE_TRAIN;
+    void setActivePhase(ActivePhaseType ap) { active_phase_ = ap; }
+    static std::string lastCudnnErrorString();
 };
 
 }    // namespace cccc

@@ -33,22 +33,6 @@ int main(int argc, char* argv[])
     else if (cmd.exist("version"))
     {
         cccc::LOG("CCCC (A Deep Neural Net library) command line interface\n");
-        cccc::LOG("Float precision is {} (", cccc::Application::getFloatPresicion() * 8);
-        switch (cccc::Application::getFloatPresicion())
-        {
-        case 2:
-            cccc::LOG("half");
-            break;
-        case 4:
-            cccc::LOG("float");
-            break;
-        case 8:
-            cccc::LOG("double");
-            break;
-        default:
-            cccc::LOG("unknown");
-        }
-        cccc::LOG(")\n");
         cccc::LOG("Built with ");
 #if defined(_MSC_VER)
         cccc::LOG("Microsoft Visual Studio {}\n", _MSC_VER);

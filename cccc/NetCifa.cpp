@@ -27,6 +27,13 @@ cifa::Object NetCifa::registerLoss(std::vector<MatrixOp> loss)
     return o;
 }
 
+cifa::Object NetCifa::registerMatrixGroup(std::vector<MatrixSP> mg)
+{
+    cifa::Object o(count_++, "MatrixGroup");
+    map_matrix_group_[o] = std::move(mg);
+    return o;
+}
+
 std::vector<cifa::Object> NetCifa::getVector(cifa::ObjectVector& v, int index)
 {
     std::vector<cifa::Object> r;
@@ -63,10 +70,10 @@ std::vector<int> NetCifa::getIntVector(cifa::ObjectVector& v, int index)
     return r;
 }
 
-std::vector<real> NetCifa::getRealVector(cifa::ObjectVector& v, int index)
+std::vector<float> NetCifa::getRealVector(cifa::ObjectVector& v, int index)
 {
     auto vo = getVector(v, index);
-    std::vector<real> r;
+    std::vector<float> r;
     for (auto& o : vo)
     {
         r.push_back(o.value);
@@ -97,7 +104,7 @@ int NetCifa::init2()
 #endif
     if (X_ && A_)
     {
-        Y_->resize(*A_);
+        Y_->resize(A_->getDim());
     }
     else
     {
@@ -113,7 +120,8 @@ int NetCifa::runScript(const std::string& script)
     {
         for (auto key : option_->getAllKeys(section))
         {
-            cifa_.register_parameter(strfunc::toLowerCase(section) + "::" + strfunc::toLowerCase(key), cifa::Object(option_->getReal(section, key), option_->getString(section, key)));
+            cifa_.register_parameter(strfunc::toLowerCase(section) + "::" + strfunc::toLowerCase(key),
+                cifa::Object(option_->INIReaderNoUnderline::getReal(section, key), option_->INIReaderNoUnderline::getString(section, key)));
         }
     }
 
@@ -156,14 +164,20 @@ int NetCifa::registerFunctions()
             {
                 dim.push_back(v[i].value);
             }
+            return registerMatrix(makeMatrixSP(dim));
+        });
+    cifa_.register_function("Mb", [this](cifa::ObjectVector& v)
+        {
+            std::vector<int> dim = getIntVector(v, 0);
             auto o = registerMatrix(makeMatrixSP(dim));
+            map_matrix_[o]->setNeedBack(v[1].value);
             return o;
         });
     cifa_.register_function("setValue", [this](cifa::ObjectVector& v)
         {
             auto& m = map_matrix_[v[0]];
             auto values = getVector(v, 1);
-            std::vector<real> values_real(values.size());
+            std::vector<float> values_real(values.size());
             for (int i = 0; i < values.size(); i++)
             {
                 values_real[i] = values[i].value;
@@ -366,6 +380,11 @@ int NetCifa::registerFunctions()
             op_queue_.push_back(op);
             return o;
         });
+    cifa_.register_function("setneedback", [this](cifa::ObjectVector& v)
+        {
+            map_matrix_[v[0]]->setNeedBack(v[1].value);
+            return v[1];
+        });
     cifa_.register_function("mul", [this](cifa::ObjectVector& v)
         {
             auto dim = getIntVector(v, 2);
@@ -387,13 +406,21 @@ int NetCifa::registerFunctions()
         {
             MatrixOp op;
             auto o = registerMatrix(makeMatrixSP());
-            auto vo = getVector(v, 0);
-            std::vector<MatrixSP> vm;
-            for (auto& o1 : vo)
+            if (v.size() == 1 && v[0].type == "MatrixGroup")
             {
-                vm.push_back(map_matrix_[o1]);
+                auto& vm = map_matrix_group_[v[0]];
+                op.as_concat(vm, map_matrix_[o]);
             }
-            op.as_concat(vm, map_matrix_[o]);
+            else
+            {
+                auto vo = getVector(v, 0);
+                std::vector<MatrixSP> vm;
+                for (auto& o1 : vo)
+                {
+                    vm.push_back(map_matrix_[o1]);
+                }
+                op.as_concat(vm, map_matrix_[o]);
+            }
             op_queue_.push_back(op);
             return o;
         });
@@ -419,7 +446,15 @@ int NetCifa::registerFunctions()
         {
             return registerLoss(L2(map_matrix_[v[0]]));
         });
-
+    cifa_.register_function("MatrixGroup", [this](cifa::ObjectVector& v)
+        {
+            return registerMatrixGroup({});
+        });
+    cifa_.register_function("addIntoGroup", [this](cifa::ObjectVector& v)
+        {
+            map_matrix_group_[v[0]].push_back(map_matrix_[v[1]]);
+            return cifa::Object();
+        });
     for (int i = -1; i < 100; i++)
     {
         auto str = option_->getStringFromEnum(ActiveFunctionType(i));

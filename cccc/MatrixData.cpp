@@ -7,13 +7,14 @@ namespace cccc
 {
 //此处有问题，目前来看只能在同设备中resize
 
-real* MatrixData::resize(int64_t size, bool reserve_data, bool force)
+void* MatrixData::resize(int64_t size, DataType data_type, bool reserve_data, bool force)
 {
+    data_type_ = data_type;
     if (size <= occupy_data_size_ && !force)
     {
         return data_;
     }
-    real* new_data = nullptr;
+    float* new_data = nullptr;
     auto device_type = UnitType::GPU;
     if (!reserve_data)    //数据不需保留可以先行释放，可以节省显存的使用，否则峰值占用是新旧尺寸之和
     {
@@ -22,9 +23,9 @@ real* MatrixData::resize(int64_t size, bool reserve_data, bool force)
     if (gpu_)
     {
         gpu_->setAsCurrent();
-        if (gpu_->malloc((void**)&new_data, size * sizeof(real)) == 0)
+        if (gpu_->malloc((void**)&new_data, size * getDataTypeSize(data_type_)) == 0)
         {
-            gpu_->memory_used_ += size * sizeof(real);
+            gpu_->memory_used_ += size * getDataTypeSize(data_type_);
             //LOG("Device {} MALLOC {:g}, memory used {:g}!\n", cuda_->getDeviceID(), 1.0 * size * sizeof(real), 1.0 * cuda_->memory_used_);
             //if (size * sizeof(real) > 3e8)
             //{
@@ -33,17 +34,17 @@ real* MatrixData::resize(int64_t size, bool reserve_data, bool force)
         }
         else
         {
-            LOG("Device {} FAIL TO MALLOC {:g}!\n", gpu_->getDeviceID(), 1.0 * size * sizeof(real));
+            LOG("Device {} FAIL TO MALLOC {:g}!\n", gpu_->getDeviceID(), 1.0 * size * getDataTypeSize(data_type_));
         }
     }
     else
     {
         device_type = UnitType::CPU;
-        new_data = new real[size];
+        new_data = new float[size];
     }
     if (reserve_data)
     {
-        copy(getApiType(), data_, getApiType(), new_data, std::min(size, occupy_data_size_));
+        copy(getApiType(), data_, getApiType(), new_data, std::min(size, occupy_data_size_), data_type_);
         release();
     }
     occupy_data_size_ = size;
@@ -67,12 +68,12 @@ void MatrixData::release()
         auto status = gpu_->free(data_);
         if (status == 0)
         {
-            gpu_->memory_used_ -= occupy_data_size_ * sizeof(real);
-            //LOG("Device {} FREE {:g}, memory used {:g}!\n", gpu_->getDeviceID(), 1.0 * occupy_data_size_ * sizeof(real), 1.0 * gpu_->memory_used_);
+            gpu_->memory_used_ -= occupy_data_size_ * getDataTypeSize(data_type_);
+            //LOG("Device {} FREE {:g}, memory used {:g}!\n", gpu_->getDeviceID(), 1.0 * occupy_data_size_ * getDataTypeSize(data_type_), 1.0 * gpu_->memory_used_);
         }
         else
         {
-            //LOG("Device {} FAIL TO FREE {:g}!\n", gpu_->getDeviceID(), 1.0 * occupy_data_size_ * sizeof(real));
+            //LOG("Device {} FAIL TO FREE {:g}!\n", gpu_->getDeviceID(), 1.0 * occupy_data_size_ * getDataTypeSize(data_type_));
         }
         if (current_gpu != gpu_)
         {
@@ -87,13 +88,17 @@ void MatrixData::release()
     data_ = nullptr;
 }
 
-int64_t MatrixData::copy(ApiType dt_src, const real* src, ApiType dt_dst, real* dst, int64_t size)
+int64_t MatrixData::copy(ApiType dt_src, const void* src, ApiType dt_dst, void* dst, int64_t size, DataType dt)
+{
+    return copyByByte(dt_src, src, dt_dst, dst, size * getDataTypeSize(dt));
+}
+
+int64_t MatrixData::copyByByte(ApiType dt_src, const void* src, ApiType dt_dst, void* dst, int64_t size_in_byte)
 {
     if (src == nullptr || dst == nullptr || src == dst)
     {
         return 0;
     }
-    int64_t size_in_byte = size * sizeof(real);
     int state = 0;
     //cuda
     if (dt_dst == API_CUDA && dt_src == API_CUDA)
@@ -143,9 +148,8 @@ int64_t MatrixData::copy(ApiType dt_src, const real* src, ApiType dt_dst, real* 
     }
     if (state != 0)
     {
-        LOG(stderr, "Memcpy error: {}, size in byte {:g}\n", state, 1.0 * size_in_byte);
+        LOG_ERR("Memcpy error: {}, size in byte {:g}\n", state, 1.0 * size_in_byte);
     }
-    return size;
+    return size_in_byte;
 }
-
 }    // namespace cccc

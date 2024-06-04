@@ -230,7 +230,7 @@ void Layer::makeMatrixOp(std::vector<MatrixOp>& op_queue)
         MatrixOp op;
         auto Ap = A_;
         A_ = makeMatrixSP();
-        real coef = option_->getReal(layer_name_, "coef", 0.2);
+        float coef = option_->getReal(layer_name_, "coef", 0.2);
         op.as_active(Ap, A_, active, {}, { coef }, {});
         op_queue.push_back(op);
     }

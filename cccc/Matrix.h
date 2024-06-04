@@ -1,6 +1,7 @@
 ﻿#pragma once
 #include "GpuControl.h"
 #include "MatrixData.h"
+#include "TensorDesc.h"
 #include "blas_types.h"
 #include "types.h"
 #include <algorithm>
@@ -27,49 +28,45 @@ class DLL_EXPORT Matrix
 public:
     friend class MatrixEx;
 
-private:
-    //这个结构实际上是直接用cudnn的desc，属实验性质
-    //不调用创建描述符，因为写复制构造太麻烦
-    struct TensorDesc
-    {
-        int64_t unknown_ = 0;
-        int64_t dim_size_ = 0;
-        int64_t data_size_ = 0;
-        int64_t data_size1_ = 0;
-        int number_ = 0, channel_ = 0, height_ = 0, width_ = 0;
-        int c3[4] = { 0 };
-        int row_ = 0;
-        int c4[15] = { 0 };
-    };
-
-    //std::shared_ptr<DataWarpper> makeSharedData() { return std::make_shared<DataWarpper>(); }
-
 protected:
     //矩阵所使用的常数
-    static constexpr realc const_real_1{ 1.0 };
-    static constexpr realc const_real_0{ 0.0 };
+    static constexpr float const_real_1{ 1.0 };
+    static constexpr float const_real_0{ 0.0 };
+    static constexpr double const_double_1{ 1.0 };
+    static constexpr double const_double_0{ 0.0 };
+    //static constexpr half const_half_1{ 1.0 };
+    //static constexpr half const_half_0{ 0.0 };
+
+    //默认的矩阵数据类型，注意是一个全局变量，影响所有线程
+    //应在程序开始时设置，不要在多线程中修改
+    static DataType& current_data_type()
+    {
+        static DataType cdt;
+        return cdt;
+    }
 
     //一列的数据作为一个或一组图像，矩阵本身是列优先
     //但是在图片处理，包含卷积核默认是行优先（遵从cudnn），也就是说图片和卷积核可以认为是转置保存的！！
 
+    //总尺寸为int64_t，分开的坐标为int，适应目前其他库的情况
     int64_t data_size_ = 0;
     int width_ = 0, height_ = 0, channel_ = 0, number_ = 0;
     int row_ = 0;
 
     std::vector<int> dim_;
 
-    TensorDesc tensor_desc_;    //这里太麻烦了，干脆这么糊弄吧
+    std::shared_ptr<TensorDesc> tensor_desc_;    //这里太麻烦了，干脆这么糊弄吧
 
     //数据，被迫使用双重指针是因为矩阵计算返回对象，和生成计算流的需要！
-    real* data_ = nullptr;
+    void* data_ = nullptr;
     //共享指针的意义是自动析构不被引用的数据，不可以直接使用
     std::shared_ptr<MatrixData> shared_data_ = std::make_shared<MatrixData>();
 
     //反向数据，实际上除了数据指针，其他必然跟原矩阵相同，矩阵赋值或复制之后仍然维持关联。除操作符和求解器外，禁止其他部分使用
     mutable std::shared_ptr<Matrix> d_this_;
 
-    bool need_reverse_ = true;    //仅反向使用此参数，决定是否需要更新D数据，禁止本体使用
-    realc keep_weight_ = 0;
+    bool need_back_ = true;    //仅反向使用此参数，决定是否需要更新D数据，本体的参数决定是否更新D数据
+    float keep_weight_ = 0;
 
     void* user_data_ = nullptr;
 
@@ -77,24 +74,32 @@ public:
     //Matrix& operator=(const Matrix& m);
     //Matrix(const Matrix& src);
 
-    Matrix(const std::vector<int>& dim, UnitType device_type = UnitType::GPU, bool create_d = true);
-    Matrix(int w, int h, int c, int n, UnitType device_type = UnitType::GPU);
-    Matrix(int m, int n, UnitType device_type = UnitType::GPU);
-    Matrix(const std::vector<int>& dim, real* data, UnitType device_type = UnitType::GPU);
-    Matrix(UnitType device_type = UnitType::GPU);
+    Matrix(const std::vector<int>& dim, DataType data_type = DataType::CURRENT, UnitType device_type = UnitType::GPU, bool create_d = true);
+    Matrix(int w, int h, int c, int n, DataType data_type = DataType::CURRENT, UnitType device_type = UnitType::GPU);
+    Matrix(int m, int n, DataType data_type = DataType::CURRENT, UnitType device_type = UnitType::GPU);
+    //Matrix(size_t size, DataType data_type = DataType::CURRENT, UnitType device_type = UnitType::GPU);
+    Matrix(const std::vector<int>& dim, void* data, DataType data_type = DataType::CURRENT, UnitType device_type = UnitType::GPU);
+    Matrix(DataType data_type = DataType::CURRENT, UnitType device_type = UnitType::GPU);
     //~Matrix();
     Matrix clone(UnitType device_type = UnitType::GPU) const;
     Matrix createShared() const;
     Matrix createSharedCol(int col = 0) const;
     Matrix autoShareClone(UnitType device_type) const;
-
+    Matrix transDataType(DataType data_type) const;
     void release();    //会释放所有共享的数据，除非特别需要，一般不要使用
 
+
 private:
-    inline real* data() const { return data_; }
+    void* data() const { return data_; }
+    float* dataf() const { return (float*)data_; }
+    double* datad() const { return (double*)data_; }
+    half* datah() const { return (half*)data_; }
+    template <typename T>
+    T* data() const { return (T*)data_; }
     //bool haveD() const { return d_this_ != nullptr; }
     GpuControl* gpu() const { return shared_data_->gpu_; }
-    cudnnTensorStruct* tensor_desc() const { return (cudnnTensorStruct*)&tensor_desc_; }
+    cudnnTensorStruct* cudnn_desc() const { return tensor_desc_->cudnnDesc(); }
+    miopenTensorDescriptor* miopen_desc() const { return tensor_desc_->miopenDesc(); }
 
 public:
     UnitType getDeviceType() const { return shared_data_->gpu_ == nullptr ? UnitType::CPU : UnitType::GPU; }
@@ -102,13 +107,17 @@ public:
     bool isCuda() const { return gpu() && gpu()->getApiType() == API_CUDA; }
     bool isHip() const { return gpu() && gpu()->getApiType() == API_HIP; }
     ApiType getApiType() const { return shared_data_->getApiType(); }
+    DataType getDataType() const { return shared_data_->getDataType(); }
+    int getDataTypeByInt() const { return int(shared_data_->getDataType()); }
+    size_t getDataTypeSize() const { return shared_data_->getDataTypeSize(); }
+    static void setCurrentDataType(DataType dt) { current_data_type() = dt; }
 
 public:
     Matrix& d() const;
-    void setNeedReverse(bool b) { need_reverse_ = b; }    //会生成反向矩阵，需慎用
-    bool needReverse() const { return need_reverse_; }
-    void setKeepWeight(real kw) { keep_weight_ = kw; }
-    realc keepWeight() const { return keep_weight_; }
+    void setNeedBack(bool b) { need_back_ = b; }    //会生成反向矩阵，需慎用
+    bool needBack() const { return need_back_; }
+    void setKeepWeight(float kw) { keep_weight_ = kw; }
+    float keepWeight() const { return keep_weight_; }
     void*& user_data() { return user_data_; }
 
 private:
@@ -136,27 +145,33 @@ public:
     int getOneChannelSize() const { return row_ / channel_; }
 
     int64_t getDataSize() const { return data_size_; }
-    int64_t getDataSizeInByte() const { return getDataSize() * sizeof(real); }
+    int64_t getDataSizeInByte() const { return getDataSize() * getDataTypeSize(); }
+
+    void* getDataPtr() const { return data(); }
+    void* getDataPtr(int i) const { return (char*)data() + i * getDataTypeSize(); }
+    void* getDataPtr(int m, int n) const { return getDataPtr(mn2i(m, n)); }
+    void* getDataPtr(int w, int h, int c, int n) const { return getDataPtr(whcn2i(w, h, c, n)); }
 
     //以下3个函数，注意如果数据在显存中，一般x来说是无法赋值和输出的
-    //有胡搞嫌疑，但是看起来没有违反语义
-    //这里似乎应该是调用两个版本重载 const real getData() const / real& getData()
-    real& getData(int i) const { return data()[i]; }
-    real& getData(int m, int n) const { return data()[mn2i(m, n)]; }
-    real& getData(int w, int h, int c, int n) const { return data()[whcn2i(w, h, c, n)]; }
+    //注意只返回float
+    float getData(int i) const { return shared_data_->getData(i); }
+    float getData(int m, int n) const { return getData(mn2i(m, n)); }
+    float getData(int w, int h, int c, int n) const { return getData(whcn2i(w, h, c, n)); }
 
-    real* getDataPtr() const { return data(); }
-    real* getDataPtr(int i) const { return &data()[i]; }
-    real* getDataPtr(int m, int n) const { return &data()[mn2i(m, n)]; }
-    real* getDataPtr(int w, int h, int c, int n) const { return &data()[whcn2i(w, h, c, n)]; }
-    //real& operator[](int i) const { return data_[i]; }
+    template <typename T>
+    void setData(int i, T v) { shared_data_->setData(i, v); }
+    template <typename T>
+    void setData(int m, int n, T v) { setData(mn2i(m, n), v); }
+    template <typename T>
+    void setData(int w, int h, int c, int n, T v) { setData(whcn2i(w, h, c, n), v); }
+    void setData(int i, void* p, DataType data_type) { shared_data_->setData(i, p, data_type); }
 
 public:
     //改变矩阵维度，同时矩阵数据尺寸可能会变化，如果尺寸变大会备份数据
     //返回值：-1空矩阵，未重新分配内存，1重新分配内存
     int resize(int m, int n, bool reserve_data = true, bool force = false);
     int resize(int w, int h, int c, int n, bool reserve_data = true, bool force = false);
-    int resize(const Matrix& X, bool reserve_data = true, bool force = false);
+    //int resize(const Matrix& X, bool reserve_data = true, bool force = false);
     int resize(const std::vector<int>& dim, bool reserve_data = true, bool force = false);
     int resizeNumber(int n, bool reserve_data = true, bool force = false);
     int resizeAndNumber(const std::vector<int>& dim, int n, bool reserve_data = true, bool force = false);
@@ -172,11 +187,11 @@ public:
     int64_t load(const void* buffer, int64_t size);
 
 private:
-    void copyDataInFromHost(real* src, int64_t size);
-    void copyDataOutToHost(real* dst, int64_t size);
+    void copyDataInFromHost(float* src, int64_t size);
+    void copyDataOutToHost(float* dst, int64_t size);
 
 public:
-    static int64_t copyDataPtr(const Matrix& A, const real* A_ptr, Matrix& R, real* R_ptr, int64_t size = -1);
+    static int64_t copyDataPtr(const Matrix& A, const void* A_ptr, Matrix& R, void* R_ptr, int64_t size = -1);
 
 public:
     static void copyData(const Matrix& A, Matrix& R, int64_t size = -1);
@@ -186,11 +201,11 @@ public:
     void shareData(const Matrix& A);
     void shareData(const Matrix& A, int m, int n);
     void shareData(const Matrix& A, int w, int h, int c, int n);
-    void shareData(real* data);
+    void shareData(float* data);
 
     //初始化数据后返回自身的引用，可以在一行代码内初始化
-    Matrix& fillData(real v, real inc = 0);    //非常慢
-    Matrix& loadDataPtr(real* data, int64_t size);
+    Matrix& fillData(float v, float inc = 0);    //非常慢
+    Matrix& loadDataPtr(void* data, int64_t size);
     Matrix& fillRandom(int seed = 0);    //调试用
 
 public:
@@ -212,31 +227,31 @@ public:
     //运算函数
     void repeat(int c = 1);
     int indexColMaxAbs(int c) const;
-    realc sumAbs() const;
-    realc sumAbsCol(int c) const;
-    realc sum() const;
+    float sumAbs() const;
+    float sumAbsCol(int c) const;
+    float sum() const;
 
-    void sectionLimit(real v0, real v1);
-    void scale(real v);
-    static void scale(const Matrix& A, Matrix& R, real v);
-    void scaleCol(real v, int c);
+    void sectionLimit(float v0, float v1);
+    void scale(float v);
+    static void scale(const Matrix& A, Matrix& R, float v);
+    void scaleCol(float v, int c);
 
     //为使功能完整，所有正向运算均应有这个返回矩阵的形式
-    static void mul(const Matrix& A, const Matrix& B, Matrix& R, real a = 1, real r = 0, MatrixTransType ta = MATRIX_NO_TRANS, MatrixTransType tb = MATRIX_NO_TRANS);
-    static void mulVector(Matrix& A, Matrix& B, Matrix& R, real a = 1, real r = 0, MatrixTransType ta = MATRIX_NO_TRANS);
-    static void mulVector2(Matrix& A, Matrix& B, Matrix& R, real a = 1, real r = 0, MatrixTransType ta = MATRIX_NO_TRANS);
-    static void elementMul(const Matrix& A, const Matrix& B, Matrix& R, real a = 1, real r = 0);
-    static void add(const Matrix& A, const Matrix& B, Matrix& R, realc a = 1, realc b = 1, realc r = 0);
-    static realc dot(const Matrix& A, const Matrix& B);
-    static realc dotCol(const Matrix& A, int cA, const Matrix& B, int cB);
-    static realc dotPart(int size, const Matrix& A, real* a, int cA, real* b, int cB);
-    realc dotSelf() const;
-    static void sign(Matrix& A, Matrix& R, real v = 1, real section = 0);
+    static void mul(const Matrix& A, const Matrix& B, Matrix& R, float a = 1, float r = 0, MatrixTransType ta = MATRIX_NO_TRANS, MatrixTransType tb = MATRIX_NO_TRANS);
+    static void mulVector(Matrix& A, Matrix& B, Matrix& R, float a = 1, float r = 0, MatrixTransType ta = MATRIX_NO_TRANS);
+    static void mulVector2(Matrix& A, Matrix& B, Matrix& R, float a = 1, float r = 0, MatrixTransType ta = MATRIX_NO_TRANS);
+    static void elementMul(const Matrix& A, const Matrix& B, Matrix& R, float a = 1, float r = 0);
+    static void add(const Matrix& A, const Matrix& B, Matrix& R, float a = 1, float b = 1, float r = 0);
+    static float dot(const Matrix& A, const Matrix& B);
+    static float dotCol(const Matrix& A, int cA, const Matrix& B, int cB);
+    static float dotPart(int size, const Matrix& A, void* a, int cA, void* b, int cB);
+    float dotSelf() const;
+    static void sign(Matrix& A, Matrix& R, float v = 1, float section = 0);
 
 public:
     //PYTHON only ----------------------------------------------------------------------------------------------------
     //取值和赋值，通常不推荐在c++中使用，仅用于python接口，故安全保护较多
-    real getDataValue(int i)
+    float getDataValue(int i)
     {
         if (getDeviceType() == UnitType::CPU && i >= 0 && i < data_size_)
         {
@@ -244,39 +259,34 @@ public:
         }
         return 0;
     }
-    real getDataValue(int m, int n) { return getDataValue(mn2i(m, n)); }
-    real getDataValue(int w, int h, int c, int n) { return getDataValue(whcn2i(w, h, c, n)); }
+    float getDataValue(int m, int n) { return getDataValue(mn2i(m, n)); }
+    float getDataValue(int w, int h, int c, int n) { return getDataValue(whcn2i(w, h, c, n)); }
 
     void setDataValue(float v, int i)
     {
         if (getDeviceType() == UnitType::CPU && i >= 0 && i < data_size_)
         {
-            getData(i) = v;
+            setData(i, v);
         }
     }
     void setDataValue(float v, int m, int n) { setDataValue(v, mn2i(m, n)); }
     void setDataValue(float v, int w, int h, int c, int n) { setDataValue(v, whcn2i(w, h, c, n)); }
 
-    void importData(real* v, int64_t n);
-    void exportData(real* v, int64_t n);
+    void importData(float* v, int64_t n);
+    void exportData(float* v, int64_t n);
 
     //PYTHON only ----------------------------------------------------------------------------------------------------
 
 public:
     //以下函数都是自己写cuda部分
-    void reciprocal(real scale = 1);
-    void addNumber(real v, real scale = 1);
-    static void addNumber(const Matrix& A, Matrix& R, real v, real scale = 1);
-    void addNumberCol(real v, real scale, int c);
-    static void elementPow(const Matrix& A, Matrix& R, real e, real bias = 0);
-    static void elementDiv(const Matrix& A, const Matrix& B, Matrix& R, real a = 0, real b = 0, real scale = 1);
-    static void crossEntropy(const Matrix& A, const Matrix& Y, Matrix& R, real a = 0, real scale = 1);
-    static void crossEntropy2(const Matrix& A, const Matrix& Y, Matrix& R, real a = 0, real scale = 1);    //二分类时仅用一个结果时的交叉熵
-
-public:
-    //void setPrevWeight(real r) { prev_weight_ = r; }
-    //void clearWeight() { prev_weight_ = 0; }
-    //real getPrevWeight() { return prev_weight_; }
+    void reciprocal(float scale = 1);
+    void addNumber(float v, float scale = 1);
+    static void addNumber(const Matrix& A, Matrix& R, float v, float scale = 1);
+    void addNumberCol(float v, float scale, int c);
+    static void elementPow(const Matrix& A, Matrix& R, float e, float bias = 0);
+    static void elementDiv(const Matrix& A, const Matrix& B, Matrix& R, float a = 0, float b = 0, float scale = 1);
+    static void crossEntropy(const Matrix& A, const Matrix& Y, Matrix& R, float a = 0, float scale = 1);
+    static void crossEntropy2(const Matrix& A, const Matrix& Y, Matrix& R, float a = 0, float scale = 1);    //二分类时仅用一个结果时的交叉熵
 
 public:
     static bool checkMatrixDevice(const std::vector<const Matrix*>& v);    //此处用对象会有效率问题
@@ -291,37 +301,52 @@ inline MatrixSP makeMatrixSP(Args... args) { return std::make_shared<Matrix>(arg
 //运算符重载：+-*数乘
 inline Matrix operator+(const Matrix& A, const Matrix& B)
 {
-    Matrix R(A.getDim(), A.getDeviceType());
+    Matrix R(A.getDim(), A.getDataType(), A.getDeviceType());
     Matrix::add(A, B, R);
     return R;
 }
 
 inline Matrix operator-(const Matrix& A, const Matrix& B)
 {
-    Matrix R(A.getDim(), A.getDeviceType());
+    Matrix R(A.getDim(), A.getDataType(), A.getDeviceType());
     Matrix::add(A, B, R, 1, -1);
     return R;
 }
 
 inline Matrix operator*(const Matrix& A, const Matrix& B)
 {
-    Matrix R(A.getRow(), B.getNumber(), A.getDeviceType());
+    Matrix R({A.getRow(), B.getNumber()}, A.getDataType(), A.getDeviceType());
     Matrix::mul(A, B, R);
     return R;
 }
 
-inline Matrix operator*(real r, const Matrix& A)
+inline Matrix operator*(float r, const Matrix& A)
 {
-    Matrix R(A.getDim());
+    Matrix R(A.getDim(), A.getDataType());
     Matrix::scale(A, R, r);
     return R;
 }
 
-inline Matrix operator*(const Matrix& A, real r)
+inline Matrix operator*(const Matrix& A, float r)
 {
-    Matrix R(A.getDim());
+    Matrix R(A.getDim(), A.getDataType());
     Matrix::scale(A, R, r);
     return R;
 }
 
 }    // namespace cccc
+
+#define RUN_BY_DATA_TYPE(dt, func, p1, p2) \
+    switch (dt) \
+    { \
+    case DataType::FLOAT: \
+        func((float*)p1); \
+        break; \
+    case DataType::DOUBLE: \
+        func((double*)p1); \
+        break; \
+    case DataType::HALF: \
+        func((half*)p1); \
+        break; \
+    }
+//cudnn中的scale数值，在half和float中均是half，但是在double中是double，此处暂时不处理double，其他同

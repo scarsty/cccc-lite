@@ -13,13 +13,18 @@
 namespace cccc
 {
 
+static void setDesc4D(cudnnTensorDescriptor_t desc, DataType data_type, int w, int h, int c, int n)
+{
+    cudnnSetTensor4dDescriptor(desc, CUDNN_TENSOR_NCHW, toCudnnDataType(data_type), n, c, h, w);
+}
+
 //若bias某一维度为1，则视为对X的对应维度加上同样的值，cudnn的文档中指出最高支持到5维
 //此处仅用于两种情况：1 - bias仅有channel不为1，2 - bias的number为1，注意1是2的一个特例，其他情况不一定能得到正确结果
-void MatrixEx::addBias(const Matrix& X, const Matrix& bias, Matrix& Y, realc a /*= 1*/, realc b /*= 1*/)
+void MatrixEx::addBias(const Matrix& X, const Matrix& bias, Matrix& Y, float a /*= 1*/, float b /*= 1*/)
 {
     assert(checkMatrixDevice({ &X, &bias, &Y }));
     assert(bias.getDataSize() == bias.channel_ || bias.number_ == 1);
-    //if (X != &Y)
+    //if (&X != &Y)
     {
         copyData(X, Y);
     }
@@ -28,20 +33,25 @@ void MatrixEx::addBias(const Matrix& X, const Matrix& bias, Matrix& Y, realc a /
         auto gpu = X.gpu();
         if (bias.getDimSize() <= 5)
         {
-            cudnnAddTensor(gpu->cudnn_handle_, &a, bias.tensor_desc(), bias.data(), &b, Y.tensor_desc(), Y.data());
+            cudnnAddTensor(gpu->cudnn_handle_, &a, bias.cudnn_desc(), bias.data(), &b, Y.cudnn_desc(), Y.data());
         }
         else
         {
-            int op_desc[64] = { 0 };
-            int op_desc2[64] = { 0 };
-            GpuControl::setTensorDesc4D((cudnnTensorDescriptor_t)op_desc, bias.width_, bias.height_, bias.channel_, bias.number_);
-            GpuControl::setTensorDesc4D((cudnnTensorDescriptor_t)op_desc2, Y.width_, Y.height_, Y.channel_, Y.number_);
-            cudnnAddTensor(gpu->cudnn_handle_, &a, (cudnnTensorDescriptor_t)op_desc, bias.data(), &b, (cudnnTensorDescriptor_t)op_desc2, Y.data());
+            LOG_ERR("Dim of bias cannot > 5!\n");
+            //int op_desc[64] = { 0 };
+            //int op_desc2[64] = { 0 };
+            //GpuControl::setTensorDesc4D(op_desc_t, bias.width_, bias.height_, bias.channel_, bias.number_);
+            //GpuControl::setTensorDesc4D((cudnnTensorDescriptor_t)op_desc2, Y.width_, Y.height_, Y.channel_, Y.number_);
+            //cudnnAddTensor(gpu->cudnn_handle_, &a, op_desc_t, bias.data(), &b, op_desc_t2, Y.data());
         }
     }
     else if (X.isHip())
     {
         //hip_addbias(X.data(), bias.data(), Y.data(), X.getDataSize(), Y.row_ / Y.channel_, bias.getDataSize(), a, b);
+        auto gpu = Y.gpu();
+        b = b - a;    //only for miopen
+        miopenConvolutionForwardBias(gpu->miopen_handle_, &a, bias.miopen_desc(), bias.data(), &b, Y.miopen_desc(), Y.data());
+        //miopenOpTensor(gpu->miopen_handle_, miopenTensorOpAdd, &const_real_1, X.miopen_desc(), X.data(), &const_real_1, bias.miopen_desc(), bias.data(), &b, Y.miopen_desc(), Y.data());
     }
     else
     {
@@ -50,7 +60,7 @@ void MatrixEx::addBias(const Matrix& X, const Matrix& bias, Matrix& Y, realc a /
             for (int i = 0; i < Y.data_size_; i++)
             {
                 int c = i % Y.row_ / (Y.row_ / Y.channel_);
-                Y.data()[i] += bias.data()[c];
+                Y.setData(i, Y.getData(i) + bias.getData(c));
             }
         }
         else
@@ -58,30 +68,32 @@ void MatrixEx::addBias(const Matrix& X, const Matrix& bias, Matrix& Y, realc a /
             for (int i = 0; i < Y.data_size_; i++)
             {
                 int c = i % bias.getDataSize();
-                Y.data()[i] += bias.data()[c];
+                Y.setData(i, Y.getData(i) + bias.getData(c));
             }
         }
     }
 }
 
-void MatrixEx::addBiasBackward(Matrix& X, Matrix& bias, const Matrix& Y, realc a /*= 1*/, realc b /*= 1*/)
+void MatrixEx::addBiasBackward(Matrix& X, Matrix& bias, const Matrix& Y, float a /*= 1*/, float b /*= 1*/)
 {
     assert(checkMatrixDevice({ &X, &bias, &Y }));
-    if (X.needReverse())
+    if (X.needBack())
     {
         Matrix::add(X.d(), Y.d(), X.d(), a, 1, 0);
     }
-    if (bias.needReverse())
+    if (bias.needBack())
     {
         if (X.isCuda())
         {
             //用卷积反向代替一般反向，此处待验证
             auto gpu = Y.gpu();
-            cudnnConvolutionBackwardBias(gpu->cudnn_handle_, &const_real_1, Y.tensor_desc(), Y.d().data(), &b, bias.tensor_desc(), bias.d().data());
+            cudnnConvolutionBackwardBias(gpu->cudnn_handle_, &const_real_1, Y.cudnn_desc(), Y.d().data(), &b, bias.cudnn_desc(), bias.d().data());
         }
         else if (X.isHip())
         {
-            //hip_addbiasb(bias.d().data(), Y.d().data(), X.getDataSize(), Y.row_ / Y.channel_, bias.getDataSize(), const_real_1, b);
+            auto gpu = Y.gpu();
+            //b = 0;    //todo: miopen unfinished
+            miopenConvolutionBackwardBias(gpu->miopen_handle_, &const_real_1, Y.miopen_desc(), Y.d().data(), &b, bias.miopen_desc(), bias.d().data());
         }
         else
         {
@@ -93,7 +105,7 @@ void MatrixEx::addBiasBackward(Matrix& X, Matrix& bias, const Matrix& Y, realc a
                 {
                     for (int c = 0; c < Y.channel_; c++)
                     {
-                        bias.d().getData(0, 0, c, 0) += b * VectorMath::sum(Y.d().getDataPtr(0, 0, c, n), Y.width_ * Y.height_);
+                        bias.d().setData(0, 0, c, 0, bias.d().getData(0, 0, c, 0) + b * VectorMath::sum((float*)Y.d().getDataPtr(0, 0, c, n), Y.width_ * Y.height_));
                     }
                 }
             }
@@ -118,14 +130,14 @@ void MatrixEx::concatByChannel(const std::vector<MatrixSP>& X_vector, Matrix& Y)
 void MatrixEx::concatByChannelBackward(std::vector<MatrixSP>& X_vector, const Matrix& Y)
 {
     //此处可能应该是考虑求和
-    Matrix dy(Y.getDeviceType());
-    Matrix dx(Y.getDeviceType());
+    Matrix dy(Y.getDataType(), Y.getDeviceType());
+    Matrix dx(Y.getDataType(), Y.getDeviceType());
     for (int n = 0; n < Y.number_; n++)
     {
         int c_off = 0;
         for (int i = 0; i < X_vector.size(); i++)
         {
-            if (X_vector[i]->needReverse())
+            if (X_vector[i]->needBack())
             {
                 dy.shareData(Y.d(), 0, 0, c_off, n);
                 dy.resize(X_vector[i]->row_, 1);
@@ -154,7 +166,7 @@ void MatrixEx::splitByChannel(const Matrix& X, std::vector<Matrix>& Y_vector)
 }
 
 //初始化激活需要的缓冲区
-void MatrixEx::activeBufferInit(const Matrix& X, ActiveFunctionType af, std::vector<int>& int_vector, std::vector<real>& real_vector, std::vector<Matrix>& matrix_vector)
+void MatrixEx::activeBufferInit(const Matrix& X, ActiveFunctionType af, std::vector<int>& int_vector, std::vector<float>& real_vector, std::vector<Matrix>& matrix_vector)
 {
     auto gpu = X.gpu();
     switch (af)
@@ -164,9 +176,9 @@ void MatrixEx::activeBufferInit(const Matrix& X, ActiveFunctionType af, std::vec
         {
             size_t size1, size2;
             cudnnDropoutGetStatesSize(gpu->cudnn_handle_, &size1);
-            Matrix rg_stat(size1 / sizeof(real) + 1, 1);
-            cudnnDropoutGetReserveSpaceSize(X.tensor_desc(), &size2);
-            Matrix reverse_space(size2 / sizeof(real) + 1, 1);
+            Matrix rg_stat({ int(size1 / sizeof(float) + 1), 1 });    //int64->int32
+            cudnnDropoutGetReserveSpaceSize(X.cudnn_desc(), &size2);
+            Matrix reverse_space({ int(size2 / sizeof(float) + 1), 1 });    //int64->int32
             //LOG(stderr, "dropout size {},{}\n", size, size2);
             matrix_vector = { rg_stat, reverse_space };
         }
@@ -175,17 +187,17 @@ void MatrixEx::activeBufferInit(const Matrix& X, ActiveFunctionType af, std::vec
     case ACTIVE_FUNCTION_DIVISIVE_NORMALIZATION:
         if (X.isCuda())
         {
-            matrix_vector = { Matrix(X.getDim()), Matrix(X.getDim()), Matrix(1, 1, 1, X.getDataSizeInByte() * 2) };
+            matrix_vector = { Matrix(X.getDim()), Matrix(X.getDim()), Matrix({ X.getRow(), X.getNumber() * 2 }) };
         }
         break;
     case ACTIVE_FUNCTION_BATCH_NORMALIZATION:
         if (X.isCuda())
         {
-            int op_desc[64] = { 0 };
-            cudnnDeriveBNTensorDescriptor((cudnnTensorDescriptor_t)op_desc, X.tensor_desc(), cudnnBatchNormMode_t(int_vector[1]));
+            cudnnTensorDesc op_desc;
+            cudnnDeriveBNTensorDescriptor(op_desc(), X.cudnn_desc(), cudnnBatchNormMode_t(int_vector[1]));
             int w, h, c, n, p1, p2, p3, p4;
             cudnnDataType_t dt;
-            cudnnGetTensor4dDescriptor((cudnnTensorDescriptor_t)op_desc, &dt, &n, &c, &h, &w, &p1, &p2, &p3, &p4);
+            cudnnGetTensor4dDescriptor(op_desc(), &dt, &n, &c, &h, &w, &p1, &p2, &p3, &p4);
             std::vector<int> size = { w, h, c, n };
             matrix_vector = { Matrix(size).fillData(0.5), Matrix(size), Matrix(size), Matrix(size), Matrix(size), Matrix(size), Matrix(size), Matrix(size) };
         }
@@ -193,7 +205,7 @@ void MatrixEx::activeBufferInit(const Matrix& X, ActiveFunctionType af, std::vec
     case ACTIVE_FUNCTION_SPATIAL_TRANSFORMER:
         if (X.isCuda())
         {
-            matrix_vector = { Matrix(3, 2, 1, X.number_), Matrix(X).getDim(), Matrix(3, 2, 1, X.number_), Matrix(X).getDim() };
+            matrix_vector = { Matrix({ 3, 2, 1, X.number_ }), Matrix(X).getDim(), Matrix({ 3, 2, 1, X.number_ }), Matrix(X).getDim() };
         }
         break;
     case ACTIVE_FUNCTION_RECURRENT:
@@ -201,7 +213,7 @@ void MatrixEx::activeBufferInit(const Matrix& X, ActiveFunctionType af, std::vec
     case ACTIVE_FUNCTION_ZERO_CHANNEL:
     {
         //1 matrix: factor for mul
-        Matrix m(X.getDim(), UnitType::CPU);
+        Matrix m(X.getDim(), X.getDataType(), UnitType::CPU);
         m.fillData(1);
         for (int w = 0; w < X.width_; w++)
         {
@@ -211,7 +223,7 @@ void MatrixEx::activeBufferInit(const Matrix& X, ActiveFunctionType af, std::vec
                 {
                     for (int n = 0; n < X.number_; n++)
                     {
-                        m.getData(w, h, c, n) = 0;
+                        m.setData(w, h, c, n, 0);
                     }
                 }
             }
@@ -252,12 +264,13 @@ void MatrixEx::activeBufferInit(const Matrix& X, ActiveFunctionType af, std::vec
 //调用时请自己保证参数数量的正确性！
 //vector参数的含义请参考Activer.cpp中的注释，以及上面函数中matrix向量的含义
 void MatrixEx::activeForward(const Matrix& X, Matrix& Y, ActiveFunctionType af,
-    std::vector<int>& int_vector, std::vector<real>& real_vector, std::vector<Matrix>& matrix_vector, real a /*= 1*/, real r /*= 0*/)
+    std::vector<int>& int_vector, std::vector<float>& real_vector, std::vector<Matrix>& matrix_vector, float a /*= 1*/, float r /*= 0*/)
 {
     assert(checkMatrixDevice({ &X, &Y }));
     auto nan = CUDNN_NOT_PROPAGATE_NAN;
     auto gpu = X.gpu();
-    int op_desc[64] = { 0 };
+    //cudnnActivationDesc activation_desc;
+    //cudnnTensorDesc tensor_desc;
     switch (af)
     {
     case ACTIVE_FUNCTION_NONE:
@@ -268,13 +281,16 @@ void MatrixEx::activeForward(const Matrix& X, Matrix& Y, ActiveFunctionType af,
     case ACTIVE_FUNCTION_SIGMOID3:
         if (X.isCuda())
         {
-            GpuControl::setActivationDesc((cudnnActivationDescriptor_t)op_desc, CUDNN_ACTIVATION_SIGMOID, 1);
-            cudnnActivationForward(gpu->cudnn_handle_, (cudnnActivationDescriptor_t)op_desc,
-                &a, X.tensor_desc(), X.data(), &r, Y.tensor_desc(), Y.data());
+            cudnnActivationDesc activation_desc;
+            GpuControl::setActivationDesc(activation_desc(), CUDNN_ACTIVATION_SIGMOID, 1);
+            cudnnActivationForward(gpu->cudnn_handle_, activation_desc(),
+                &a, X.cudnn_desc(), X.data(), &r, Y.cudnn_desc(), Y.data());
         }
         else if (X.isHip())
         {
-            //hip_sigmoid(X.data(), Y.data(), Y.data_size_, a, r);
+            auto act_desc = gpu->getDesc<miopenActivationDescriptor_t>();
+            miopenSetActivationDescriptor(act_desc, miopenActivationLOGISTIC, 1, 1, 1);
+            miopenActivationForward(gpu->miopen_handle_, act_desc, &a, X.miopen_desc(), X.data(), &r, Y.miopen_desc(), Y.data());
         }
         else
         {
@@ -284,13 +300,16 @@ void MatrixEx::activeForward(const Matrix& X, Matrix& Y, ActiveFunctionType af,
     case ACTIVE_FUNCTION_RELU:
         if (X.isCuda())
         {
-            GpuControl::setActivationDesc((cudnnActivationDescriptor_t)op_desc, CUDNN_ACTIVATION_RELU, 1);
-            cudnnActivationForward(gpu->cudnn_handle_, (cudnnActivationDescriptor_t)op_desc,
-                &a, X.tensor_desc(), X.data(), &r, Y.tensor_desc(), Y.data());
+            cudnnActivationDesc activation_desc;
+            GpuControl::setActivationDesc(activation_desc(), CUDNN_ACTIVATION_RELU, 1);
+            cudnnActivationForward(gpu->cudnn_handle_, activation_desc(),
+                &a, X.cudnn_desc(), X.data(), &r, Y.cudnn_desc(), Y.data());
         }
         else if (X.isHip())
         {
-            //hip_relu(X.data(), Y.data(), Y.data_size_, a, r);
+            auto act_desc = gpu->getDesc<miopenActivationDescriptor_t>();
+            miopenSetActivationDescriptor(act_desc, miopenActivationRELU, 1, 1, 1);
+            miopenActivationForward(gpu->miopen_handle_, act_desc, &a, X.miopen_desc(), X.data(), &r, Y.miopen_desc(), Y.data());
         }
         else
         {
@@ -300,12 +319,16 @@ void MatrixEx::activeForward(const Matrix& X, Matrix& Y, ActiveFunctionType af,
     case ACTIVE_FUNCTION_TANH:
         if (X.isCuda())
         {
-            GpuControl::setActivationDesc((cudnnActivationDescriptor_t)op_desc, CUDNN_ACTIVATION_TANH, 1);
-            cudnnActivationForward(gpu->cudnn_handle_, (cudnnActivationDescriptor_t)op_desc,
-                &a, X.tensor_desc(), X.data(), &r, Y.tensor_desc(), Y.data());
+            cudnnActivationDesc activation_desc;
+            GpuControl::setActivationDesc(activation_desc(), CUDNN_ACTIVATION_TANH, 1);
+            cudnnActivationForward(gpu->cudnn_handle_, activation_desc(),
+                &a, X.cudnn_desc(), X.data(), &r, Y.cudnn_desc(), Y.data());
         }
         else if (X.isHip())
         {
+            auto act_desc = gpu->getDesc<miopenActivationDescriptor_t>();
+            miopenSetActivationDescriptor(act_desc, miopenActivationTANH, 1, 1, 1);
+            miopenActivationForward(gpu->miopen_handle_, act_desc, &a, X.miopen_desc(), X.data(), &r, Y.miopen_desc(), Y.data());
         }
         else
         {
@@ -317,13 +340,14 @@ void MatrixEx::activeForward(const Matrix& X, Matrix& Y, ActiveFunctionType af,
     case ACTIVE_FUNCTION_SOFTMAX3:
         if (X.isCuda())
         {
-            GpuControl::setTensorDesc4D((cudnnTensorDescriptor_t)op_desc, 1, 1, X.row_, X.number_);
+            cudnnTensorDesc tensor_desc;
+            setDesc4D(tensor_desc(), X.getDataType(), 1, 1, X.row_, X.number_);
             cudnnSoftmaxForward(gpu->cudnn_handle_, CUDNN_SOFTMAX_ACCURATE, CUDNN_SOFTMAX_MODE_INSTANCE,
-                &a, (cudnnTensorDescriptor_t)op_desc, X.data(), &r, (cudnnTensorDescriptor_t)op_desc, Y.data());
+                &a, tensor_desc(), X.data(), &r, tensor_desc(), Y.data());
         }
         else if (X.isHip())
         {
-            //hip_softmax(X.data(), Y.data(), X.getDataSize(), X.getRow(), a, r);
+            miopenSoftmaxForward_V2(gpu->miopen_handle_, &a, X.miopen_desc(), X.data(), &r, Y.miopen_desc(), Y.data(), MIOPEN_SOFTMAX_ACCURATE, MIOPEN_SOFTMAX_MODE_INSTANCE);
         }
         else
         {
@@ -336,7 +360,7 @@ void MatrixEx::activeForward(const Matrix& X, Matrix& Y, ActiveFunctionType af,
             VectorMath::exp_v(Y.data(), Y.data(), Y.data_size_);
             for (int i = 0; i < Y.number_; i++)
             {
-                real sum = Y.sumAbsCol(i);
+                float sum = Y.sumAbsCol(i);
                 if (sum == 0)
                 {
                     continue;
@@ -349,16 +373,21 @@ void MatrixEx::activeForward(const Matrix& X, Matrix& Y, ActiveFunctionType af,
     case ACTIVE_FUNCTION_SOFTMAX_FAST_CE:
         if (X.isCuda())
         {
-            GpuControl::setTensorDesc4D((cudnnTensorDescriptor_t)op_desc, 1, 1, X.row_, X.number_);
+            cudnnTensorDesc tensor_desc;
+            setDesc4D(tensor_desc(), X.getDataType(), 1, 1, X.row_, X.number_);
             cudnnSoftmaxForward(gpu->cudnn_handle_, CUDNN_SOFTMAX_FAST, CUDNN_SOFTMAX_MODE_INSTANCE,
-                &a, (cudnnTensorDescriptor_t)op_desc, X.data(), &r, (cudnnTensorDescriptor_t)op_desc, Y.data());
+                &a, tensor_desc(), X.data(), &r, tensor_desc(), Y.data());
+        }
+        else if (X.isHip())
+        {
+            miopenSoftmaxForward_V2(gpu->miopen_handle_, &a, X.miopen_desc(), X.data(), &r, Y.miopen_desc(), Y.data(), MIOPEN_SOFTMAX_FAST, MIOPEN_SOFTMAX_MODE_INSTANCE);
         }
         else
         {
             VectorMath::exp_v(X.data(), Y.data(), Y.data_size_, a, r);
             for (int i = 0; i < Y.number_; i++)
             {
-                real sum = Y.sumAbsCol(i);
+                float sum = Y.sumAbsCol(i);
                 if (sum == 0)
                 {
                     continue;
@@ -370,9 +399,14 @@ void MatrixEx::activeForward(const Matrix& X, Matrix& Y, ActiveFunctionType af,
     case ACTIVE_FUNCTION_SOFTMAX_LOG:
         if (X.isCuda())
         {
-            GpuControl::setTensorDesc4D((cudnnTensorDescriptor_t)op_desc, 1, 1, X.row_, X.number_);
+            cudnnTensorDesc tensor_desc;
+            setDesc4D(tensor_desc(), X.getDataType(), 1, 1, X.row_, X.number_);
             cudnnSoftmaxForward(gpu->cudnn_handle_, CUDNN_SOFTMAX_LOG, CUDNN_SOFTMAX_MODE_INSTANCE,
-                &a, (cudnnTensorDescriptor_t)op_desc, X.data(), &r, (cudnnTensorDescriptor_t)op_desc, Y.data());
+                &a, tensor_desc(), X.data(), &r, tensor_desc(), Y.data());
+        }
+        else if (X.isHip())
+        {
+            miopenSoftmaxForward_V2(gpu->miopen_handle_, &a, X.miopen_desc(), X.data(), &r, Y.miopen_desc(), Y.data(), MIOPEN_SOFTMAX_LOG, MIOPEN_SOFTMAX_MODE_INSTANCE);
         }
         else
         {
@@ -388,12 +422,12 @@ void MatrixEx::activeForward(const Matrix& X, Matrix& Y, ActiveFunctionType af,
         }
         if (X.inGpu())
         {
-            Matrix T(Y.row_, Y.number_, UnitType::CPU);
+            Matrix T({ Y.row_, Y.number_ }, Y.getDataType(), UnitType::CPU);
             T.scale(0);
             for (int i_group = 0; i_group < Y.number_; i_group++)
             {
                 int index = X.indexColMaxAbs(i_group);
-                T.getData(index, i_group) = 1;
+                T.setData(index, i_group, 1);
             }
             Matrix::copyData(T, Y);
         }
@@ -403,12 +437,12 @@ void MatrixEx::activeForward(const Matrix& X, Matrix& Y, ActiveFunctionType af,
             for (int i_group = 0; i_group < Y.number_; i_group++)
             {
                 int index = X.indexColMaxAbs(i_group);
-                Y.getData(index, i_group) = 1;
+                Y.setData(index, i_group, 1);
             }
         }
         break;
     default:
-        LOG(stderr, "ACTIVE forward not right {}!\n", int(af));
+        LOG_ERR("ACTIVE forward not right {}!\n", int(af));
         break;
     }
 }
@@ -418,12 +452,11 @@ void MatrixEx::activeForward(const Matrix& X, Matrix& Y, ActiveFunctionType af,
 //softmax的cpu部分貌似不支持a，b
 //这里的系数应该是不对,unfinished
 void MatrixEx::activeBackward(Matrix& X, const Matrix& Y, ActiveFunctionType af,
-    std::vector<int>& int_vector, std::vector<real>& real_vector, std::vector<Matrix>& matrix_vector, real a /*= 1*/, real r /*= 0*/)
+    std::vector<int>& int_vector, std::vector<float>& real_vector, std::vector<Matrix>& matrix_vector, float a /*= 1*/, float r /*= 0*/)
 {
     assert(checkMatrixDevice({ &X, &Y }));
     auto nan = CUDNN_NOT_PROPAGATE_NAN;
     auto gpu = Y.gpu();
-    int op_desc[64] = { 0 };
     switch (af)
     {
     case ACTIVE_FUNCTION_NONE:
@@ -435,13 +468,16 @@ void MatrixEx::activeBackward(Matrix& X, const Matrix& Y, ActiveFunctionType af,
     case ACTIVE_FUNCTION_SIGMOID:
         if (X.isCuda())
         {
-            GpuControl::setActivationDesc((cudnnActivationDescriptor_t)op_desc, CUDNN_ACTIVATION_SIGMOID, 1);
-            cudnnActivationBackward(gpu->cudnn_handle_, (cudnnActivationDescriptor_t)op_desc, &a, Y.tensor_desc(), Y.data(),
-                Y.tensor_desc(), Y.d().data(), X.tensor_desc(), X.data(), &r, X.tensor_desc(), X.d().data());
+            cudnnActivationDesc activation_desc;
+            GpuControl::setActivationDesc(activation_desc(), CUDNN_ACTIVATION_SIGMOID, 1);
+            cudnnActivationBackward(gpu->cudnn_handle_, activation_desc(), &a, Y.cudnn_desc(), Y.data(),
+                Y.cudnn_desc(), Y.d().data(), X.cudnn_desc(), X.data(), &r, X.cudnn_desc(), X.d().data());
         }
         else if (X.isHip())
         {
-            //hip_sigmoidb(Y.data(), Y.d().data(), X.data(), X.d().data(), X.data_size_, a, r);
+            auto act_desc = gpu->getDesc<miopenActivationDescriptor_t>();
+            miopenSetActivationDescriptor(act_desc, miopenActivationLOGISTIC, 1, 1, 1);
+            miopenActivationBackward(gpu->miopen_handle_, act_desc, &a, Y.miopen_desc(), Y.data(), Y.miopen_desc(), Y.d().data(), X.miopen_desc(), X.data(), &r, X.miopen_desc(), X.d().data());
         }
         else
         {
@@ -451,13 +487,16 @@ void MatrixEx::activeBackward(Matrix& X, const Matrix& Y, ActiveFunctionType af,
     case ACTIVE_FUNCTION_RELU:
         if (X.isCuda())
         {
-            GpuControl::setActivationDesc((cudnnActivationDescriptor_t)op_desc, CUDNN_ACTIVATION_RELU, 1);
-            cudnnActivationBackward(gpu->cudnn_handle_, (cudnnActivationDescriptor_t)op_desc, &a, Y.tensor_desc(), Y.data(),
-                Y.tensor_desc(), Y.d().data(), X.tensor_desc(), X.data(), &r, X.tensor_desc(), X.d().data());
+            cudnnActivationDesc activation_desc;
+            GpuControl::setActivationDesc(activation_desc(), CUDNN_ACTIVATION_RELU, 1);
+            cudnnActivationBackward(gpu->cudnn_handle_, activation_desc(), &a, Y.cudnn_desc(), Y.data(),
+                Y.cudnn_desc(), Y.d().data(), X.cudnn_desc(), X.data(), &r, X.cudnn_desc(), X.d().data());
         }
         else if (X.isHip())
         {
-            //hip_relub(Y.data(), Y.d().data(), X.data(), X.d().data(), X.data_size_, a, r);
+            auto act_desc = gpu->getDesc<miopenActivationDescriptor_t>();
+            miopenSetActivationDescriptor(act_desc, miopenActivationRELU, 1, 1, 1);
+            miopenActivationBackward(gpu->miopen_handle_, act_desc, &a, Y.miopen_desc(), Y.data(), Y.miopen_desc(), Y.d().data(), X.miopen_desc(), X.data(), &r, X.miopen_desc(), X.d().data());
         }
         else
         {
@@ -468,12 +507,16 @@ void MatrixEx::activeBackward(Matrix& X, const Matrix& Y, ActiveFunctionType af,
         //两者结果在1e-10的精度有区别
         if (X.isCuda())
         {
-            GpuControl::setActivationDesc((cudnnActivationDescriptor_t)op_desc, CUDNN_ACTIVATION_TANH, 1);
-            cudnnActivationBackward(gpu->cudnn_handle_, (cudnnActivationDescriptor_t)op_desc, &a, Y.tensor_desc(), Y.data(),
-                Y.tensor_desc(), Y.d().data(), X.tensor_desc(), X.data(), &r, X.tensor_desc(), X.d().data());
+            cudnnActivationDesc activation_desc;
+            GpuControl::setActivationDesc(activation_desc(), CUDNN_ACTIVATION_TANH, 1);
+            cudnnActivationBackward(gpu->cudnn_handle_, activation_desc(), &a, Y.cudnn_desc(), Y.data(),
+                Y.cudnn_desc(), Y.d().data(), X.cudnn_desc(), X.data(), &r, X.cudnn_desc(), X.d().data());
         }
         else if (X.isHip())
         {
+            auto act_desc = gpu->getDesc<miopenActivationDescriptor_t>();
+            miopenSetActivationDescriptor(act_desc, miopenActivationTANH, 1, 1, 1);
+            miopenActivationBackward(gpu->miopen_handle_, act_desc, &a, Y.miopen_desc(), Y.data(), Y.miopen_desc(), Y.d().data(), X.miopen_desc(), X.data(), &r, X.miopen_desc(), X.d().data());
         }
         else
         {
@@ -484,85 +527,114 @@ void MatrixEx::activeBackward(Matrix& X, const Matrix& Y, ActiveFunctionType af,
     case ACTIVE_FUNCTION_SOFTMAX_FAST:
         if (X.isCuda())
         {
+            cudnnTensorDesc tensor_desc;
             auto softmax_flag = CUDNN_SOFTMAX_ACCURATE;
             if (af == ACTIVE_FUNCTION_SOFTMAX_FAST)
             {
                 softmax_flag = CUDNN_SOFTMAX_FAST;
             }
-            GpuControl::setTensorDesc4D((cudnnTensorDescriptor_t)op_desc, 1, 1, X.row_, X.number_);
+            setDesc4D(tensor_desc(), X.getDataType(), 1, 1, X.row_, X.number_);
             auto s = cudnnSoftmaxBackward(gpu->cudnn_handle_, softmax_flag, CUDNN_SOFTMAX_MODE_INSTANCE,
-                &a, (cudnnTensorDescriptor_t)op_desc, Y.data(), (cudnnTensorDescriptor_t)op_desc, Y.d().data(), &r, (cudnnTensorDescriptor_t)op_desc, X.d().data());
+                &a, tensor_desc(), Y.data(), tensor_desc(), Y.d().data(), &r, tensor_desc(), X.d().data());
         }
         else if (X.isHip())
         {
+            auto softmax_flag = MIOPEN_SOFTMAX_ACCURATE;
+            if (af == ACTIVE_FUNCTION_SOFTMAX_FAST)
+            {
+                softmax_flag = MIOPEN_SOFTMAX_FAST;
+            }
+            miopenSoftmaxBackward_V2(gpu->miopen_handle_, &a, Y.miopen_desc(), Y.data(), Y.miopen_desc(), Y.d().data(), &r, X.miopen_desc(), X.d().data(), softmax_flag, MIOPEN_SOFTMAX_MODE_INSTANCE);
         }
         else
         {
             for (int i = 0; i < X.number_; i++)
             {
-                real v = MatrixEx::dotCol(Y, i, Y.d(), i);
-                VectorMath::softmax_vb_sub(Y.getDataPtr(0, i), Y.d().getDataPtr(0, i), v, X.d().getDataPtr(0, i), X.row_);
+                float v = MatrixEx::dotCol(Y, i, Y.d(), i);
+                VectorMath::softmax_vb_sub((float*)Y.getDataPtr(0, i), (float*)Y.d().getDataPtr(0, i), v, (float*)X.d().getDataPtr(0, i), X.row_);
             }
         }
         break;
     case ACTIVE_FUNCTION_SOFTMAX_LOG:
         if (X.isCuda())
         {
-            GpuControl::setTensorDesc4D((cudnnTensorDescriptor_t)op_desc, 1, 1, X.row_, X.number_);
+            cudnnTensorDesc tensor_desc;
+            setDesc4D(tensor_desc(), X.getDataType(), 1, 1, X.row_, X.number_);
             auto s = cudnnSoftmaxBackward(gpu->cudnn_handle_, CUDNN_SOFTMAX_LOG, CUDNN_SOFTMAX_MODE_INSTANCE,
-                &a, (cudnnTensorDescriptor_t)op_desc, Y.data(), (cudnnTensorDescriptor_t)op_desc, Y.d().data(), &r, (cudnnTensorDescriptor_t)op_desc, X.d().data());
+                &a, tensor_desc(), Y.data(), tensor_desc(), Y.d().data(), &r, tensor_desc(), X.d().data());
+        }
+        else if (X.isHip())
+        {
+            miopenSoftmaxBackward_V2(gpu->miopen_handle_, &a, Y.miopen_desc(), Y.data(), Y.miopen_desc(), Y.d().data(), &r, X.miopen_desc(), X.d().data(), MIOPEN_SOFTMAX_LOG, MIOPEN_SOFTMAX_MODE_INSTANCE);
         }
         else
         {
             for (int i = 0; i < X.number_; i++)
             {
-                real v = 0;
+                float v = 0;
                 for (int j = 0; j < X.row_; j++)
                 {
                     v += Y.d().getData(i, j);
                 }
-                VectorMath::softmaxlog_vb_sub(Y.getDataPtr(0, i), Y.d().getDataPtr(0, i), v, X.d().getDataPtr(0, i), X.row_);
+                VectorMath::softmaxlog_vb_sub((float*)Y.getDataPtr(0, i), (float*)Y.d().getDataPtr(0, i), v, (float*)X.d().getDataPtr(0, i), X.row_);
             }
         }
         break;
+    case ACTIVE_FUNCTION_ABSMAX:
+        //似乎应该是返回一个常数矩阵，若考虑效率应当留空此处在外部处理
+        //dX.fillData(1);
+        LOG_ERR("Unsupported backward of FINDMAX!\n");
+        break;
+        //case ACTIVE_FUNCTION_SUMMAX:
+        //    Matrix::copyDataPtr(A,A.DMatrix().data(), X,X.DMatrix().data());
+        //    for (int i = 0; i < X.getCol(); i++)
+        //    {
+        //        dX.addNumberCol(-Matrix::dotCol(A, i, dA, i), 1, i);
+        //        dX.scaleCol(1.0 / X.sumAbsCol(i), i);
+        //    }
+        //    break;
     default:
-        LOG(stderr, "ACTIVE backward not right {}!\n", int(af));
+        LOG_ERR("ACTIVE backward not right {}!\n", int(af));
         break;
     }
 }
 
-void MatrixEx::activeForwardSimple(const Matrix& X, Matrix& Y, ActiveFunctionType af, real a /*= 1*/, real r /*= 0*/)
+void MatrixEx::activeForwardSimple(const Matrix& X, Matrix& Y, ActiveFunctionType af, float a /*= 1*/, float r /*= 0*/)
 {
     std::vector<int> int_vector;
-    std::vector<real> real_vector;
+    std::vector<float> real_vector;
     std::vector<Matrix> matrix_vector;
     activeForward(X, Y, af, int_vector, real_vector, matrix_vector, a, r);
 }
 
-void MatrixEx::activeBackwardSimple(Matrix& X, const Matrix& Y, ActiveFunctionType af, real a /*= 1*/, real r /*= 0*/)
+void MatrixEx::activeBackwardSimple(Matrix& X, const Matrix& Y, ActiveFunctionType af, float a /*= 1*/, float r /*= 0*/)
 {
     std::vector<int> int_vector;
-    std::vector<real> real_vector;
+    std::vector<float> real_vector;
     std::vector<Matrix> matrix_vector;
     activeBackward(X, Y, af, int_vector, real_vector, matrix_vector, a, r);
 }
 
 //池化
 //gpu部分，平均模式下对padding的支持目前还有问题
-void MatrixEx::poolingForward(const Matrix& X, Matrix& Y, PoolingType pooling_type, int reverse,
-    const std::vector<int>& window, const std::vector<int>& stride, const std::vector<int>& padding,
-    realc a /*= 1*/, realc r /*= 0*/)
+void MatrixEx::poolingForward(const Matrix& X, Matrix& Y, PoolingType pooling_type, int reverse, std::vector<Matrix>& workspaces,
+    const std::vector<int>& window, const std::vector<int>& stride,
+    const std::vector<int>& padding, float a /*= 1*/
+    ,
+    float r /*= 0*/)
 {
     assert(checkMatrixDevice({ &X, &Y }));
     assert(window.size() >= 2 && stride.size() >= 2 && padding.size() >= 2);
     auto gpu = X.gpu();
-    int op_desc[64] = { 0 };
-    if (pooling_type == POOLING_MA) { pooling_type = POOLING_MAX; }
     if (Y.isCuda())
     {
+        cudnnPoolingMode_t pooling_type_c = CUDNN_POOLING_MAX;
+        if (pooling_type == POOLING_AVERAGE_NOPADDING) { pooling_type_c = CUDNN_POOLING_AVERAGE_COUNT_EXCLUDE_PADDING; }
+        if (pooling_type == POOLING_AVERAGE_PADDING) { pooling_type_c = CUDNN_POOLING_AVERAGE_COUNT_INCLUDE_PADDING; }
+        cudnnPoolingDesc pooling_desc;
         if (stride.size() == 2)
         {
-            cudnnSetPooling2dDescriptor((cudnnPoolingDescriptor_t)op_desc, cudnnPoolingMode_t(pooling_type), CUDNN_NOT_PROPAGATE_NAN,
+            cudnnSetPooling2dDescriptor(pooling_desc(), pooling_type_c, CUDNN_NOT_PROPAGATE_NAN,
                 window[1], window[0], padding[1], padding[0], stride[1], stride[0]);
         }
         else
@@ -573,34 +645,55 @@ void MatrixEx::poolingForward(const Matrix& X, Matrix& Y, PoolingType pooling_ty
             std::reverse(wr.begin(), wr.end());
             std::reverse(pr.begin(), pr.end());
             std::reverse(sr.begin(), sr.end());
-            cudnnSetPoolingNdDescriptor((cudnnPoolingDescriptor_t)op_desc, cudnnPoolingMode_t(pooling_type), CUDNN_NOT_PROPAGATE_NAN,
+            cudnnSetPoolingNdDescriptor(pooling_desc(), pooling_type_c, CUDNN_NOT_PROPAGATE_NAN,
                 window.size(), wr.data(), pr.data(), sr.data());
         }
         cudnnStatus_t s;
         if (reverse == 0)
         {
-            s = cudnnPoolingForward(gpu->cudnn_handle_, (cudnnPoolingDescriptor_t)op_desc, &a, X.tensor_desc(), X.data(), &r, Y.tensor_desc(), Y.data());
+            s = cudnnPoolingForward(gpu->cudnn_handle_, pooling_desc(), &a, X.cudnn_desc(), X.data(), &r, Y.cudnn_desc(), Y.data());
         }
         else
         {
-            s = cudnnPoolingBackward(gpu->cudnn_handle_, (cudnnPoolingDescriptor_t)op_desc,
-                &a, X.tensor_desc(), X.data(), X.tensor_desc(), X.data(), Y.tensor_desc(), Y.data(), &r, Y.tensor_desc(), Y.data());
+            s = cudnnPoolingBackward(gpu->cudnn_handle_, pooling_desc(),
+                &a, X.cudnn_desc(), X.data(), X.cudnn_desc(), X.data(), Y.cudnn_desc(), Y.data(), &r, Y.cudnn_desc(), Y.data());
             Y.scale(VectorMath::multiply(window));
         }
         if (s)
         {
-            LOG(stderr, "POOL forward error {}\n", cudnnGetErrorString(s));
+            LOG_ERR("POOL forward error {}, {}\n", cudnnGetErrorString(s), X.gpu()->lastCudnnErrorString());
         }
     }
     else if (Y.isHip())
     {
+        miopenPoolingMode_t pooling_type_c = miopenPoolingMax;
+        if (pooling_type == POOLING_AVERAGE_NOPADDING) { pooling_type_c = miopenPoolingAverage; }
+        if (pooling_type == POOLING_AVERAGE_PADDING) { pooling_type_c = miopenPoolingAverageInclusive; }
+        //auto op_desc = gpu->getDesc<miopenPoolingDescriptor_t>();
+        miopenPoolingDesc op_desc;    //todo: 未测试
+        if (stride.size() == 2)
+        {
+            miopenSet2dPoolingDescriptor(op_desc(), pooling_type_c, window[1], window[0], padding[1], padding[0], stride[1], stride[0]);
+        }
+        if (workspaces.size() == 0)
+        {
+            workspaces.resize(1);
+        }
+        if (workspaces[0].getDataSizeInByte() == 0)
+        {
+            size_t ws;
+            miopenPoolingGetWorkSpaceSize(Y.miopen_desc(), &ws);
+            workspaces[0].resize(1, 1, 1, ws);
+        }
+        miopenStatus_t s;
+        bool back = gpu->active_phase_ == ACTIVE_PHASE_TRAIN;
         if (reverse == 0)
         {
-            //hip_pool(X.data(), Y.data(), X.width_, X.height_, X.channel_, X.number_, Y.width_, Y.height_, window[0], pooling_type, a, r);
+            s = miopenPoolingForward(gpu->miopen_handle_, op_desc(), &a, X.miopen_desc(), X.data(), &r, Y.miopen_desc(), Y.data(), back, workspaces[0].data(), workspaces[0].getDataSizeInByte());
         }
         else
         {
-            //hip_poolb(Y.data(), Y.data(), X.data(), X.data(), Y.width_, Y.height_, Y.channel_, Y.number_, X.width_, X.height_, window[0], pooling_type, a, r);
+            s = miopenPoolingBackward(gpu->miopen_handle_, op_desc(), &a, X.miopen_desc(), X.data(), X.miopen_desc(), X.data(), Y.miopen_desc(), Y.data(), &r, Y.miopen_desc(), Y.data(), workspaces[0].data());
             Y.scale(VectorMath::multiply(window));
         }
     }
@@ -613,10 +706,10 @@ void MatrixEx::poolingForward(const Matrix& X, Matrix& Y, PoolingType pooling_ty
             {
                 for (int hA = 0; hA < Y.height_; hA++)
                 {
-                    real v = 0;
+                    float v = 0;
                     if (pooling_type == POOLING_MAX)
                     {
-                        v = -REAL_MAX;
+                        v = -FLT_MAX;
                     }
                     int n = 0;
                     int wX0 = wA * stride[0] - padding[0];
@@ -654,7 +747,7 @@ void MatrixEx::poolingForward(const Matrix& X, Matrix& Y, PoolingType pooling_ty
                     {
                         v /= n;
                     }
-                    Y.getData(wA, hA, p, 0) += a * v;    // +r * Y.getData(wA, hA, p, 0);
+                    Y.setData(wA, hA, p, 0, Y.getData(wA, hA, p, 0) + a * v);    // +r * Y.getData(wA, hA, p, 0);
                 }
             }
         }
@@ -663,24 +756,24 @@ void MatrixEx::poolingForward(const Matrix& X, Matrix& Y, PoolingType pooling_ty
 
 //使用cpu时利用了record -- 取消，直接计算
 void MatrixEx::poolingBackward(Matrix& X, const Matrix& Y, PoolingType pooling_type, int reverse,
-    const std::vector<int>& window, const std::vector<int>& stride, const std::vector<int>& padding,
-    realc a /*= 1*/, realc r /*= 0*/)
+    std::vector<Matrix>& workspaces, const std::vector<int>& window, const std::vector<int>& stride,
+    const std::vector<int>& padding, float a /*= 1*/
+    ,
+    float r /*= 0*/)
 {
     assert(checkMatrixDevice({ &X, &Y }));
     assert(window.size() >= 2 && stride.size() >= 2 && padding.size() >= 2);
     auto gpu = Y.gpu();
-    int op_desc[64] = { 0 };
-    if (pooling_type == POOLING_MA)
-    {
-        pooling_type = POOLING_AVERAGE_NOPADDING;
-        //a *= 4;
-    }
     if (X.isCuda())
     {
+        cudnnPoolingDesc pooling_desc;
+        cudnnPoolingMode_t pooling_type_c = CUDNN_POOLING_MAX;
+        if (pooling_type == POOLING_AVERAGE_NOPADDING) { pooling_type_c = CUDNN_POOLING_AVERAGE_COUNT_EXCLUDE_PADDING; }
+        if (pooling_type == POOLING_AVERAGE_PADDING) { pooling_type_c = CUDNN_POOLING_AVERAGE_COUNT_INCLUDE_PADDING; }
         if (window.size() == 2)
         {
             //这个怎么看都快不了
-            cudnnSetPooling2dDescriptor((cudnnPoolingDescriptor_t)op_desc, cudnnPoolingMode_t(pooling_type), CUDNN_NOT_PROPAGATE_NAN,
+            cudnnSetPooling2dDescriptor(pooling_desc(), pooling_type_c, CUDNN_NOT_PROPAGATE_NAN,
                 window[1], window[0], padding[1], padding[0], stride[1], stride[0]);
         }
         else
@@ -691,34 +784,44 @@ void MatrixEx::poolingBackward(Matrix& X, const Matrix& Y, PoolingType pooling_t
             std::reverse(wr.begin(), wr.end());
             std::reverse(pr.begin(), pr.end());
             std::reverse(sr.begin(), sr.end());
-            cudnnSetPoolingNdDescriptor((cudnnPoolingDescriptor_t)op_desc, cudnnPoolingMode_t(pooling_type), CUDNN_NOT_PROPAGATE_NAN,
+            cudnnSetPoolingNdDescriptor(pooling_desc(), pooling_type_c, CUDNN_NOT_PROPAGATE_NAN,
                 window.size(), wr.data(), pr.data(), sr.data());
         }
         cudnnStatus_t s;
         if (reverse == 0)
         {
-            s = cudnnPoolingBackward(gpu->cudnn_handle_, (cudnnPoolingDescriptor_t)op_desc,
-                &a, Y.tensor_desc(), Y.data(), Y.tensor_desc(), Y.d().data(), X.tensor_desc(), X.data(), &r, X.tensor_desc(), X.d().data());
+            s = cudnnPoolingBackward(gpu->cudnn_handle_, pooling_desc(),
+                &a, Y.cudnn_desc(), Y.data(), Y.cudnn_desc(), Y.d().data(), X.cudnn_desc(), X.data(), &r, X.cudnn_desc(), X.d().data());
         }
         else
         {
-            s = cudnnPoolingForward(gpu->cudnn_handle_, (cudnnPoolingDescriptor_t)op_desc, &a, Y.tensor_desc(), Y.d().data(), &r, X.tensor_desc(), X.d().data());
+            s = cudnnPoolingForward(gpu->cudnn_handle_, pooling_desc(), &a, Y.cudnn_desc(), Y.d().data(), &r, X.cudnn_desc(), X.d().data());
             X.d().scale(1.0 / VectorMath::multiply(window));
         }
         if (s)
         {
-            LOG(stderr, "POOL backward error {}\n", cudnnGetErrorString(s));
+            LOG_ERR("POOL backward error {}, {}\n", cudnnGetErrorString(s), X.gpu()->lastCudnnErrorString());
         }
     }
     else if (X.isHip())
     {
+        miopenPoolingMode_t pooling_type_c = miopenPoolingMax;
+        if (pooling_type == POOLING_AVERAGE_NOPADDING) { pooling_type_c = miopenPoolingAverage; }
+        if (pooling_type == POOLING_AVERAGE_PADDING) { pooling_type_c = miopenPoolingAverageInclusive; }
+        auto op_desc = gpu->getDesc<miopenPoolingDescriptor_t>();
+        if (stride.size() == 2)
+        {
+            miopenSet2dPoolingDescriptor(op_desc, pooling_type_c, window[1], window[0], padding[1], padding[0], stride[1], stride[0]);
+        }
+        miopenStatus_t s;
+        bool back = gpu->active_phase_ == ACTIVE_PHASE_TRAIN;
         if (reverse == 0)
         {
-            //hip_poolb(X.data(), X.d().data(), Y.data(), Y.d().data(), X.width_, X.height_, X.channel_, X.number_, Y.width_, Y.height_, window[0], pooling_type, a, r);
+            s = miopenPoolingBackward(gpu->miopen_handle_, op_desc, &a, Y.miopen_desc(), Y.data(), Y.miopen_desc(), Y.d().data(), X.miopen_desc(), X.data(), &r, X.miopen_desc(), X.d().data(), workspaces[0].data());
         }
         else
         {
-            //hip_pool(Y.d().data(), X.d().data(), Y.width_, Y.height_, Y.channel_, Y.number_, X.width_, X.height_, window[0], pooling_type, a, r);
+            s = miopenPoolingForward(gpu->miopen_handle_, op_desc, &a, Y.miopen_desc(), Y.d().data(), &r, X.miopen_desc(), X.d().data(), back, workspaces[0].data(), workspaces[0].getDataSizeInByte());
             X.d().scale(1.0 / VectorMath::multiply(window));
         }
     }
@@ -735,26 +838,28 @@ void MatrixEx::poolingBackward(Matrix& X, const Matrix& Y, PoolingType pooling_t
                     int hdX0 = hdA * stride[1] - padding[1];
                     if (pooling_type == POOLING_MAX)
                     {
-                        real max_v = -REAL_MAX;
-                        real* max_p = nullptr;
+                        float max_v = -FLT_MAX;
+                        int64_t max_p = -1;
                         for (int wdX = wdX0; wdX < std::min(X.width_, wdX0 + window[0]); wdX++)
                         {
                             for (int hdX = hdX0; hdX < std::min(X.height_, hdX0 + window[1]); hdX++)
                             {
                                 if (X.haveData(wdX, hdX, p, 0))
                                 {
-                                    real v = X.getData(wdX, hdX, p, 0);
+                                    float v = X.getData(wdX, hdX, p, 0);
                                     if (v > max_v)
                                     {
                                         max_v = v;
-                                        max_p = &X.d().getData(wdX, hdX, p, 0);
+                                        max_p = X.d().whcn2i(wdX, hdX, p, 0);
+                                        //max_p = X.d().getDataPtr(wdX, hdX, p, 0);
                                     }
                                 }
                             }
                         }
-                        if (max_p)
+                        if (max_p >= 0)
                         {
-                            *max_p += a * Y.d().getData(wdA, hdA, p, 0);
+                            X.d().setData(max_p, 0, X.d().getData(max_p, 0) + a * Y.d().getData(wdA, hdA, p, 0));
+                            //*max_p += a * Y.d().getData(wdA, hdA, p, 0);
                         }
                     }
                     else
@@ -768,14 +873,14 @@ void MatrixEx::poolingBackward(Matrix& X, const Matrix& Y, PoolingType pooling_t
                         {
                             n = window[0] * window[1];
                         }
-                        real v = Y.d().getData(wdA, hdA, p, 0) / n;
+                        float v = Y.d().getData(wdA, hdA, p, 0) / n;
                         for (int wdX = wdX0; wdX < std::min(X.width_, wdX0 + window[0]); wdX++)
                         {
                             for (int hdX = hdX0; hdX < std::min(X.height_, hdX0 + window[1]); hdX++)
                             {
                                 if (X.haveData(wdX, hdX, p, 0))
                                 {
-                                    X.d().getData(wdX, hdX, p, 0) += a * v;    // +r * X.d().getData(wdX, hdX, p, 0);
+                                    X.d().setData(wdX, hdX, p, 0, X.d().getData(wdX, hdX, p, 0) + a * v);    // +r * X.d().getData(wdX, hdX, p, 0);
                                 }
                             }
                         }
@@ -810,7 +915,7 @@ void MatrixEx::poolingBackward(Matrix& X, const Matrix& Y, PoolingType pooling_t
 //CPU模式仅支持stride为1，padding为0的二维卷积
 //methods保存信息为3个: 算法，类型，组数。若考虑反向则应为9个，后面对应反向数据和反向权重
 void MatrixEx::convolutionForward(const Matrix& X, const Matrix& W, Matrix& Y, std::vector<int>& methods, std::vector<Matrix>& workspaces,
-    const std::vector<int>& stride, const std::vector<int>& padding, realc a /*= 1*/, realc r /*= 0*/)
+    const std::vector<int>& stride, const std::vector<int>& padding, float a /*= 1*/, float r /*= 0*/)
 {
     assert(checkMatrixDevice({ &X, &W, &Y }));
     assert(stride.size() >= 2 && padding.size() >= 2);
@@ -823,18 +928,17 @@ void MatrixEx::convolutionForward(const Matrix& X, const Matrix& W, Matrix& Y, s
     auto gpu = X.gpu();
     if (Y.isCuda())
     {
+        cudnnConvolutionDesc conv_desc;
+        cudnnFilterDesc filter_desc;
         if (workspaces.size() < 2)
         {
             workspaces.resize(2);
         }
-        int op_desc[64] = { 0 };
-        int op_desc2[64] = { 0 };
-        op_desc[23] = 1;    //此值从cudnn的create结果推断得到，原理不负责
         cudnnStatus_t scd, sfd;
         if (stride.size() == 2)
         {
-            scd = cudnnSetConvolution2dDescriptor((cudnnConvolutionDescriptor_t)op_desc, padding[1], padding[0], stride[1], stride[0], 1, 1, CUDNN_CROSS_CORRELATION, MYCUDNN_DATA_REAL);
-            sfd = cudnnSetFilter4dDescriptor((cudnnFilterDescriptor_t)op_desc2, MYCUDNN_DATA_REAL, CUDNN_TENSOR_NCHW, W.number_, W.channel_, W.height_, W.width_);
+            scd = cudnnSetConvolution2dDescriptor(conv_desc(), padding[1], padding[0], stride[1], stride[0], 1, 1, CUDNN_CROSS_CORRELATION, toCudnnDataType(Y.getDataType()));
+            sfd = cudnnSetFilter4dDescriptor(filter_desc(), toCudnnDataType(W.getDataType()), CUDNN_TENSOR_NCHW, W.number_, W.channel_, W.height_, W.width_);
         }
         else
         {
@@ -844,19 +948,19 @@ void MatrixEx::convolutionForward(const Matrix& X, const Matrix& W, Matrix& Y, s
             auto sr = stride;
             std::reverse(pr.begin(), pr.end());
             std::reverse(sr.begin(), sr.end());
-            scd = cudnnSetConvolutionNdDescriptor((cudnnConvolutionDescriptor_t)op_desc, padding.size(), pr.data(), sr.data(), dilation.data(), CUDNN_CROSS_CORRELATION, MYCUDNN_DATA_REAL);
+            scd = cudnnSetConvolutionNdDescriptor(conv_desc(), padding.size(), pr.data(), sr.data(), dilation.data(), CUDNN_CROSS_CORRELATION, toCudnnDataType(Y.getDataType()));
             auto w_dim = W.getDim();
             std::reverse(w_dim.begin(), w_dim.end());
-            sfd = cudnnSetFilterNdDescriptor((cudnnFilterDescriptor_t)op_desc2, MYCUDNN_DATA_REAL, CUDNN_TENSOR_NCHW, W.getDimSize(), w_dim.data());
+            sfd = cudnnSetFilterNdDescriptor(filter_desc(), toCudnnDataType(Y.getDataType()), CUDNN_TENSOR_NCHW, W.getDimSize(), w_dim.data());
         }
-        cudnnSetConvolutionMathType((cudnnConvolutionDescriptor_t)op_desc, CUDNN_TENSOR_OP_MATH);
+        cudnnSetConvolutionMathType(conv_desc(), CUDNN_TENSOR_OP_MATH);
         //寻找最快的算法
         if (methods[2] <= 0)
         {
             size_t ws_size;
             if (0)
             {
-                cudnnGetConvolutionForwardWorkspaceSize(gpu->cudnn_handle_, X.tensor_desc(), (cudnnFilterDescriptor_t)op_desc2, (cudnnConvolutionDescriptor_t)op_desc, Y.tensor_desc(), (cudnnConvolutionFwdAlgo_t)0, &ws_size);
+                cudnnGetConvolutionForwardWorkspaceSize(gpu->cudnn_handle_, X.cudnn_desc(), filter_desc(), conv_desc(), Y.cudnn_desc(), (cudnnConvolutionFwdAlgo_t)0, &ws_size);
                 methods[0] = 0;
                 methods[1] = 0;
             }
@@ -864,8 +968,8 @@ void MatrixEx::convolutionForward(const Matrix& X, const Matrix& W, Matrix& Y, s
             {
                 int n;
                 cudnnConvolutionFwdAlgoPerf_t cfap[conv_method_count];
-                auto t = cudnnFindConvolutionForwardAlgorithm(gpu->cudnn_handle_, X.tensor_desc(),
-                    (cudnnFilterDescriptor_t)op_desc2, (cudnnConvolutionDescriptor_t)op_desc, Y.tensor_desc(), conv_method_count, &n, cfap);
+                auto t = cudnnFindConvolutionForwardAlgorithm(gpu->cudnn_handle_, X.cudnn_desc(),
+                    filter_desc(), conv_desc(), Y.cudnn_desc(), conv_method_count, &n, cfap);
 
                 //for (int i = 0; i < 8; i++)
                 //{
@@ -881,7 +985,7 @@ void MatrixEx::convolutionForward(const Matrix& X, const Matrix& W, Matrix& Y, s
             }
             if (ws_size > workspaces[0].getDataSizeInByte())
             {
-                workspaces[0].resize(1, 1, 1, ws_size / sizeof(real) + 2);
+                workspaces[0].resize(1, 1, 1, ws_size / workspaces[0].getDataTypeSize() + 2);
             }
 #ifdef _DEBUG
             LOG("conv forward choose {}({}), workspace {}\n", methods[0], methods[1], ws_size);
@@ -890,11 +994,11 @@ void MatrixEx::convolutionForward(const Matrix& X, const Matrix& W, Matrix& Y, s
         else if (methods[2] != X.number_)    //有可能存在组数小反而需要缓冲区更大的情况
         {
             size_t ws_size;
-            cudnnGetConvolutionForwardWorkspaceSize(gpu->cudnn_handle_, X.tensor_desc(),
-                (cudnnFilterDescriptor_t)op_desc2, (cudnnConvolutionDescriptor_t)op_desc, Y.tensor_desc(), cudnnConvolutionFwdAlgo_t(methods[0]), &ws_size);
+            cudnnGetConvolutionForwardWorkspaceSize(gpu->cudnn_handle_, X.cudnn_desc(),
+                filter_desc(), conv_desc(), Y.cudnn_desc(), cudnnConvolutionFwdAlgo_t(methods[0]), &ws_size);
             if (ws_size > workspaces[0].getDataSizeInByte())
             {
-                workspaces[0].resize(1, 1, 1, ws_size / sizeof(real) + 2);
+                workspaces[0].resize(1, 1, 1, ws_size / workspaces[0].getDataTypeSize() + 2);
 #ifdef _DEBUG
                 LOG("resize conv workspace {}\n", ws_size);
 #endif
@@ -902,39 +1006,77 @@ void MatrixEx::convolutionForward(const Matrix& X, const Matrix& W, Matrix& Y, s
         }
         methods[2] = X.number_;
         auto cfa = cudnnConvolutionFwdAlgo_t(methods[0]);
-        auto tensor = cudnnSetConvolutionMathType((cudnnConvolutionDescriptor_t)op_desc, cudnnMathType_t(methods[1]));
-        auto scf = cudnnConvolutionForward(gpu->cudnn_handle_, &a, X.tensor_desc(), X.data(), (cudnnFilterDescriptor_t)op_desc2, W.data(),
-            (cudnnConvolutionDescriptor_t)op_desc, cfa, workspaces[0].data(), workspaces[0].getDataSizeInByte(), &r, Y.tensor_desc(), Y.data());
+        auto tensor = cudnnSetConvolutionMathType(conv_desc(), cudnnMathType_t(methods[1]));
+        auto scf = cudnnConvolutionForward(gpu->cudnn_handle_, &a, X.cudnn_desc(), X.data(), filter_desc(), W.data(),
+            conv_desc(), cfa, workspaces[0].data(), workspaces[0].getDataSizeInByte(), &r, Y.cudnn_desc(), Y.data());
         if (scf)
         {
-            LOG(stderr, "CONV forward error: status {}, algo {}\n", cudnnGetErrorString(scf), int(cfa));
+            LOG_ERR("CONV forward error: status {}, algo {}, {}\n", cudnnGetErrorString(scf), int(cfa), X.gpu()->lastCudnnErrorString());
         }
     }
     else if (Y.isHip())
     {
-        //hip_conv2d(X.data(), W.data(), Y.data(), X.width_, X.height_, X.channel_, X.number_, Y.width_, Y.height_, Y.channel_, W.width_, W.height_, stride[0], padding[0], a, r);
-
-        //Conv conv(X.width_, X.height_, X.channel_, Y.channel_, W.width_, W.height_, padding[0], padding[1], stride[0], stride[1], false);
-        //if (methods[2] != X.number_)
-        //{
-        //    methods[2] = X.number_;
-        //    workspaces.resize(1);
-        //    //int height_col = (X.height_, +2 * padding[1] - W.height_) / stride[1] + 1;
-        //    //int width_col = (X.width_, +2 * padding[0] - W.width_) / stride[0] + 1;
-        //    workspaces[0].resize(Y.height_ * Y.width_ * X.channel_ * W.height_ * W.width_, X.number_);
-        //}
-        //conv.forward(X.data(), X.number_, workspaces[0].data(), W.data(), Y.data());
-        //int channel_out = Y.channel_;
-        //int height_out = Y.height_;
-        //int width_out = Y.width_;
-        //int channel_in  = X.channel_;
-        //int batch_size = X.number_;
-        //int kernel_h = W.height_;
-        //int kernel_w = W.width_;
-        //int m = channel_out;
-        //int n = height_out * width_out * batch_size;
-        //int k = channel_in * kernel_h * kernel_w;
-        //Y.gpu()->rocblas_->gemm(MATRIX_NO_TRANS, MATRIX_NO_TRANS, m, n, k, a, W.data(), m, workspaces[0].data(), k, r, Y.data(), m);
+        if (workspaces.size() < 2)
+        {
+            workspaces.resize(2);
+        }
+        miopenStatus_t scd, sfd;
+        auto op_desc = gpu->getDesc<miopenConvolutionDescriptor_t>();
+        if (stride.size() == 2)
+        {
+            scd = miopenInitConvolutionDescriptor(op_desc, miopenConvolution, padding[1], padding[0], stride[1], stride[0], 1, 1);
+        }
+        else
+        {
+            //这里有可能需要反序vector，待测试
+            std::vector<int> dilation(padding.size(), 1);
+            auto pr = padding;
+            auto sr = stride;
+            std::reverse(pr.begin(), pr.end());
+            std::reverse(sr.begin(), sr.end());
+            scd = miopenInitConvolutionNdDescriptor(op_desc, padding.size(), pr.data(), sr.data(), dilation.data(), miopenConvolution);
+            auto w_dim = W.getDim();
+            std::reverse(w_dim.begin(), w_dim.end());
+        }
+        //暂无类型设定
+        if (methods[2] <= 0)
+        {
+            int n;
+            size_t ws_size;
+            miopenConvAlgoPerf_t cfap[conv_method_count];
+            miopenTensorDescriptor_t d1, d2;
+            miopenCreateTensorDescriptor(&d1);
+            miopenCreateTensorDescriptor(&d2);
+            for (int i = 1; i <= X.number_; i++)
+            {
+                miopenSet4dTensorDescriptor(d1, miopenFloat, i, X.channel_, X.height_, X.width_);
+                miopenSet4dTensorDescriptor(d2, miopenFloat, i, Y.channel_, Y.height_, Y.width_);
+                miopenFindConvolutionForwardAlgorithm(gpu->miopen_handle_, d1, X.data(), W.miopen_desc(), W.data(),
+                    op_desc, d2, Y.data(), conv_method_count, &n, cfap, workspaces[0].data(), workspaces[0].getDataSizeInByte(), true);
+            }
+            ws_size = cfap[0].memory;
+            if (ws_size > workspaces[0].getDataSizeInByte())
+            {
+                workspaces[0].resize(1, 1, cfap[0].memory / workspaces[0].getDataTypeSize() + 2, 1);
+            }
+            methods[0] = cfap[0].fwd_algo;
+        }
+        else if (methods[2] != X.number_)
+        {
+            size_t ws_size;
+            miopenConvolutionForwardGetWorkSpaceSize(gpu->miopen_handle_, W.miopen_desc(), X.miopen_desc(), op_desc, Y.miopen_desc(), &ws_size);
+            if (ws_size > workspaces[0].getDataSizeInByte())
+            {
+                workspaces[0].resize(1, 1, ws_size / workspaces[0].getDataTypeSize() + 2, 1);
+            }
+        }
+        methods[2] = X.number_;
+        auto scf = miopenConvolutionForward(gpu->miopen_handle_, &a, X.miopen_desc(), X.data(), W.miopen_desc(), W.data(),
+            op_desc, miopenConvFwdAlgorithm_t(methods[0]), &r, Y.miopen_desc(), Y.data(), workspaces[0].data(), workspaces[0].getDataSizeInByte());
+        if (scf)
+        {
+            LOG_ERR("CONV forward error: status {}, methods {}\n", miopenGetErrorString(scf), methods);
+        }
     }
     else
     {
@@ -942,7 +1084,7 @@ void MatrixEx::convolutionForward(const Matrix& X, const Matrix& W, Matrix& Y, s
         //辅助矩阵的尺寸
         int row = Y.width_ * Y.height_;
         int col = X.channel_ * W.width_ * W.height_;
-        Matrix X_ex(row, col, UnitType::CPU);
+        Matrix X_ex({ row, col }, X.getDataType(), UnitType::CPU);
         if (methods[0] < 1)
         {
             methods[0] = 1;
@@ -959,12 +1101,12 @@ void MatrixEx::convolutionForward(const Matrix& X, const Matrix& W, Matrix& Y, s
                         //拍扁
                         int pX = X.whcn2i(wX, hX, cX, 0);    //X其中一组特征对应的位置
                         int pX_ex = X_ex.mn2i(pY, pW);
-                        workspaces[0].getData(pX_ex, 0) = pX;    //记录展开的位置
+                        workspaces[0].setData(pX_ex, 0, pX);    //记录展开的位置
                     });
             }
         }
-        Matrix X_sub({ X.row_, 1 }, X.data_, UnitType::CPU);
-        Matrix Y_sub({ Y.width_ * Y.height_, Y.channel_ }, Y.data_, UnitType::CPU);    //这两个是专用于share
+        Matrix X_sub({ X.row_, 1 }, X.data_, X.getDataType(), UnitType::CPU);
+        Matrix Y_sub({ Y.width_ * Y.height_, Y.channel_ }, Y.data_, Y.getDataType(), UnitType::CPU);    //这两个是专用于share
         for (int i = 0; i < X.number_; i++)
         {
             X_sub.shareData(X, 0, i);
@@ -975,7 +1117,7 @@ void MatrixEx::convolutionForward(const Matrix& X, const Matrix& W, Matrix& Y, s
                 int p = workspaces[0].getData(j, 0);
                 if (p >= 0 && p < X_sub.getDataSize())
                 {
-                    X_ex.getData(j) = X_sub.getData(p);
+                    X_ex.setData(j, X_sub.getData(p));
                 }
             }
             MatrixEx::mul(X_ex, W, Y_sub, a, r);
@@ -1004,7 +1146,7 @@ void MatrixEx::convolutionForward(const Matrix& X, const Matrix& W, Matrix& Y, s
 
 //计算dX只需要W，dA；计算dW只需要X，dA；计算dB只需要dA
 void MatrixEx::convolutionBackward(Matrix& X, Matrix& W, const Matrix& Y, std::vector<int>& methods, std::vector<Matrix>& workspaces,
-    const std::vector<int>& stride, const std::vector<int>& padding, realc a /*= 1*/, realc rx /*= 0*/, realc rw /*= 0*/)
+    const std::vector<int>& stride, const std::vector<int>& padding, float a /*= 1*/, float rx /*= 0*/, float rw /*= 0*/)
 {
     assert(checkMatrixDevice({ &X, &W, &Y }));
     assert(stride.size() >= 2 && padding.size() >= 2);
@@ -1018,16 +1160,15 @@ void MatrixEx::convolutionBackward(Matrix& X, Matrix& W, const Matrix& Y, std::v
     auto methods_x = &methods[3];
     auto methods_w = &methods[6];
     auto gpu = Y.gpu();
-    int op_desc[64] = { 0 };
-    int op_desc2[64] = { 0 };
-    op_desc[23] = 1;
     //这里不用dX判断是因为dX可能是空
     if (Y.isCuda())
     {
+        cudnnConvolutionDesc conv_desc;
+        cudnnFilterDesc filter_desc;
         if (stride.size() == 2)
         {
-            cudnnSetConvolution2dDescriptor((cudnnConvolutionDescriptor_t)op_desc, padding[1], padding[0], stride[1], stride[0], 1, 1, CUDNN_CROSS_CORRELATION, MYCUDNN_DATA_REAL);
-            cudnnSetFilter4dDescriptor((cudnnFilterDescriptor_t)op_desc2, MYCUDNN_DATA_REAL, CUDNN_TENSOR_NCHW, W.number_, W.channel_, W.height_, W.width_);
+            cudnnSetConvolution2dDescriptor(conv_desc(), padding[1], padding[0], stride[1], stride[0], 1, 1, CUDNN_CROSS_CORRELATION, toCudnnDataType(Y.getDataType()));
+            cudnnSetFilter4dDescriptor(filter_desc(), toCudnnDataType(Y.getDataType()), CUDNN_TENSOR_NCHW, W.number_, W.channel_, W.height_, W.width_);
         }
         else
         {
@@ -1036,27 +1177,27 @@ void MatrixEx::convolutionBackward(Matrix& X, Matrix& W, const Matrix& Y, std::v
             auto sr = stride;
             std::reverse(pr.begin(), pr.end());
             std::reverse(sr.begin(), sr.end());
-            cudnnSetConvolutionNdDescriptor((cudnnConvolutionDescriptor_t)op_desc, padding.size(), pr.data(), sr.data(), dilation.data(), CUDNN_CROSS_CORRELATION, MYCUDNN_DATA_REAL);
+            cudnnSetConvolutionNdDescriptor(conv_desc(), padding.size(), pr.data(), sr.data(), dilation.data(), CUDNN_CROSS_CORRELATION, toCudnnDataType(Y.getDataType()));
             auto w_dim = W.getDim();
             std::reverse(w_dim.begin(), w_dim.end());
-            cudnnSetFilterNdDescriptor((cudnnFilterDescriptor_t)op_desc2, MYCUDNN_DATA_REAL, CUDNN_TENSOR_NCHW, W.getDimSize(), w_dim.data());
+            cudnnSetFilterNdDescriptor(filter_desc(), toCudnnDataType(Y.getDataType()), CUDNN_TENSOR_NCHW, W.getDimSize(), w_dim.data());
         }
-        cudnnSetConvolutionMathType((cudnnConvolutionDescriptor_t)op_desc, CUDNN_TENSOR_OP_MATH);
-        if (X.needReverse())
+        cudnnSetConvolutionMathType(conv_desc(), CUDNN_TENSOR_OP_MATH);
+        if (X.needBack())
         {
             //寻找最快的算法
             if (methods_x[2] <= 0)
             {
                 int n;
                 cudnnConvolutionBwdDataAlgoPerf_t cbdap[conv_method_count];
-                auto t = cudnnFindConvolutionBackwardDataAlgorithm(gpu->cudnn_handle_, (cudnnFilterDescriptor_t)op_desc2,
-                    Y.tensor_desc(), (cudnnConvolutionDescriptor_t)op_desc, X.tensor_desc(), conv_method_count, &n, cbdap);
+                auto t = cudnnFindConvolutionBackwardDataAlgorithm(gpu->cudnn_handle_, filter_desc(),
+                    Y.cudnn_desc(), conv_desc(), X.cudnn_desc(), conv_method_count, &n, cbdap);
                 methods_x[0] = cbdap[0].algo;
                 methods_x[1] = cbdap[0].mathType;
                 size_t ws_size = cbdap[0].memory;
                 if (ws_size > workspaces[0].getDataSizeInByte())
                 {
-                    workspaces[0].resize(1, 1, 1, ws_size / sizeof(real) + 2);
+                    workspaces[0].resize(1, 1, 1, ws_size / workspaces[0].getDataTypeSize() + 2);
                     //LOG("resize work space {}\n", memory);
                 }
 #ifdef _DEBUG
@@ -1067,11 +1208,11 @@ void MatrixEx::convolutionBackward(Matrix& X, Matrix& W, const Matrix& Y, std::v
             else if (methods_x[2] != X.number_)
             {
                 size_t ws_size;
-                cudnnGetConvolutionBackwardDataWorkspaceSize(gpu->cudnn_handle_, (cudnnFilterDescriptor_t)op_desc2,
-                    Y.tensor_desc(), (cudnnConvolutionDescriptor_t)op_desc, X.tensor_desc(), cudnnConvolutionBwdDataAlgo_t(methods_x[0]), &ws_size);
+                cudnnGetConvolutionBackwardDataWorkspaceSize(gpu->cudnn_handle_, filter_desc(),
+                    Y.cudnn_desc(), conv_desc(), X.cudnn_desc(), cudnnConvolutionBwdDataAlgo_t(methods_x[0]), &ws_size);
                 if (ws_size > workspaces[0].getDataSizeInByte())
                 {
-                    workspaces[0].resize(1, 1, 1, ws_size / sizeof(real) + 2);
+                    workspaces[0].resize(1, 1, 1, ws_size / workspaces[0].getDataTypeSize() + 2);
 #ifdef _DEBUG
                     LOG("resize conv workspace {}\n", ws_size);
 #endif
@@ -1079,29 +1220,29 @@ void MatrixEx::convolutionBackward(Matrix& X, Matrix& W, const Matrix& Y, std::v
             }
             methods_x[2] = X.number_;
             auto cbda = cudnnConvolutionBwdDataAlgo_t(methods_x[0]);
-            auto tensor = cudnnSetConvolutionMathType((cudnnConvolutionDescriptor_t)op_desc, cudnnMathType_t(methods_x[1]));
-            auto scbx = cudnnConvolutionBackwardData(gpu->cudnn_handle_, &a, (cudnnFilterDescriptor_t)op_desc2, W.data(), Y.tensor_desc(), Y.d().data(),
-                (cudnnConvolutionDescriptor_t)op_desc, cbda, workspaces[0].data(), workspaces[0].getDataSizeInByte(), &rx, X.tensor_desc(), X.d().data());
+            auto tensor = cudnnSetConvolutionMathType(conv_desc(), cudnnMathType_t(methods_x[1]));
+            auto scbx = cudnnConvolutionBackwardData(gpu->cudnn_handle_, &a, filter_desc(), W.data(), Y.cudnn_desc(), Y.d().data(),
+                conv_desc(), cbda, workspaces[0].data(), workspaces[0].getDataSizeInByte(), &rx, X.cudnn_desc(), X.d().data());
             if (scbx)
             {
-                LOG(stderr, "CONV backward data error: status {}\n", cudnnGetErrorString(scbx));
+                LOG_ERR("CONV backward data error: status {}, {}\n", cudnnGetErrorString(scbx), X.gpu()->lastCudnnErrorString());
             }
         }
-        if (W.needReverse())
+        if (W.needBack())
         {
             //寻找最快的算法
             if (methods_w[2] <= 0)
             {
                 int n;
                 cudnnConvolutionBwdFilterAlgoPerf_t cbfap[conv_method_count];
-                cudnnFindConvolutionBackwardFilterAlgorithm(gpu->cudnn_handle_, X.tensor_desc(), Y.tensor_desc(),
-                    (cudnnConvolutionDescriptor_t)op_desc, (cudnnFilterDescriptor_t)op_desc2, conv_method_count, &n, cbfap);
+                cudnnFindConvolutionBackwardFilterAlgorithm(gpu->cudnn_handle_, X.cudnn_desc(), Y.cudnn_desc(),
+                    conv_desc(), filter_desc(), conv_method_count, &n, cbfap);
                 methods_w[0] = cbfap[0].algo;
                 methods_w[1] = cbfap[0].mathType;
                 size_t memory = cbfap[0].memory;
                 if (memory > workspaces[0].getDataSizeInByte())
                 {
-                    workspaces[0].resize(1, 1, 1, memory / sizeof(real) + 2);
+                    workspaces[0].resize(1, 1, 1, memory / workspaces[0].getDataTypeSize() + 2);
                     //LOG("resize work space {}\n", memory);
                 }
 #ifdef _DEBUG
@@ -1112,11 +1253,11 @@ void MatrixEx::convolutionBackward(Matrix& X, Matrix& W, const Matrix& Y, std::v
             else if (methods_w[2] != X.number_)
             {
                 size_t memory;
-                cudnnGetConvolutionBackwardFilterWorkspaceSize(gpu->cudnn_handle_, X.tensor_desc(), Y.tensor_desc(),
-                    (cudnnConvolutionDescriptor_t)op_desc, (cudnnFilterDescriptor_t)op_desc2, cudnnConvolutionBwdFilterAlgo_t(methods_w[0]), &memory);
+                cudnnGetConvolutionBackwardFilterWorkspaceSize(gpu->cudnn_handle_, X.cudnn_desc(), Y.cudnn_desc(),
+                    conv_desc(), filter_desc(), cudnnConvolutionBwdFilterAlgo_t(methods_w[0]), &memory);
                 if (memory > workspaces[0].getDataSizeInByte())
                 {
-                    workspaces[0].resize(1, 1, 1, memory / sizeof(real) + 2);
+                    workspaces[0].resize(1, 1, 1, memory / workspaces[0].getDataTypeSize() + 2);
 #ifdef _DEBUG
                     LOG("resize conv workspace {}\n", memory);
 #endif
@@ -1124,12 +1265,12 @@ void MatrixEx::convolutionBackward(Matrix& X, Matrix& W, const Matrix& Y, std::v
             }
             methods_w[2] = X.number_;
             auto cbfa = cudnnConvolutionBwdFilterAlgo_t(methods_w[0]);
-            auto tensor = cudnnSetConvolutionMathType((cudnnConvolutionDescriptor_t)op_desc, cudnnMathType_t(methods_w[1]));
-            auto scbw = cudnnConvolutionBackwardFilter(gpu->cudnn_handle_, &a, X.tensor_desc(), X.data(), Y.tensor_desc(), Y.d().data(),
-                (cudnnConvolutionDescriptor_t)op_desc, cbfa, workspaces[0].data(), workspaces[0].getDataSizeInByte(), &rw, (cudnnFilterDescriptor_t)op_desc2, W.d().data());
+            auto tensor = cudnnSetConvolutionMathType(conv_desc(), cudnnMathType_t(methods_w[1]));
+            auto scbw = cudnnConvolutionBackwardFilter(gpu->cudnn_handle_, &a, X.cudnn_desc(), X.data(), Y.cudnn_desc(), Y.d().data(),
+                conv_desc(), cbfa, workspaces[0].data(), workspaces[0].getDataSizeInByte(), &rw, filter_desc(), W.d().data());
             if (scbw)
             {
-                LOG(stderr, "CONV backward weight error: status {}\n", cudnnGetErrorString(scbw));
+                LOG_ERR("CONV backward weight error: status {}, {}\n", cudnnGetErrorString(scbw), X.gpu()->lastCudnnErrorString());
             }
         }
         //if (B.needUpdate())
@@ -1140,22 +1281,88 @@ void MatrixEx::convolutionBackward(Matrix& X, Matrix& W, const Matrix& Y, std::v
     }
     else if (Y.isHip())
     {
-        if (X.needReverse())
+        auto op_desc = gpu->getDesc<miopenConvolutionDescriptor_t>();
+        if (stride.size() == 2)
         {
-            //hip_conv2db_d(X.d().data(), W.data(), Y.d().data(), X.width_, X.height_, X.channel_, X.number_, Y.width_, Y.height_, Y.channel_, W.width_, W.height_, stride[0], padding[0], a, rx);
+            miopenInitConvolutionDescriptor(op_desc, miopenConvolution, padding[1], padding[0], stride[1], stride[0], 1, 1);
         }
-        if (W.needReverse())
+        else
         {
-            //hip_conv2db_w(X.data(), W.d().data(), Y.d().data(), X.width_, X.height_, X.channel_, X.number_, Y.width_, Y.height_, Y.channel_, W.width_, W.height_, stride[0], padding[0], a, rw);
+            std::vector<int> dilation(padding.size(), 1);
+            auto pr = padding;
+            auto sr = stride;
+            std::reverse(pr.begin(), pr.end());
+            std::reverse(sr.begin(), sr.end());
+            miopenInitConvolutionNdDescriptor(op_desc, padding.size(), pr.data(), sr.data(), dilation.data(), miopenConvolution);
+            auto w_dim = W.getDim();
+            std::reverse(w_dim.begin(), w_dim.end());
+        }
+        if (X.needBack())
+        {
+            if (methods_x[2] <= 0)
+            {
+                int n;
+                size_t ws_size;
+                miopenConvAlgoPerf_t cfap[conv_method_count];
+                miopenFindConvolutionBackwardDataAlgorithm(gpu->miopen_handle_, Y.miopen_desc(), Y.d().data(), W.miopen_desc(), W.data(),
+                    op_desc, X.miopen_desc(), X.d().data(), conv_method_count, &n, cfap, workspaces[0].data(), workspaces[0].getDataSizeInByte(), true);
+                ws_size = cfap[0].memory;
+                if (ws_size > workspaces[0].getDataSizeInByte())
+                {
+                    workspaces[0].resize(1, 1, cfap[0].memory / workspaces[0].getDataTypeSize() + 2, 1);
+                }
+                methods_x[0] = cfap[0].bwd_data_algo;
+            }
+            else if (methods_x[2] != X.number_)
+            {
+                size_t ws_size;
+                miopenConvolutionBackwardDataGetWorkSpaceSize(gpu->miopen_handle_, Y.miopen_desc(), W.miopen_desc(), op_desc, X.miopen_desc(), &ws_size);
+                if (ws_size > workspaces[0].getDataSizeInByte())
+                {
+                    workspaces[0].resize(1, 1, ws_size / workspaces[0].getDataTypeSize() + 2, 1);
+                }
+            }
+            methods_x[2] = X.number_;
+            auto scf = miopenConvolutionBackwardData(gpu->miopen_handle_, &a, Y.miopen_desc(), Y.d().data(), W.miopen_desc(), W.data(),
+                op_desc, miopenConvBwdDataAlgorithm_t(methods_x[0]), &rx, X.miopen_desc(), X.d().data(), workspaces[0].data(), workspaces[0].getDataSizeInByte());
+        }
+        if (W.needBack())
+        {
+            if (methods_w[2] <= 0)
+            {
+                int n;
+                size_t ws_size;
+                miopenConvAlgoPerf_t cfap[conv_method_count];
+                miopenFindConvolutionBackwardWeightsAlgorithm(gpu->miopen_handle_, Y.miopen_desc(), Y.d().data(), X.miopen_desc(), X.data(),
+                    op_desc, W.miopen_desc(), W.d().data(), conv_method_count, &n, cfap, workspaces[0].data(), workspaces[0].getDataSizeInByte(), true);
+                ws_size = cfap[0].memory;
+                if (ws_size > workspaces[0].getDataSizeInByte())
+                {
+                    workspaces[0].resize(1, 1, cfap[0].memory / workspaces[0].getDataTypeSize() + 2, 1);
+                }
+                methods_w[0] = cfap[0].bwd_weights_algo;
+            }
+            else if (methods_w[2] != X.number_)
+            {
+                size_t ws_size;
+                miopenConvolutionBackwardWeightsGetWorkSpaceSize(gpu->miopen_handle_, Y.miopen_desc(), X.miopen_desc(), op_desc, W.miopen_desc(), &ws_size);
+                if (ws_size > workspaces[0].getDataSizeInByte())
+                {
+                    workspaces[0].resize(1, 1, ws_size / workspaces[0].getDataTypeSize() + 2, 1);
+                }
+            }
+            methods_w[2] = X.number_;
+            auto scf = miopenConvolutionBackwardWeights(gpu->miopen_handle_, &a, Y.miopen_desc(), Y.d().data(), X.miopen_desc(), X.data(),
+                op_desc, miopenConvBwdWeightsAlgorithm_t(methods_w[0]), &rw, W.miopen_desc(), W.d().data(), workspaces[0].data(), workspaces[0].getDataSizeInByte());
         }
     }
     else
     {
-        if (X.needReverse())
+        if (X.needBack())
         {
             //计算dX从数学上来看可以反向来求展开后的dX，再压缩，但是看起来加法次数较多
             //转置W的输入和输出
-            Matrix W2(W.width_, W.height_, W.number_, W.channel_, UnitType::CPU);
+            Matrix W2({ W.width_, W.height_, W.number_, W.channel_ }, W.getDataType(), UnitType::CPU);
             for (int i = 0; i < W.channel_; i++)
             {
                 for (int j = 0; j < W.number_; j++)
@@ -1166,7 +1373,7 @@ void MatrixEx::convolutionBackward(Matrix& X, Matrix& W, const Matrix& Y, std::v
             //辅助矩阵的尺寸
             int row = X.width_ * X.height_;
             int col = Y.channel_ * W.width_ * W.height_;
-            Matrix dY_ex(row, col, UnitType::CPU);
+            Matrix dY_ex({ row, col }, DataType::CURRENT, UnitType::CPU);
             dY_ex.fillData(0);
             if (methods_x[0] < 1)
             {
@@ -1181,12 +1388,12 @@ void MatrixEx::convolutionBackward(Matrix& X, Matrix& W, const Matrix& Y, std::v
                             int pW = W2.whcn2i(wW, hW, cY, 0);    //这里用W或者W2没有区别
                             int pY = Y.whcn2i(wY, hY, cY, 0);     //拍扁
                             int p_ex = dY_ex.mn2i(pX, pW);
-                            workspaces[1].getData(p_ex, 0) = pY;
+                            workspaces[1].setData(p_ex, 0, pY);
                         });
                 }
             }
-            Matrix dY_sub(Y.row_, 1, UnitType::CPU);
-            Matrix dX_sub(X.width_ * X.height_, X.channel_, UnitType::CPU);
+            Matrix dY_sub({ Y.row_, 1 }, Y.getDataType(), UnitType::CPU);
+            Matrix dX_sub({ X.width_ * X.height_, X.channel_ }, X.getDataType(), UnitType::CPU);
             for (int i = 0; i < Y.number_; i++)
             {
                 dY_sub.shareData(Y.d(), 0, i);
@@ -1195,20 +1402,20 @@ void MatrixEx::convolutionBackward(Matrix& X, Matrix& W, const Matrix& Y, std::v
                 {
                     if (workspaces[1].getData(j, 0) >= 0)
                     {
-                        dY_ex.getData(j) = dY_sub.getData(workspaces[1].getData(j, 0));
+                        dY_ex.setData(j, dY_sub.getData(workspaces[1].getData(j, 0)));
                     }
                 }
                 MatrixEx::mul(dY_ex, W2, dX_sub, a, rx);
             }
         }
         //暂时如此写，看情况能否跟上面合并
-        if (W.needReverse())
+        if (W.needBack())
         {
             //W.d().scale(rw);
             //辅助矩阵的尺寸
             int row = W.width_ * W.height_ * W.channel_;
             int col = Y.width_ * Y.height_;
-            Matrix X_ex(row, col, UnitType::CPU);
+            Matrix X_ex({ row, col }, X.getDataType(), UnitType::CPU);
             X_ex.fillData(0);
             if (methods_w[0] < 1)
             {
@@ -1225,12 +1432,12 @@ void MatrixEx::convolutionBackward(Matrix& X, Matrix& W, const Matrix& Y, std::v
                             //拍扁
                             int pX = X.whcn2i(wX, hX, cW, 0);
                             int p_ex = X_ex.mn2i(pW, pY);
-                            workspaces[2].getData(p_ex, 0) = pX;
+                            workspaces[2].setData(p_ex, 0, pX);
                         });
                 }
             }
-            Matrix dY_sub(Y.width_ * Y.height_, Y.channel_, UnitType::CPU);
-            Matrix X_sub(X.row_, 1, UnitType::CPU);
+            Matrix dY_sub({ Y.width_ * Y.height_, Y.channel_ }, Y.getDataType(), UnitType::CPU);
+            Matrix X_sub({ X.row_, 1 }, X.getDataType(), UnitType::CPU);
             for (int i = 0; i < Y.number_; i++)
             {
                 dY_sub.shareData(Y.d(), 0, i);
@@ -1238,7 +1445,7 @@ void MatrixEx::convolutionBackward(Matrix& X, Matrix& W, const Matrix& Y, std::v
                 for (int j = 0; j < X_ex.getDataSize(); j++)
                 {
                     //if ((*ex2)[j] >= 0) //因为是满的不需要
-                    X_ex.getData(j) = X_sub.getData(workspaces[2].getData(j, 0));
+                    X_ex.setData(j, X_sub.getData(workspaces[2].getData(j, 0)));
                 }
                 MatrixEx::mul(X_ex, dY_sub, W.d(), a, rw);    //有点麻烦，暂时不管
             }
@@ -1292,7 +1499,7 @@ void MatrixEx::convolutionBackward(Matrix& X, Matrix& W, const Matrix& Y, std::v
 }
 
 //随机让一些点不参与计算
-void MatrixEx::dropoutForward(const Matrix& X, Matrix& Y, ActivePhaseType work_phase, real v, int seed, Matrix& rg_stat, Matrix& reverse_space)
+void MatrixEx::dropoutForward(const Matrix& X, Matrix& Y, ActivePhaseType work_phase, float v, int seed, Matrix& rg_stat, Matrix& reverse_space)
 {
     assert(checkMatrixDevice({ &X, &Y }));
     if (work_phase == ACTIVE_PHASE_TEST)
@@ -1302,54 +1509,56 @@ void MatrixEx::dropoutForward(const Matrix& X, Matrix& Y, ActivePhaseType work_p
         return;
     }
     auto gpu = X.gpu();
-    int op_desc[64] = { 0 };
+    int op_desc_buf[64] = { 0 };
+    auto op_desc = (cudnnDropoutDescriptor_t)op_desc_buf;
     if (Y.isCuda())
     {
-        cudnnSetDropoutDescriptor((cudnnDropoutDescriptor_t)op_desc, gpu->cudnn_handle_, v, rg_stat.data(), rg_stat.getDataSizeInByte(), seed);
-        cudnnDropoutForward(gpu->cudnn_handle_, (cudnnDropoutDescriptor_t)op_desc, X.tensor_desc(), X.data(),
-            Y.tensor_desc(), Y.data(), reverse_space.data(), reverse_space.getDataSizeInByte());
+        cudnnSetDropoutDescriptor(op_desc, gpu->cudnn_handle_, v, rg_stat.data(), rg_stat.getDataSizeInByte(), seed);
+        cudnnDropoutForward(gpu->cudnn_handle_, op_desc, X.cudnn_desc(), X.data(),
+            Y.cudnn_desc(), Y.data(), reverse_space.data(), reverse_space.getDataSizeInByte());
     }
     else
     {
-        Random<real> r;
+        Random<float> r;
         r.set_seed(seed);
         for (int i = 0; i < Y.data_size_; i++)
         {
             if (r.rand() < v)
             {
-                Y.data()[i] = 0;
+                Y.setData(i, 0);
             }
             else
             {
-                Y.data()[i] = X.data()[i] / (1 - v);
+                Y.setData(i, X.getData(i) / (1 - v));
             }
         }
     }
 }
 
-void MatrixEx::dropoutBackward(Matrix& X, const Matrix& Y, real v, int seed, Matrix& rg_stat, Matrix& reverse_space)
+void MatrixEx::dropoutBackward(Matrix& X, const Matrix& Y, float v, int seed, Matrix& rg_stat, Matrix& reverse_space)
 {
     assert(checkMatrixDevice({ &X, &Y }));
     auto gpu = Y.gpu();
-    int op_desc[64] = { 0 };
+    int op_desc_buf[64] = { 0 };
+    auto op_desc = (cudnnDropoutDescriptor_t)op_desc_buf;
     if (Y.isCuda())
     {
         //这里的seed应该是没关系，待查
-        cudnnSetDropoutDescriptor((cudnnDropoutDescriptor_t)op_desc, gpu->cudnn_handle_, v, rg_stat.data(), rg_stat.getDataSizeInByte(), seed);
-        cudnnDropoutBackward(gpu->cudnn_handle_, (cudnnDropoutDescriptor_t)op_desc, Y.tensor_desc(), Y.d().data(),
-            X.tensor_desc(), X.d().data(), reverse_space.data(), reverse_space.getDataSizeInByte());
+        cudnnSetDropoutDescriptor(op_desc, gpu->cudnn_handle_, v, rg_stat.data(), rg_stat.getDataSizeInByte(), seed);
+        cudnnDropoutBackward(gpu->cudnn_handle_, op_desc, Y.cudnn_desc(), Y.d().data(),
+            X.cudnn_desc(), X.d().data(), reverse_space.data(), reverse_space.getDataSizeInByte());
     }
     else
     {
         for (int i = 0; i < X.data_size_; i++)
         {
-            if (Y.data()[i] == 0)
+            if (Y.getData(i) == 0)
             {
-                X.d().data()[i] = 0;
+                X.d().setData(i, 0);
             }
             else
             {
-                X.d().data()[i] = Y.d().data()[i] / (1 - v);
+                X.d().setData(i, Y.d().getData(i) / (1 - v));
             }
         }
     }
@@ -1357,7 +1566,7 @@ void MatrixEx::dropoutBackward(Matrix& X, const Matrix& Y, real v, int seed, Mat
 
 //批归一化
 void MatrixEx::batchNormalizationForward(const Matrix& X, Matrix& Y,
-    ActivePhaseType work_phase, BatchNormalizationType bn_type, real& exp_aver_factor, real epsilon, Matrix& scale, Matrix& bias,
+    ActivePhaseType work_phase, BatchNormalizationType bn_type, float& exp_aver_factor, float epsilon, Matrix& scale, Matrix& bias,
     Matrix& result_running_mean, Matrix& result_running_variance, Matrix& result_save_mean, Matrix& result_save_inv_variance)
 {
     assert(checkMatrixDevice({ &X, &Y }));
@@ -1367,23 +1576,23 @@ void MatrixEx::batchNormalizationForward(const Matrix& X, Matrix& Y,
         if (work_phase == ACTIVE_PHASE_TRAIN)
         {
             cudnnBatchNormalizationForwardTraining(gpu->cudnn_handle_, cudnnBatchNormMode_t(bn_type),
-                &const_real_1, &const_real_0, X.tensor_desc(), X.data(), Y.tensor_desc(), Y.data(),
-                scale.tensor_desc(), scale.data(), bias.data(), exp_aver_factor, result_running_mean.data(), result_running_variance.data(),
+                &const_real_1, &const_real_0, X.cudnn_desc(), X.data(), Y.cudnn_desc(), Y.data(),
+                scale.cudnn_desc(), scale.data(), bias.data(), exp_aver_factor, result_running_mean.data(), result_running_variance.data(),
                 std::max(epsilon * 1.0, CUDNN_BN_MIN_EPSILON), result_save_mean.data(), result_save_inv_variance.data());
             exp_aver_factor = 1 / (1 / exp_aver_factor + 1);
         }
         if (work_phase == ACTIVE_PHASE_TEST)
         {
             cudnnBatchNormalizationForwardInference(gpu->cudnn_handle_, cudnnBatchNormMode_t(bn_type),
-                &const_real_1, &const_real_0, X.tensor_desc(), X.data(), Y.tensor_desc(), Y.data(),
-                scale.tensor_desc(), scale.data(), bias.data(), result_running_mean.data(), result_running_variance.data(),
+                &const_real_1, &const_real_0, X.cudnn_desc(), X.data(), Y.cudnn_desc(), Y.data(),
+                scale.cudnn_desc(), scale.data(), bias.data(), result_running_mean.data(), result_running_variance.data(),
                 std::max(epsilon * 1.0, CUDNN_BN_MIN_EPSILON));
         }
     }
 }
 
 void MatrixEx::batchNormalizationBackward(Matrix& X, const Matrix& Y,
-    ActivePhaseType work_phase, BatchNormalizationType bn_type, real epsilon, real rate, Matrix& scale, Matrix& bias,
+    ActivePhaseType work_phase, BatchNormalizationType bn_type, float epsilon, float rate, Matrix& scale, Matrix& bias,
     Matrix& saved_mean, Matrix& saved_inv_variance, Matrix& result_dscale, Matrix& result_dbias)
 {
     assert(checkMatrixDevice({ &X, &Y }));
@@ -1391,8 +1600,8 @@ void MatrixEx::batchNormalizationBackward(Matrix& X, const Matrix& Y,
     if (X.isCuda())
     {
         cudnnBatchNormalizationBackward(gpu->cudnn_handle_, cudnnBatchNormMode_t(bn_type),
-            &const_real_1, &const_real_0, &const_real_1, &const_real_0, X.tensor_desc(), X.data(), Y.tensor_desc(), Y.d().data(), X.tensor_desc(), X.d().data(),
-            scale.tensor_desc(), scale.data(), result_dscale.data(), result_dbias.data(),
+            &const_real_1, &const_real_0, &const_real_1, &const_real_0, X.cudnn_desc(), X.data(), Y.cudnn_desc(), Y.d().data(), X.cudnn_desc(), X.d().data(),
+            scale.cudnn_desc(), scale.data(), result_dscale.data(), result_dbias.data(),
             std::max(epsilon * 1.0, CUDNN_BN_MIN_EPSILON), saved_mean.data(), saved_inv_variance.data());
         MatrixEx::add(scale, result_dscale, scale, 1, -rate);
         MatrixEx::add(bias, result_dbias, bias, 1, -rate);
@@ -1400,86 +1609,90 @@ void MatrixEx::batchNormalizationBackward(Matrix& X, const Matrix& Y,
 }
 
 //ada_d表示ada方法计算得到的参数的改变量，应在下一步加到原参数上，下同
-void MatrixEx::adaDeltaUpdate(Matrix& mean_d2, Matrix& mean_ada_d2, Matrix& d, Matrix& ada_d, real rou, real epsilon)
+void MatrixEx::adaDeltaUpdate(Matrix& mean_d2, Matrix& mean_ada_d2, Matrix& d, Matrix& ada_d, float rou, float epsilon)
 {
     assert(checkMatrixDevice({ &mean_d2, &mean_ada_d2, &d, &ada_d }));
     if (d.isCuda())
     {
-        cuda_ada_delta_update(mean_d2.data(), mean_ada_d2.data(), d.data(), ada_d.data(), d.data_size_, rou, epsilon);
+        cuda_ada_delta_update(mean_d2.getDataTypeByInt(), mean_d2.data(), mean_ada_d2.data(), d.data(), ada_d.data(), d.data_size_, rou, epsilon);
+    }
+    else if (d.isHip())
+    {
+        hip_ada_delta_update(mean_d2.data(), mean_ada_d2.data(), d.data(), ada_d.data(), d.data_size_, rou, epsilon);
     }
     else
     {
-        auto p1 = mean_d2.data();
-        auto p2 = mean_ada_d2.data();
-        auto p3 = d.data();
-        auto p4 = ada_d.data();
+        auto& p1 = mean_d2;
+        auto& p2 = mean_ada_d2;
+        auto& p3 = d;
+        auto& p4 = ada_d;
         for (int i = 0; i < d.data_size_; i++)
         {
-            p1[i] = p1[i] * rou + p3[i] * p3[i] * (1 - rou);
-            p4[i] = p3[i] * sqrt((p2[i] + epsilon) / (p1[i] + epsilon));
-            p2[i] = p2[i] * rou + p4[i] * p4[i] * (1 - rou);
+            p1.setData(i, p1.getData(i) * rou + p3.getData(i) * p3.getData(i) * (1 - rou));
+            p4.setData(i, p3.getData(i) * sqrt((p2.getData(i) + epsilon) / (p1.getData(i) + epsilon)));
+            p2.setData(i, p2.getData(i) * rou + p4.getData(i) * p4.getData(i) * (1 - rou));
         }
     }
 }
 
-void MatrixEx::adamUpdate(Matrix& mean_d, Matrix& mean_d2, Matrix& d, Matrix& ada_d, real beta1, real beta2, real epsilon, real t)
+void MatrixEx::adamUpdate(Matrix& mean_d, Matrix& mean_d2, Matrix& d, Matrix& ada_d, float beta1, float beta2, float epsilon, float t)
 {
     assert(checkMatrixDevice({ &mean_d, &mean_d2, &d, &ada_d }));
     if (d.isCuda())
     {
-        cuda_adam_update(mean_d.data(), mean_d2.data(), d.data(), ada_d.data(), d.data_size_, beta1, beta2, epsilon, t);
+        cuda_adam_update(mean_d.getDataTypeByInt(), mean_d.data(), mean_d2.data(), d.data(), ada_d.data(), d.data_size_, beta1, beta2, epsilon, t);
     }
     else if (d.isHip())
     {
-        //hip_adam_update(mean_d.data(), mean_d2.data(), d.data(), ada_d.data(), d.data_size_, beta1, beta2, epsilon, t);
+        hip_adam_update(mean_d.data(), mean_d2.data(), d.data(), ada_d.data(), d.data_size_, beta1, beta2, epsilon, t);
     }
     else
     {
-        auto p1 = mean_d.data();
-        auto p2 = mean_d2.data();
-        auto p3 = d.data();
-        auto p4 = ada_d.data();
+        auto& p1 = mean_d;
+        auto& p2 = mean_d2;
+        auto& p3 = d;
+        auto& p4 = ada_d;
         for (int i = 0; i < d.data_size_; i++)
         {
-            p1[i] = p1[i] * beta1 + p3[i] * (1 - beta1);
-            p2[i] = p2[i] * beta2 + p3[i] * p3[i] * (1 - beta2);
-            p4[i] = p1[i] / (1 - pow(beta1, t)) / (sqrt(p2[i] / (1 - pow(beta2, t))) + epsilon);
+            p1.setData(i, p1.getData(i) * beta1 + p3.getData(i) * (1 - beta1));
+            p2.setData(i, p2.getData(i) * beta2 + p3.getData(i) * p3.getData(i) * (1 - beta2));
+            p4.setData(i, p1.getData(i) / (1 - pow(beta1, t)) / (sqrt(p2.getData(i) / (1 - pow(beta2, t))) + epsilon));
         }
     }
 }
 
-void MatrixEx::adaRMSPropUpdate(Matrix& mean_d2, Matrix& d, Matrix& ada_d, real rou, real epsilon)
+void MatrixEx::adaRMSPropUpdate(Matrix& mean_d2, Matrix& d, Matrix& ada_d, float rou, float epsilon)
 {
     assert(checkMatrixDevice({ &mean_d2, &d, &ada_d }));
     if (d.isCuda())
     {
-        cuda_rms_prop_update(mean_d2.data(), d.data(), ada_d.data(), d.data_size_, rou, epsilon);
+        cuda_rms_prop_update(mean_d2.getDataTypeByInt(), mean_d2.data(), d.data(), ada_d.data(), d.data_size_, rou, epsilon);
     }
     else
     {
-        auto p1 = mean_d2.data();
-        auto p2 = d.data();
-        auto p3 = ada_d.data();
+        auto& p1 = mean_d2;
+        auto& p2 = d;
+        auto& p3 = ada_d;
         for (int i = 0; i < d.data_size_; i++)
         {
-            p1[i] = p1[i] * rou + p2[i] * p2[i] * (1 - rou);
-            p3[i] = p2[i] * sqrt(1.0 / (p1[i] + epsilon));
+            p1.setData(i, p1.getData(i) * rou + p2.getData(i) * p2.getData(i) * (1 - rou));
+            p3.setData(i, p2.getData(i) * sqrt(1.0 / (p1.getData(i) + epsilon)));
         }
     }
 }
 
 //R = ((1-rou)/(1-rou_hat)-rou/rou_hat)*beta
-void MatrixEx::sparse(Matrix& rou_hat, Matrix& R, real rou, real beta)
+void MatrixEx::sparse(Matrix& rou_hat, Matrix& R, float rou, float beta)
 {
     if (rou_hat.isCuda())
     {
-        cuda_sparse(rou_hat.data(), R.data(), R.data_size_, rou, beta);
+        cuda_sparse(R.getDataTypeByInt(), rou_hat.data(), R.data(), R.data_size_, rou, beta);
     }
     else
     {
         for (int i = 0; i < R.data_size_; i++)
         {
-            R.data()[i] = ((1 - rou) / (1 - rou_hat.data()[i]) - rou / rou_hat.data()[i]) * beta;
+            R.setData(i, ((1 - rou) / (1 - rou_hat.getData(i)) - rou / rou_hat.getData(i)) * beta);
         }
     }
 }
@@ -1490,9 +1703,9 @@ void MatrixEx::fill(Matrix& m, RandomFillType random_type, int in, int out)
     {
         return;
     }
-    Random<real> random_generator;
+    Random<float> random_generator;
     random_generator.set_seed();
-    real a = 0, b = 0;
+    float a = 0, b = 0;
 
     switch (random_type)
     {
@@ -1522,39 +1735,66 @@ void MatrixEx::fill(Matrix& m, RandomFillType random_type, int in, int out)
     default:
         break;
     }
-    std::vector<real> temp(m.getDataSize());
+    std::vector<float> temp(m.getDataSize());
     random_generator.rand_data(temp.data(), temp.size());
-    m.loadDataPtr(temp.data(), temp.size());
+
+    switch (m.getDataType())
+    {
+    case DataType::FLOAT:
+        m.loadDataPtr(temp.data(), temp.size());
+        break;
+    case DataType::DOUBLE:
+    {
+        std::vector<double> temp1(m.getDataSize());
+        for (int i = 0; i < m.getDataSize(); i++)
+        {
+            temp1[i] = temp[i];
+        }
+        m.loadDataPtr(temp1.data(), temp1.size());
+    }
+    break;
+    case DataType::HALF:
+    {
+        std::vector<half> temp1(m.getDataSize());
+        for (int i = 0; i < m.getDataSize(); i++)
+        {
+            temp1[i] = temp[i];
+        }
+        m.loadDataPtr(temp1.data(), temp1.size());
+    }
+    break;
+    }
+    //m.message();
 }
 
-void MatrixEx::sin(const Matrix& X, Matrix& Y, real a /*= 1*/)
+void MatrixEx::sin(const Matrix& X, Matrix& Y, float a /*= 1*/)
 {
     assert(checkMatrixDevice({ &X, &Y }));
     if (X.isCuda())
     {
-        cuda_sin(X.data(), Y.data(), X.getDataSize(), a, 0);
+        cuda_sin(X.getDataTypeByInt(), X.data(), Y.data(), X.getDataSize(), a, 0);
     }
     else
     {
         for (int i = 0; i < Y.data_size_; i++)
         {
-            Y.getData(i) = ::sin(a * X.getData(i));
+            Y.setData(i, ::sin(a * X.getData(i)));
         }
     }
 }
 
-void MatrixEx::cos(const Matrix& X, Matrix& Y, real a /*= 1*/)
+void MatrixEx::cos(const Matrix& X, Matrix& Y, float a /*= 1*/)
 {
     assert(checkMatrixDevice({ &X, &Y }));
     if (X.isCuda())
     {
-        cuda_cos(X.data(), Y.data(), X.getDataSize(), a, 0);
+        cuda_cos(X.getDataTypeByInt(), X.data(), Y.data(), X.getDataSize(), a, 0);
     }
     else
     {
         for (int i = 0; i < Y.data_size_; i++)
         {
-            Y.getData(i) = ::cos(a * X.getData(i));
+            Y.setData(i, ::cos(a * X.getData(i)));
         }
     }
 }
@@ -1564,14 +1804,14 @@ void MatrixEx::zigzag(const Matrix& X, Matrix& Y)
     assert(checkMatrixDevice({ &X, &Y }));
     if (X.isCuda())
     {
-        cuda_zigzag(X.data(), Y.data(), X.getDataSize(), 1, 0);
+        cuda_zigzag(X.getDataTypeByInt(), X.data(), Y.data(), X.getDataSize(), 1, 0);
     }
     else
     {
         for (int i = 0; i < Y.data_size_; i++)
         {
-            auto& x = X.getData(i);
-            Y.getData(i) = x - 2 * floor((x - 1) / 2) - 2;
+            auto x = X.getData(i);
+            Y.setData(i, x - 2 * floor((x - 1) / 2) - 2);
         }
     }
 }
@@ -1582,21 +1822,21 @@ void MatrixEx::zigzagb(Matrix& X, const Matrix& Y)
     assert(checkMatrixDevice({ &X, &Y }));
     if (X.isCuda())
     {
-        cuda_zigzagb(X.data(), X.d().data(), Y.data(), Y.d().data(), X.getDataSize(), 1, 0);
+        cuda_zigzagb(X.getDataTypeByInt(), X.data(), X.d().data(), Y.data(), Y.d().data(), X.getDataSize(), 1, 0);
     }
     else
     {
-        auto p1 = Y.data();
-        auto p2 = Y.d().data();
-        auto p3 = X.d().data();
+        auto& p1 = Y;
+        auto& p2 = Y.d();
+        auto& p3 = X.d();
         for (int i = 0; i < Y.data_size_; i++)
         {
-            if (abs(p1[i]) > 1 - 1e-2)
+            if (abs(p1.getData(i)) > 1 - 1e-2)
             {
-                p3[i] = -p2[i] * 100;
+                p3.setData(i, -p2.getData(i) * 100);
                 continue;
             }
-            p3[i] = p2[i];
+            p3.setData(i, p2.getData(i));
         }
     }
 }
@@ -1606,7 +1846,7 @@ void MatrixEx::step(const Matrix& X, Matrix& Y)
     assert(checkMatrixDevice({ &X, &Y }));
     if (X.isCuda())
     {
-        cuda_step(X.data(), Y.data(), X.getDataSize(), 0, 0);
+        cuda_step(X.getDataTypeByInt(), X.data(), Y.data(), X.getDataSize(), 0, 0);
     }
     else
     {
@@ -1614,12 +1854,12 @@ void MatrixEx::step(const Matrix& X, Matrix& Y)
     }
 }
 
-void MatrixEx::leaky_relu(const Matrix& X, Matrix& Y, real l, real a /*= 1*/, real b /*= 0*/)
+void MatrixEx::leaky_relu(const Matrix& X, Matrix& Y, float l, float a /*= 1*/, float b /*= 0*/)
 {
     assert(checkMatrixDevice({ &X, &Y }));
     if (X.isCuda())
     {
-        cuda_leaky_relu(X.data(), Y.data(), X.getDataSize(), l, 1, 0);
+        cuda_leaky_relu(X.getDataTypeByInt(), X.data(), Y.data(), X.getDataSize(), l, 1, 0);
     }
     else
     {
@@ -1627,12 +1867,12 @@ void MatrixEx::leaky_relu(const Matrix& X, Matrix& Y, real l, real a /*= 1*/, re
     }
 }
 
-void MatrixEx::leaky_relub(Matrix& X, const Matrix& Y, real l, real a /*= 1*/, real b /*= 0*/)
+void MatrixEx::leaky_relub(Matrix& X, const Matrix& Y, float l, float a /*= 1*/, float b /*= 0*/)
 {
     assert(checkMatrixDevice({ &X, &Y }));
     if (X.isCuda())
     {
-        cuda_leaky_relub(X.data(), X.d().data(), Y.data(), Y.d().data(), X.getDataSize(), l, 1, 0);
+        cuda_leaky_relub(X.getDataTypeByInt(), X.data(), X.d().data(), Y.data(), Y.d().data(), X.getDataSize(), l, 1, 0);
     }
     else
     {
@@ -1640,9 +1880,9 @@ void MatrixEx::leaky_relub(Matrix& X, const Matrix& Y, real l, real a /*= 1*/, r
     }
 }
 
-void MatrixEx::correlationForward(const Matrix& X, const Matrix& W, Matrix& Y, std::vector<int>& methods, std::vector<Matrix>& workspaces, const std::vector<int>& stride, const std::vector<int>& padding, realc a /*= 1*/, realc r /*= 0*/)
+void MatrixEx::correlationForward(const Matrix& X, const Matrix& W, Matrix& Y, std::vector<int>& methods, std::vector<Matrix>& workspaces, const std::vector<int>& stride, const std::vector<int>& padding, float a /*= 1*/, float r /*= 0*/)
 {
-    real epsilon = 1e-4;
+    float epsilon = 1e-4;
 
     int need_resize = 1;
     if (workspaces.size() < 16)
@@ -1678,24 +1918,24 @@ void MatrixEx::correlationForward(const Matrix& X, const Matrix& W, Matrix& Y, s
 
         for (auto& m : { &Y_den_square, &Y_den, &Y_aver, &Y_conv_aver })
         {
-            (*m).resize(Y);
+            (*m).resize(Y.getDim());
             (*m).fillData(0);
         }
 
         for (auto& m : { &W_den_square, &W_den, &W_aver, &W_minus_aver, &W_norm })
         {
-            (*m).resize(W);
+            (*m).resize(W.getDim());
             (*m).fillData(0);
         }
 
         as_W_aver.resize(W.getRow(), W.getRow());
         as_W_aver.fillData(1);
 
-        W_1.resize(W);
+        W_1.resize(W.getDim());
         W_1.fillData(1);
-        X1.resize(X);
+        X1.resize(X.getDim());
         X1.fillData(1);
-        X_square.resize(X);
+        X_square.resize(X.getDim());
     }
 
     //计算W相关
@@ -1726,7 +1966,7 @@ void MatrixEx::correlationForward(const Matrix& X, const Matrix& W, Matrix& Y, s
     Matrix::elementDiv(Y, Y_den, Y);
 }
 
-void MatrixEx::correlationBackward(Matrix& X, Matrix& W, const Matrix& Y, std::vector<int>& methods, std::vector<Matrix>& workspaces, const std::vector<int>& stride, const std::vector<int>& padding, realc a /*= 1*/, realc rx /*= 0*/, realc rw /*= 0*/)
+void MatrixEx::correlationBackward(Matrix& X, Matrix& W, const Matrix& Y, std::vector<int>& methods, std::vector<Matrix>& workspaces, const std::vector<int>& stride, const std::vector<int>& padding, float a /*= 1*/, float rx /*= 0*/, float rw /*= 0*/)
 {
     //注意仅有W的反向，即只能为首层
     auto& Y_den_square = workspaces[3];
@@ -1746,13 +1986,13 @@ void MatrixEx::correlationBackward(Matrix& X, Matrix& W, const Matrix& Y, std::v
     auto& X1 = workspaces[14];    //与X同维，但是所有值为1
     auto& X_square = workspaces[15];
 
-    if (W.needReverse())
+    if (W.needBack())
     {
         Matrix::elementDiv(Y.d(), Y_den, Y_den.d());
-        X.setNeedReverse(false);
+        X.setNeedBack(false);
         MatrixEx::convolutionBackward(X, W, Y_den, methods, workspaces, stride, padding, 1 - 1.0 / W.getRow(), 0, 0);
         Matrix::elementMul(Y_den.d(), Y_aver, Y_aver.d());
-        X1.setNeedReverse(false);
+        X1.setNeedBack(false);
         MatrixEx::convolutionBackward(X1, W, Y_aver, methods, workspaces, stride, padding, -(1 - 1.0 / W.getRow()), 0, 1);
         Matrix::elementDiv(W.d(), W_den, W.d());
 
@@ -1770,7 +2010,7 @@ void MatrixEx::matrix_max(const Matrix& X1, const Matrix& X2, Matrix& Y)
     assert(checkMatrixDevice({ &X1, &X2, &Y }));
     if (X1.isCuda())
     {
-        cuda_max(X1.data(), X2.data(), Y.data(), X1.getDataSize(), 1, 1, 0);
+        cuda_max(X1.getDataTypeByInt(), X1.data(), X2.data(), Y.data(), X1.getDataSize(), 1, 1, 0);
     }
     else
     {
@@ -1778,12 +2018,12 @@ void MatrixEx::matrix_max(const Matrix& X1, const Matrix& X2, Matrix& Y)
     }
 }
 
-void MatrixEx::matrix_maxb(Matrix& X1, Matrix& X2, const Matrix& Y, realc a1, realc a2, realc r)
+void MatrixEx::matrix_maxb(Matrix& X1, Matrix& X2, const Matrix& Y, float a1, float a2, float r)
 {
     assert(checkMatrixDevice({ &X1, &X2, &Y }));
     if (X1.isCuda())
     {
-        cuda_maxb(X1.data(), X1.d().data(), X2.data(), X2.d().data(), Y.data(), Y.d().data(), X1.getDataSize(), a1, a2, 1);
+        cuda_maxb(X1.getDataTypeByInt(), X1.data(), X1.d().data(), X2.data(), X2.d().data(), Y.data(), Y.d().data(), X1.getDataSize(), a1, a2, 1);
     }
     else
     {

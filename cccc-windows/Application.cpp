@@ -1,5 +1,5 @@
 #include "Application.h"
-#include "Brain.h"
+#include "MainProcess.h"
 #include "filefunc.h"
 
 namespace cccc
@@ -7,7 +7,7 @@ namespace cccc
 
 void Application::run()
 {
-    Brain brain;
+    MainProcess mp;
 
     std::map<std::string, std::string> replace_pairs;
     auto replace_strings = strfunc::splitString(replace_string_, ";");
@@ -26,7 +26,7 @@ void Application::run()
     {
         if (!filefunc::fileExist(filename))
         {
-            LOG(stderr, "{} doesn't exist!\n", filename.c_str());
+            LOG_ERR("{} doesn't exist!\n", filename.c_str());
         }
         auto ini_str = strfunc::readStringFromFile(filename);
         //Ìæ»»µôÒ»Ð©×Ö·û
@@ -34,14 +34,14 @@ void Application::run()
         {
             strfunc::replaceAllSubStringRef(ini_str, rp.first, rp.second);
         }
-        brain.getOption()->loadString(ini_str);
+        mp.getOption()->loadString(ini_str);
     }
-    auto load_filenames = strfunc::splitString(brain.getOption()->getString("train", "load_ini"), ",");
+    auto load_filenames = strfunc::splitString(mp.getOption()->getString("train", "load_ini"), ",");
     for (auto filename : load_filenames)
     {
         if (filename != "")
         {
-            brain.getOption()->loadFile(filename);
+            mp.getOption()->loadFile(filename);
         }
     }
 
@@ -49,23 +49,18 @@ void Application::run()
     strfunc::replaceAllSubStringRef(add_option_string_, "[", "\n[");
     strfunc::replaceAllSubStringRef(add_option_string_, "]", "]\n");
     strfunc::replaceAllSubStringRef(add_option_string_, ";", "\n");
-    brain.getOption()->loadString(add_option_string_);
+    mp.getOption()->loadString(add_option_string_);
 
-    if (brain.init() != 0)
+    if (mp.init() != 0)
     {
         return;
     }
     loop_ = true;
     while (loop_)
     {
-        brain.run();
+        mp.run();
         loop_ = false;
     }
-}
-
-int Application::getFloatPresicion()
-{
-    return sizeof(real);
 }
 
 }    // namespace cccc

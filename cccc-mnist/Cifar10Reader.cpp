@@ -20,12 +20,12 @@ static void readData(Matrix& X, Matrix& Y, const std::string& filename, int begi
         if (i % 3073 == 0)
         {
             count++;
-            Y.getData(arr[i], count) = 1;
+            Y.setData(arr[i], count, 1);
             k = 0;
         }
         else
         {
-            X.getData(k++, count) = arr[i] / 255.0;
+            X.setData(k++, count, arr[i] / 255.0);
         }
     }
     //for (int in = begin; in < begin+10000; in++)

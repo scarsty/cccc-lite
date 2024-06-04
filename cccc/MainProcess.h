@@ -9,20 +9,20 @@ namespace cccc
 {
 
 //总调度
-class DLL_EXPORT Brain
+class DLL_EXPORT MainProcess
 {
 public:
-    Brain();
-    virtual ~Brain();
-    Brain(const Brain&) = delete;
-    Brain& operator=(const Brain&) = delete;
+    MainProcess();
+    virtual ~MainProcess();
+    MainProcess(const MainProcess&) = delete;
+    MainProcess& operator=(const MainProcess&) = delete;
 
 public:
     int brain_id_;
 
 protected:
     int batch_;
-    std::function<void(Brain*)> running_callback_ = nullptr;    //回调函数
+    std::function<void(MainProcess*)> running_callback_ = nullptr;    //回调函数
     Option option_;
     Timer timer_total_;
     int MP_count_ = 1;
@@ -31,7 +31,7 @@ protected:
     WorkModeType work_mode_ = WORK_MODE_NORMAL;
 
 public:
-    void setCallback(std::function<void(Brain*)> f) { running_callback_ = f; }
+    void setCallback(std::function<void(MainProcess*)> f) { running_callback_ = f; }
     Option* getOption() { return &option_; }
 
 protected:
@@ -61,6 +61,7 @@ public:
     virtual void initDataPreparer();
     void initTrainData();
     void initTestData();
+    std::string makeSaveName(const std::string& save_format, int epoch_count);
     std::string makeSaveSign();
 
 public:
@@ -90,6 +91,9 @@ private:
     };
     void trainOneNet(std::vector<std::unique_ptr<Net>>& nets, int net_id, TrainInfo& train_info, int total_epochs);
 
+    bool checkTestEffective(std::vector<TestInfo>& resultv_max, std::vector<TestInfo>& resultv);
+    bool checkTrainHealth(const std::vector<TestInfo>& resultvp, const std::vector<TestInfo>& resultv, float l1p, float l2p, float l1, float l2, double increase_limited, int effective_epoch_count);
+
 public:
     //获取网络的时候，应注意当前的gpu
     Net* getNet(int i = 0) const
@@ -108,7 +112,7 @@ public:
     void extraTest(Net* net, const std::string& section, int force_output = 0, int test_type = 0);
 
 public:
-    int testExternalData(void* x, void* y, void* a, int n, int attack_times = 0, realc* error = nullptr);
+    int testExternalData(void* x, void* y, void* a, int n, int attack_times = 0, double* error = nullptr);
 };
 
 }    // namespace cccc

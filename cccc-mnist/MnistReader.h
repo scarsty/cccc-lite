@@ -12,8 +12,8 @@ public:
 
 private:
     void getDataSize(const std::string& file_image, int* w, int* h, int* n);
-    void readLabelFile(const std::string& filename, real* y_data);
-    void readImageFile(const std::string& filename, real* x_data);
+    void readLabelFile(const std::string& filename, void* y_data, DataType data_type);
+    void readImageFile(const std::string& filename, void* x_data, DataType data_type);
     void readData(const std::string& file_label, const std::string& file_image, Matrix& X, Matrix& Y);
     void reverse(char* c, int n);
 

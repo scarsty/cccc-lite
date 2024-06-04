@@ -8,6 +8,10 @@
 #include <cstdlib>
 #include <vector>
 
+#ifdef _WIN32
+#include "vramusage.h"
+#endif
+
 namespace cccc
 {
 
@@ -117,24 +121,22 @@ int GpuControl::init(int dev_id /*= -1*/)
     }
     gpu_id_ = dev_id;
 
-#ifndef NO_CUDA
     if (api_type_ == API_CUDA)
     {
         cudaSetDevice(api_id_);
         cublas_ = new Cublas();
         if (cublas_->init() != CUBLAS_STATUS_SUCCESS)
         {
-            LOG(stderr, "CUBLAS initialization error on device {}!\n", dev_id);
+            LOG_ERR("CUBLAS initialization error on device {}!\n", dev_id);
             return 1;
         }
         if (cudnnCreate(&cudnn_handle_) != CUDNN_STATUS_SUCCESS)
         {
-            LOG(stderr, "CUDNN initialization error on device {}!\n", dev_id);
+            LOG_ERR("CUDNN initialization error on device {}!\n", dev_id);
             return 2;
         }
         LOG("CUDA initialization on device {} succeed\n", gpu_id_);
         //LOG("CUBLAS Version = {}, CUDNN Version = {}\n", cublas_->get_version(), cudnnGetVersion());
-        LOG("Float precision is {}\n", sizeof(real) * 8);
         inited_ = true;
 
         cudaDeviceProp device_prop;
@@ -147,11 +149,19 @@ int GpuControl::init(int dev_id /*= -1*/)
         rocblas_ = new Rocblas();
         if (rocblas_->init())
         {
-            LOG(stderr, "ROCBLAS initialization error on device {}!\n", dev_id);
+            LOG_ERR("ROCBLAS initialization error on device {}!\n", dev_id);
             return 1;
         }
+        if (miopenCreate(&miopen_handle_) != CUDNN_STATUS_SUCCESS)
+        {
+            LOG_ERR("MIOpen initialization error on device {}!\n", dev_id);
+            return 2;
+        }
+        LOG("HIP initialization on device {} succeed\n", gpu_id_);
+        //LOG("ROCBLAS Version = {}, MIOpen Version = {}\n", rocblas_->get_version(), miopenGetVersion());
+        inited_ = true;
     }
-#endif
+
     setAsCurrent();
     return 0;
 }
@@ -272,22 +282,27 @@ void GpuControl::getFreeMemory(size_t& free, size_t& total) const
 {
     if (api_type_ == API_CUDA)
     {
-#ifdef NVML_API_VERSION
-        nvmlDevice_t nvml_device;
-        nvmlDeviceGetHandleByIndex(api_id_, &nvml_device);
-        nvmlMemory_t nvml_memory;
-        nvmlDeviceGetMemoryInfo(nvml_device, &nvml_memory);
-        free = nvml_memory.free;
-        total = nvml_memory.total;
-#else
         cudaSetDevice(api_id_);
         cudaMemGetInfo(&free, &total);
+#ifdef _WIN32
+        cudaDeviceProp device_prop;
+        cudaGetDeviceProperties(&device_prop, api_id_);
+        uint64_t resident;
+        get_free_mem_by_luid(*(LUID*)device_prop.luid, &resident, nullptr);
+        free = total - resident;
 #endif
     }
     else if (api_type_ == API_HIP)
     {
         hipSetDevice(api_id_);
         hipMemGetInfo(&free, &total);
+#ifdef _WIN32
+        hipDeviceProp_t device_prop;
+        hipGetDeviceProperties(&device_prop, api_id_);
+        uint64_t resident;
+        get_free_mem_by_pcibus(device_prop.pciBusID, &resident, nullptr);
+        free = total - resident;
+#endif
     }
 }
 
@@ -354,8 +369,7 @@ void GpuControl::evaluateDevices()
 
         // If we don't find the values, we default use the previous one
         // to run properly
-        LOG(stderr,
-            "MapSMtoCores for SM {}.{} is undefined, default to use {} Cores/SM\n",
+        LOG("MapSMtoCores for SM {}.{} is undefined, default to use {} Cores/SM\n",
             major, minor, nGpuArchCoresPerSM[index - 1].Cores);
 
         return mp * nGpuArchCoresPerSM[index - 1].Cores;
@@ -376,10 +390,6 @@ void GpuControl::evaluateDevices()
     double best_state = -1e8;
     std::vector<Info> infos(device_count_);
     int best_i = 0;
-    int nvml_state = 1;
-#ifdef NVML_API_VERSION
-    nvml_state = nvmlInit();
-#endif
     for (int i = 0; i < device_count_c_; i++)
     {
         infos[i].id = i;
@@ -397,20 +407,12 @@ void GpuControl::evaluateDevices()
             char pci_info[128];
             cudaDeviceGetPCIBusId(pci_info, 128, i);
             size_t free, total;
-#ifdef NVML_API_VERSION
-            nvmlDevice_t nvml_device;
-            nvmlDeviceGetHandleByPciBusId(pci_info, &nvml_device);
-            nvmlMemory_t nvml_memory;
-            nvmlDeviceGetMemoryInfo(nvml_device, &nvml_memory);
-            free = nvml_memory.free;
-            total = nvml_memory.total;
-            unsigned int temperature;
-            nvmlDeviceGetTemperature(nvml_device, NVML_TEMPERATURE_GPU, &temperature);
+            cudaMemGetInfo(&free, &total);
+#ifdef _WIN32
+            size_t resident;
+            get_free_mem_by_luid(*(LUID*)device_prop.luid, &resident, nullptr);
+            free = total - resident;
 #endif
-            if (nvml_state)
-            {
-                cudaMemGetInfo(&free, &total);
-            }
             LOG("Device {} ({}): {}, {:7.5f} TFLOPS, {:7.2f}/{:7.2f} MB free/total\n",
                 i, pci_info, device_prop.name, flops / 1e12, free / 1048576.0, total / 1048576.0);
             state = flops / 1e12 + free / 1e9;
@@ -432,22 +434,23 @@ void GpuControl::evaluateDevices()
 
         hipDeviceProp_t device_prop;
         hipGetDeviceProperties(&device_prop, i);
+
         hipSetDevice(i);
         double flops = 4.0e3 * device_prop.clockRate * device_prop.multiProcessorCount * 128;
         char pci_info[128];
         hipDeviceGetPCIBusId(pci_info, 128, i);
         size_t free, total;
-
         hipMemGetInfo(&free, &total);
-
+#ifdef _WIN32
+        size_t resident;
+        get_free_mem_by_pcibus(device_prop.pciBusID, &resident, nullptr);
+        free = total - resident;
+#endif
         LOG("Device {} ({}): {}, {:7.5f} TFLOPS, {:7.2f}/{:7.2f} MB free/total\n",
             i + device_count_c_, pci_info, device_prop.name, flops / 1e12, free / 1048576.0, total / 1048576.0);
         state = flops / 1e12 + free / 1e9;
         infos[i].pci = device_prop.pciBusID;
     }
-    //#ifdef NVML_API_VERSION
-    //    nvmlShutdown();
-    //#endif
     //这里需要重新计算，考虑与最好设备的距离
     for (int i = 0; i < device_count_; i++)
     {
@@ -466,50 +469,6 @@ void GpuControl::evaluateDevices()
     }
 }
 
-void GpuControl::setTensorDesc4D(cudnnTensorStruct* tensor, int w, int h, int c, int n)
-{
-    if (tensor && n * c * h * w > 0)
-    {
-        auto r = cudnnSetTensor4dDescriptor(tensor, CUDNN_TENSOR_NCHW, MYCUDNN_DATA_REAL, n, c, h, w);
-        if (r)
-        {
-            LOG(stderr, "Set tensor failed!\n");
-        }
-    }
-}
-
-void GpuControl::setTensorDescND(cudnnTensorStruct* tensor, std::vector<int> dim)
-{
-    if (tensor)
-    {
-        std::vector<int> dim1, stride;
-        int size = dim.size();
-        if (size > CUDNN_DIM_MAX)
-        {
-            LOG(stderr, "Error: wrong dimensions of tensor!\n");
-            return;
-        }
-        dim1 = dim;
-        stride.resize(size);
-        std::reverse(dim1.begin(), dim1.end());
-        int s = 1;
-        for (int i = 0; i < size; i++)
-        {
-            stride[size - 1 - i] = s;
-            s *= dim1[size - 1 - i];
-        }
-        cudnnSetTensorNdDescriptor(tensor, MYCUDNN_DATA_REAL, size, dim1.data(), stride.data());
-        //cudnnSetTensorNdDescriptorEx(tensor, CUDNN_TENSOR_NCHW, MYCUDNN_DATA_REAL, size, dim1.data());
-
-        //以下测试效果用
-        //cudnnDataType_t t;
-        //int n;
-        //int d1[8];
-        //int s1[8];
-        //cudnnGetTensorNdDescriptor(tensor, 8, &t, &n, d1, s1);
-    }
-}
-
 void GpuControl::setActivationDesc(void* activation, int mode, double v)
 {
     if (activation)
@@ -518,4 +477,13 @@ void GpuControl::setActivationDesc(void* activation, int mode, double v)
     }
 }
 
+std::string GpuControl::lastCudnnErrorString()
+{
+    char msg[200] = { '\0' };
+    if (cudnnGetLastErrorString)
+    {
+        cudnnGetLastErrorString(msg, 200);
+    }
+    return msg;
+}
 }    // namespace cccc

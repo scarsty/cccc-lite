@@ -2,6 +2,7 @@
 #include "Log.h"
 #include "gpu_lib.h"
 #include "types.h"
+#include <algorithm>
 
 namespace cccc
 {
@@ -9,13 +10,13 @@ namespace cccc
 TensorDesc::TensorDesc(uint32_t flag)
 {
 #if ENABLE_CUDA
-    if (flag & 1)
+    if ((flag & 1) && cudnnCreateTensorDescriptor)
     {
         cudnnCreateTensorDescriptor(&cudnn_tensor_desc_);
     }
 #endif
 #if ENABLE_HIP
-    if (flag & 2)
+    if ((flag & 2) && miopenCreateTensorDescriptor)
     {
         miopenCreateTensorDescriptor(&miopen_tensor_desc_);
     }
@@ -25,37 +26,44 @@ TensorDesc::TensorDesc(uint32_t flag)
 TensorDesc::~TensorDesc()
 {
 #if ENABLE_CUDA
-    cudnnDestroyTensorDescriptor(cudnn_tensor_desc_);
+    if (cudnn_tensor_desc_)
+    {
+        cudnnDestroyTensorDescriptor(cudnn_tensor_desc_);
+    }
 #endif
 #if ENABLE_HIP
-    miopenDestroyTensorDescriptor(miopen_tensor_desc_);
+    if (miopen_tensor_desc_)
+    {
+        miopenDestroyTensorDescriptor(miopen_tensor_desc_);
+    }
 #endif
 }
 
-void TensorDesc::setDesc4D(int w, int h, int c, int n)
+void TensorDesc::setDesc4D(DataType data_type, int w, int h, int c, int n)
 {
     if (n * c * h * w > 0)
     {
         if (cudnn_tensor_desc_)
         {
-            auto r = cudnnSetTensor4dDescriptor(cudnn_tensor_desc_, CUDNN_TENSOR_NCHW, MYCUDNN_DATA_REAL, n, c, h, w);
+
+            auto r = cudnnSetTensor4dDescriptor(cudnn_tensor_desc_, CUDNN_TENSOR_NCHW, toCudnnDataType(data_type), n, c, h, w);
             if (r)
             {
-                cccc::LOG(stderr, "Set tensor failed!\n");
+                cccc::LOG_ERR("Set tensor failed!\n");
             }
         }
         if (miopen_tensor_desc_)
         {
-            auto r = miopenSet4dTensorDescriptor(miopen_tensor_desc_, MYMIOPEN_DATA_REAL, n, c, h, w);
+            auto r = miopenSet4dTensorDescriptor(miopen_tensor_desc_, toMiopenDataType(data_type), n, c, h, w);
             if (r)
             {
-                cccc::LOG(stderr, "Set tensor failed!\n");
+                cccc::LOG_ERR("Set tensor failed!\n");
             }
         }
     }
 }
 
-void TensorDesc::setDescND(std::vector<int> dim)
+void TensorDesc::setDescND(DataType data_type, std::vector<int> dim)
 {
     std::vector<int> dim1, stride;
     int size = dim.size();
@@ -73,17 +81,29 @@ void TensorDesc::setDescND(std::vector<int> dim)
     {
         if (size > CUDNN_DIM_MAX)
         {
-            LOG(stderr, "Error: wrong dimensions of tensor!\n");
+            LOG_ERR("Error: wrong dimensions of tensor!\n");
             return;
         }
-        cudnnSetTensorNdDescriptor(cudnn_tensor_desc_, MYCUDNN_DATA_REAL, size, dim1.data(), stride.data());
+        cudnnSetTensorNdDescriptor(cudnn_tensor_desc_, toCudnnDataType(data_type), size, dim1.data(), stride.data());
     }
     if (miopen_tensor_desc_)
     {
-        miopenSetTensorDescriptor(miopen_tensor_desc_, MYMIOPEN_DATA_REAL, size, dim1.data(), stride.data());
+        miopenSetTensorDescriptor(miopen_tensor_desc_, toMiopenDataType(data_type), size, dim1.data(), stride.data());
     }
 }
-
+#if ENABLE_CUDA
+#define CREATE_CUDNN_DESC(type) \
+    template <> \
+    void OtherDesc::create<cudnn##type##_t>(void** p) \
+    { \
+        cudnnCreate##type((cudnn##type##_t*)p); \
+    }
+template <>
+void OtherDesc::create<void*>(void** p)
+{
+}
+CREATE_CUDNN_DESC(PoolingDescriptor)
+#elif ENABLE_HIP
 #define CREATE_MIOPEN_DESC(type) \
     template <> \
     void OtherDesc::create<miopen##type##_t>(void** p) \
@@ -94,5 +114,10 @@ void TensorDesc::setDescND(std::vector<int> dim)
 CREATE_MIOPEN_DESC(ConvolutionDescriptor)
 CREATE_MIOPEN_DESC(ActivationDescriptor)
 CREATE_MIOPEN_DESC(PoolingDescriptor)
-
+#else
+template <>
+void OtherDesc::create<void*>(void** p)
+{
+}
+#endif
 }    //namespace cccc

@@ -32,7 +32,7 @@ int Net::init()
         LOG("Empty compute queue!\n");
         r = -2;
     }
-    getX().setNeedReverse(false);
+    getX().setNeedBack(false);
     initWeights();
     solver_.init(option_, "train", all_weights_);
     //workspace_.resize(all_weights_);
@@ -45,7 +45,7 @@ int Net::init()
         //LossWeight_->printAsMatrix();
     }
 
-#if defined(_DEBUG) || !defined(_WIN32)
+#if defined(_DEBUG)
     LOG("{}\n", ir());
     //MatrixOp::ir(loss_);
 #endif
@@ -79,7 +79,7 @@ int Net::init()
 //learn为真时，会反向更新网络
 //active只处理一个gpu中的minibatch
 //A是外部提供的矩阵，用于保存结果
-void Net::active(Matrix* X, Matrix* Y, Matrix* A, bool back, realc* error)
+void Net::active(Matrix* X, Matrix* Y, Matrix* A, bool back, float* error)
 {
     //setDeviceSelf();
     if (X)
@@ -90,19 +90,25 @@ void Net::active(Matrix* X, Matrix* Y, Matrix* A, bool back, realc* error)
     {
         getY().shareData(*Y);
     }
+
     MatrixOp::forward(op_queue_);
+    //getX().message("getX");
+    //getY().message("getY");
+    //getA().message("getA");
     if (back)
     {
         MatrixOp::backward(op_queue_, loss_, true);
     }
     if (A)
     {
-        Matrix::copyDataPtr(getA(), getA().getDataPtr(), *A, A->getDataPtr(), getA().getDataSize());
+        Matrix::copyDataPtr(getA(), getA().getDataPtr(), *A, A->getDataPtr(), getA().getDataSizeInByte());
     }
     if (error && getY().getNumber() > 0)
     {
         Matrix R(getA().getDim());
+        //R.message("R");
         Matrix::add(getA(), getY(), R, 1, -1);
+        //R.message("R");
         *error = R.dotSelf() / getY().getNumber();
     }
 }
@@ -134,13 +140,14 @@ int Net::saveWeight(const std::string& filename, const std::string& sign)
     LOG("Save net to {}... ", filename);
     filefunc::makePath(filefunc::getParentPath(filename));
 
-    int sum = 0;
+    int64_t sum = 0;
     for (auto& m : weights_)
     {
-        sum += m->getDataSize();
+        sum += m->getDataSizeInByte();
     }
-    std::string buffer(sum * sizeof(real), '\0');
-    auto p = (real*)buffer.data();
+    std::string buffer(sum, '\0');
+    auto p = buffer.data();
+
     for (auto& m : weights_)
     {
         p += m->save(p, m->getDataSize());
@@ -148,6 +155,11 @@ int Net::saveWeight(const std::string& filename, const std::string& sign)
 
     INIReaderBin file_bin;
     file_bin.set_value("weight_binary", buffer);
+    if (!weights_.empty())
+    {
+        auto& m = weights_[0];
+        file_bin.set_value("data_type", option_->getStringFromEnum(m->getDataType()));
+    }
     if (!sign.empty())
     {
         file_bin.set_value("save_sign", sign);
@@ -216,20 +228,37 @@ int Net::loadWeight(const std::string& str, int load_mode)
     {
         weight_str = buffer;    //直接当成二进制流也可
     }
-    int sum = 0;
+    auto data_type = option_->getEnumFromString<DataType>(file_bin.get_value("data_type"));
+    int64_t sum = 0;
+    auto p = weight_str.data();
     for (auto& m : weights_)
     {
-        sum += m->load((real*)weight_str.data() + sum, (buffer.size() - sum * sizeof(real)) / sizeof(real));
+        if (data_type == m->getDataType())
+        {
+            sum += m->load((char*)weight_str.data() + sum, (buffer.size() - sum) / m->getDataTypeSize());
+        }
+        else
+        {
+            Matrix m1(m->getDim(), m->getDataType(), UnitType::CPU);
+            for (int64_t i = 0; i < m->getDataSize(); i++)
+            {
+                m1.setData(i, p, data_type);
+                p += MatrixData::getDataTypeSize(data_type);
+                sum += MatrixData::getDataTypeSize(data_type);
+            }
+            Matrix::copyData(m1, *m);
+        }
     }
     LOG("done\n");
+    LOG("Data type of save file is {}\n", option_->getStringFromEnum(data_type));
     int ret = 0;
     ConsoleControl::setColor(CONSOLE_COLOR_RED);
-    if (weight_str.size() > sum * sizeof(real))
+    if (weight_str.size() > sum)
     {
         LOG("Warning: size of weight is longer than net!\n");
         ret = 1;
     }
-    else if (weight_str.size() < sum * sizeof(real))
+    else if (weight_str.size() < sum)
     {
         LOG("Warning: size of weight is shorter than net!\n");
         ret = 1;
@@ -268,9 +297,9 @@ int Net::weightDataSize() const
     return n;
 }
 
-realc Net::weightSumAbs() const
+float Net::weightSumAbs() const
 {
-    realc l1 = 0;
+    float l1 = 0;
     for (auto& m : weights_)
     {
         if (m)
@@ -281,9 +310,9 @@ realc Net::weightSumAbs() const
     return l1;
 }
 
-realc Net::weightNorm2() const
+float Net::weightNorm2() const
 {
-    realc l2 = 0;
+    float l2 = 0;
     for (auto& m : weights_)
     {
         if (m)
@@ -294,7 +323,7 @@ realc Net::weightNorm2() const
     return l2;
 }
 
-void Net::calNorm(int& n, realc& l1, realc& l2) const
+void Net::calNorm(int& n, float& l1, float& l2) const
 {
     n = weightDataSize();
     l1 = weightSumAbs();
@@ -304,7 +333,7 @@ void Net::calNorm(int& n, realc& l1, realc& l2) const
 void Net::outputNorm() const
 {
     int n;
-    realc l1, l2;
+    float l1, l2;
     calNorm(n, l1, l2);
     LOG("N = {}, L1 = {}, L2 = {}\n", n, l1, l2);
 }
@@ -353,13 +382,20 @@ std::vector<int> Net::getTestGroup()
             group.push_back(m->getRow());
         }
     }
+    else
+    {
+        group.push_back(op_queue_.back().getMatrixOut()[0]->getRow());
+    }
     return group;
 }
 
 //测试一个大组
 //test_type时，result返回准确率，否则返回的是error
-//返回值为0表示基本正常，为负表示输入不合法，为正表示网络的测试结果只有全对或全错，此时一般存在数值问题
-int Net::test(const std::string& info, Matrix* X, Matrix* Y, Matrix* A, int output_group /*= 0*/, int test_type /*= 0*/, int attack_times /*= 0*/, realc* result /*= nullptr*/)
+//返回值为0表示基本正常，为负表示输入不合法
+//返回值为正表示结果只有0或1，此时有可能是数值有问题
+int Net::test(Matrix* X, Matrix* Y, Matrix* A, const std::string& info /* = ""*/,
+    int output_group /* = 0*/, int test_type /* = 0*/, int attack_times /* = 0*/,
+    double* result_ptr /* = nullptr*/, std::vector<std::vector<TestInfo>>* resultv_ptr /* = nullptr*/)
 {
     if (info != "")
     {
@@ -381,19 +417,19 @@ int Net::test(const std::string& info, Matrix* X, Matrix* Y, Matrix* A, int outp
         return -1;
     }
 
-    int group_size = X->getNumber();
-    if (group_size <= 0)
+    int data_size = X->getNumber();
+    if (data_size <= 0)
     {
         return 0;
     }
 
-    bool need_y = output_group > 0 || test_type > 0 || result;
+    bool need_y = output_group > 0 || test_type > 0 || result_ptr;
 
-    setActivePhase(ACTIVE_PHASE_TEST);
+    gpu_->setActivePhase(ACTIVE_PHASE_TEST);
 
-    realc total_error = 0, error = 0;
-    realc* errorp = nullptr;
-    if (test_type == 0 && result)
+    float total_error = 0, error = 0;
+    float* errorp = nullptr;
+    if (test_type == 0 && result_ptr)
     {
         errorp = &error;
     }
@@ -403,16 +439,16 @@ int Net::test(const std::string& info, Matrix* X, Matrix* Y, Matrix* A, int outp
     Matrix temp;
     if (A == nullptr)
     {
-        temp.resize(*Y);
+        temp.resize(Y->getDim());
         A = &temp;
     }
 
     auto Xp = getX(), Yp = getY(), Ap = getA();
     int batch = getX().getNumber();
-    for (int i = 0; i < group_size; i += batch)
+    for (int i = 0; i < data_size; i += batch)
     {
         //检查最后一组是不是组数不足
-        int n_rest = std::min(batch, group_size - i);
+        int n_rest = std::min(batch, data_size - i);
         if (n_rest < batch)
         {
             //getX().resizeNumber(n_rest);
@@ -420,7 +456,6 @@ int Net::test(const std::string& info, Matrix* X, Matrix* Y, Matrix* A, int outp
             //getA().resizeNumber(n_rest);
             resetBatchSize(n_rest);
         }
-        //todo: 需适配amd
         if (X->inGpu())
         {
             getX().shareData(*X, 0, i);
@@ -478,17 +513,17 @@ int Net::test(const std::string& info, Matrix* X, Matrix* Y, Matrix* A, int outp
     getX() = Xp;
     getY() = Yp;
     getA() = Ap;
-    if (test_type == 0 && result)
+    if (test_type == 0 && result_ptr)
     {
         total_error /= X->getNumber();
-        *result = total_error;
+        *result_ptr = total_error;
         ConsoleControl::setColor(CONSOLE_COLOR_LIGHT_RED);
         LOG("Real error = {}\n", total_error);
         ConsoleControl::setColor(CONSOLE_COLOR_NONE);
     }
 
     //恢复网络原来的设置
-    setActivePhase(ACTIVE_PHASE_TRAIN);
+    gpu_->setActivePhase(ACTIVE_PHASE_TRAIN);
 
     //若Y为空没有继续测试的必要
     if (Y == nullptr)
@@ -497,6 +532,7 @@ int Net::test(const std::string& info, Matrix* X, Matrix* Y, Matrix* A, int outp
     }
 
     int ret = 0;
+    std::vector<int64_t> right, total;
     if (test_type == 1)
     {
         int y_size = Y->getRow();
@@ -506,7 +542,7 @@ int Net::test(const std::string& info, Matrix* X, Matrix* Y, Matrix* A, int outp
         if (output_group > 0)
         {
             LOG("Label --> Infer\n");
-            for (int i = 0; i < (std::min)(group_size, output_group); i++)
+            for (int i = 0; i < (std::min)(data_size, output_group); i++)
             {
                 for (int j = 0; j < y_size; j++)
                 {
@@ -522,7 +558,7 @@ int Net::test(const std::string& info, Matrix* X, Matrix* Y, Matrix* A, int outp
         }
 
         ConsoleControl::setColor(CONSOLE_COLOR_LIGHT_RED);
-        auto A_max = Matrix(A_cpu.getDim(), UnitType::CPU);
+        auto A_max = Matrix(A_cpu.getDim(), A_cpu.getDataType(), UnitType::CPU);
 
         //查看最后一层是否是拼起来的
         auto group = getTestGroup();
@@ -537,22 +573,22 @@ int Net::test(const std::string& info, Matrix* X, Matrix* Y, Matrix* A, int outp
                     int out = group[i_combine];
                     if (out > 1)
                     {
-                        real max_v = -9999;
+                        float max_v = -9999;
                         int max_loc = 0;
                         for (int i = 0; i < out; i++)
                         {
-                            real v = A_cpu.getData(total_loc + i, i_group);
+                            float v = A_cpu.getData(total_loc + i, i_group);
                             if (v > max_v)
                             {
                                 max_v = v;
                                 max_loc = i;
                             }
                         }
-                        A_max.getData(total_loc + max_loc, i_group) = 1;
+                        A_max.setData(total_loc + max_loc, i_group, 1);
                     }
                     else if (out == 1)
                     {
-                        A_max.getData(total_loc, i_group) = A_cpu.getData(total_loc, i_group) > 0.5 ? 1 : 0;
+                        A_max.setData(total_loc, i_group, A_cpu.getData(total_loc, i_group) > 0.5 ? 1 : 0);
                     }
                     total_loc += out;
                 }
@@ -564,16 +600,17 @@ int Net::test(const std::string& info, Matrix* X, Matrix* Y, Matrix* A, int outp
         }
         //A_max->print();
 
-        for (int i = 0; i < (std::min)(group_size, output_group); i++)
+        for (int i = 0; i < (std::min)(data_size, output_group); i++)
         {
             int o = A_max.indexColMaxAbs(i);
             int e = Y->indexColMaxAbs(i);
             LOG("{:3} ({:6.3f}) --> {:3}\n", o, A_cpu.getData(o, i), e);
         }
-        std::vector<int> right(y_size, 0), total(y_size, 0);
+        right.resize(y_size, 0);
+        total.resize(y_size, 0);
         int right_total = 0;
         int total_total = 0;
-        for (int i = 0; i < group_size; i++)
+        for (int i = 0; i < data_size; i++)
         {
             for (int j = 0; j < y_size; j++)
             {
@@ -591,23 +628,26 @@ int Net::test(const std::string& info, Matrix* X, Matrix* Y, Matrix* A, int outp
         }
 
         double accuracy_total = 1.0 * right_total / total_total;
+        if (result_ptr)
+        {
+            *result_ptr = accuracy_total;
+        }
         LOG("Total accuracy: {:.2f}% ({}/{}) (error/total)\n", 100 * accuracy_total, total_total - right_total, total_total);
 
         int i_group = 0;
         int total_group = 0;
-        int count0 = 0, count1 = 0;
+        if (resultv_ptr)
+        {
+            resultv_ptr->resize(group.size());
+        }
         for (int i = 0; i < y_size; i++)
         {
-            if (right[i] == total[i])    //若total为0也视为正确
+            double accur = 1.0 * right[i] / total[i];
+            LOG("{}: {:.2f}% ({}/{})", i, accur * 100.0, total[i] - right[i], total[i]);
+            if (resultv_ptr)
             {
-                count1++;
+                (*resultv_ptr)[i_group].push_back({ accur, right[i], total[i] });
             }
-            else if (right[i] == 0)
-            {
-                count0++;
-            }
-            double accur = 100.0 * right[i] / total[i];
-            LOG("{}: {:.2f}% ({}/{})", i, accur, total[i] - right[i], total[i]);
             if (group.size() > i_group && i == total_group + group[i_group] - 1)
             {
                 LOG("\n");
@@ -623,17 +663,7 @@ int Net::test(const std::string& info, Matrix* X, Matrix* Y, Matrix* A, int outp
                 LOG("\n");
             }
         }
-        //若准确率只有1或0，则表示该结果有问题
-        //但若全是1，则没有问题
-        if (count0 > 0 && count0 + count1 == y_size)
-        {
-            ret = 1;
-        }
         ConsoleControl::setColor(CONSOLE_COLOR_NONE);
-        if (result)
-        {
-            *result = accuracy_total;
-        }
     }
     else if (test_type == 2)
     {
@@ -643,7 +673,7 @@ int Net::test(const std::string& info, Matrix* X, Matrix* Y, Matrix* A, int outp
         LOG("Label --> Infer\n");
         //std::string chars = R"( `.^,:~"<!ct+{i7?u30pw4A8DX%#HWM)";
         std::string chars = " .oO";
-        auto out_char = [&chars](float& f)
+        auto out_char = [&chars](float f)
         {
             const int m = chars.size();
             int n = f * m;
@@ -670,7 +700,8 @@ int Net::test(const std::string& info, Matrix* X, Matrix* Y, Matrix* A, int outp
         };
         out_matrix(Y_cpu, A_cpu, 0);
 
-        std::vector<int64_t> right(2, 0), total(2, 0);
+        right.resize(2, 0);
+        total.resize(2, 0);
         for (int64_t i = 0; i < Y_cpu.getDataSize(); i++)
         {
             if (Y_cpu.getData(i) < 0.5)
@@ -756,7 +787,7 @@ void Net::combineWeights(std::vector<Matrix*>& weights, Matrix& result)
 void Net::initWeights()
 {
     auto filler = option_->getEnum("train", "init_weight", RANDOM_FILL_XAVIER);
-    LOG("Initialized weight method is {}\n", option_->getStringFromEnum(filler));
+    //LOG("Initialized weight method is {}\n", option_->getStringFromEnum(filler));
 
     for (auto& op : op_queue_)
     {
@@ -800,12 +831,7 @@ void Net::attack(Matrix* X, Matrix* Y)
 //获取一个大组的攻击样本
 void Net::groupAttack(Matrix* X, Matrix* Y, int attack_times)
 {
-    test("Attack net", X, Y, nullptr, 0, 0, attack_times, nullptr);
-}
-
-void Net::adjustByEpoch(int epoch, int total_epoch)
-{
-    solver_.adjustLearnRate(epoch, total_epoch);
+    test(X, Y, nullptr, "Attack net", 0, 0, attack_times, nullptr);
 }
 
 //Net* Net::clone(int clone_data /*= 0*/)

@@ -73,7 +73,7 @@
       <AdditionalLibraryDirectories>$(CUDA_PATH)/lib/x64;$(HIP_PATH)/lib;../lib/x64;$(SolutionDir)$(Platform)\$(Configuration)\</AdditionalLibraryDirectories>
       <ForceSymbolReferences>%(ForceSymbolReferences)</ForceSymbolReferences>
       <Profile>true</Profile>
-      <AdditionalDependencies>cccc-cuda.lib;openblas.lib;nvml.lib;cudart.lib;cublas.lib;cudnn_adv_infer.lib;cudnn_adv_train.lib;cudnn_cnn_infer.lib;cudnn_cnn_train.lib;cudnn_ops_infer.lib;cudnn_ops_train.lib;cccc-hip.lib;rocblas.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>cccc-cuda.lib;openblas.lib;cudart.lib;cublas.lib;cudnn_adv.lib;cudnn_cnn.lib;cudnn_ops.lib;cudnn_graph.lib;cccc-hip.lib;rocblas.lib;hiprtc.lib;miopen.lib;amdhip64.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <Lib>
       <AdditionalDependencies>cccc-cuda.lib;openblas.lib;nvml.lib;cudart.lib;cublas.lib;cudnn_adv_infer.lib;cudnn_adv_train.lib;cudnn_cnn_infer.lib;cudnn_cnn_train.lib;cudnn_ops_infer.lib;cudnn_ops_train.lib;%(AdditionalDependencies)</AdditionalDependencies>
@@ -120,8 +120,7 @@
       <AdditionalLibraryDirectories>$(CUDA_PATH)/lib/x64;../lib/x64;$(SolutionDir)$(Platform)\$(Configuration)\</AdditionalLibraryDirectories>
     </Lib>
     <PreBuildEvent>
-      <Command>
-      </Command>
+      <Command>auto_version.exe --version $(ProjectName).rc --date2</Command>
     </PreBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
@@ -135,6 +134,7 @@
     <ClCompile Include="DataPreparerTxt.cpp" />
     <ClCompile Include="DataPreparer.cpp" />
     <ClCompile Include="Layer.cpp" />
+    <ClCompile Include="Log.cpp" />
     <ClCompile Include="Matrix.cpp" />
     <ClCompile Include="MatrixData.cpp" />
     <ClCompile Include="MatrixEx.cpp" />
@@ -143,9 +143,10 @@
     <ClCompile Include="NetCifa.cpp" />
     <ClCompile Include="NetLayer.cpp" />
     <ClCompile Include="Option.cpp" />
-    <ClCompile Include="Brain.cpp" />
+    <ClCompile Include="MainProcess.cpp" />
     <ClCompile Include="predict.cpp" />
     <ClCompile Include="Solver.cpp" />
+    <ClCompile Include="TensorDesc.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\mlcc\Cifa.h" />
@@ -159,6 +160,7 @@
     <ClInclude Include="..\..\mlcc\Random.h" />
     <ClInclude Include="..\..\mlcc\SimpleBuffer.h" />
     <ClInclude Include="..\..\mlcc\Timer.h" />
+    <ClInclude Include="..\..\mlcc\vramusage.h" />
     <ClInclude Include="blas_types.h" />
     <ClInclude Include="cblas_real.h" />
     <ClInclude Include="hip_libs.inc" />
@@ -172,7 +174,6 @@
     <ClInclude Include="DataPreparer.h" />
     <ClInclude Include="Layer.h" />
     <ClInclude Include="Log.h" />
-    <ClInclude Include="cuda_half_hack.h" />
     <ClInclude Include="MatrixData.h" />
     <ClInclude Include="MatrixOp.h" />
     <ClInclude Include="Net.h" />
@@ -185,8 +186,9 @@
     <ClInclude Include="resource.h" />
     <ClInclude Include="rocblas_real.h" />
     <ClInclude Include="Solver.h" />
+    <ClInclude Include="TensorDesc.h" />
     <ClInclude Include="VectorMath.h" />
-    <ClInclude Include="Brain.h" />
+    <ClInclude Include="MainProcess.h" />
     <ClInclude Include="Option.h" />
     <ClInclude Include="types.h" />
   </ItemGroup>
@@ -197,9 +199,6 @@
   <ItemGroup>
     <Text Include="..\CMakeLists.txt" />
     <Text Include="CMakeLists.txt" />
-  </ItemGroup>
-  <ItemGroup>
-    <ResourceCompile Include="cccc.rc" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

@@ -1,11 +1,13 @@
 ﻿#pragma once
-#include "INIReader.h"
+#include "ConsoleControl.h"
 #include "Log.h"
 #include "strfunc.h"
 #include "types.h"
 #include <functional>
 #include <string>
 #include <typeinfo>
+#define VIRTUAL_GET_STRING
+#include "INIReader.h"
 
 namespace cccc
 {
@@ -56,20 +58,70 @@ private:
     {
         for (auto m : members)
         {
-            enum_map_[typeid(T).name()][m.first] = m.second;
+            enum_map_[typeid(T).name()][m.first] = int(m.second);
             //反查map只保留第一个，注册时需注意顺序
-            if (enum_map_reverse_[typeid(T).name()].count(m.second) == 0)
+            if (enum_map_reverse_[typeid(T).name()].count(int(m.second)) == 0)
             {
-                enum_map_reverse_[typeid(T).name()][m.second] = m.first;
+                enum_map_reverse_[typeid(T).name()][int(m.second)] = m.first;
             }
         }
     }
     void initEnums();
 
+    mutable std::map<std::string, std::map<std::string, int>> outputed_keys_;
+
+private:
+    template <typename T>
+    void outputValue(const std::string& section, const std::string& key, const T& value, const T& default_value) const
+    {
+        int count = outputed_keys_[section][key]++;
+        if (output_ == 0
+            || (output_ == 2 && value == default_value))
+        {
+            return;
+        }
+        if (count == 0)
+        {
+            ConsoleControl::setColor(CONSOLE_COLOR_GREEN);
+            LOG("  [\"{}\"][\"{}\"] = {}\n", section, key, value);
+            ConsoleControl::setColor(CONSOLE_COLOR_NONE);
+        }
+    }
+    int output_ = 1;    //0表示不输出，1表示输出，2表示若与默认值不同则输出
+
 public:
+    void setOutput(int output)
+    {
+        output_ = output;
+    }
+    std::string getString(const std::string& section, const std::string& key, const std::string& default_value = "") const
+    {
+        auto value = INIReaderNoUnderline::getString(section, key, default_value);
+        outputValue(section, key, value.substr(0, value.find_first_of(";\n")), default_value);
+        return value;
+    }
+    int getInt(const std::string& section, const std::string& key, int default_value = 0) const
+    {
+        auto value = INIReaderNoUnderline::getInt(section, key, default_value);
+        outputValue(section, key, value, default_value);
+        return value;
+    }
+    float getReal(const std::string& section, const std::string& key, float default_value = 0) const
+    {
+        float value = INIReaderNoUnderline::getReal(section, key, default_value);
+        outputValue(section, key, value, default_value);
+        return value;
+    }
+    template <typename T>
+    std::vector<T> getVector(const std::string& section, const std::string& key, const std::string& split_chars = ",", const std::vector<T>& default_v = {}) const
+    {
+        auto value = INIReaderNoUnderline::getVector<T>(section, key, split_chars, default_v);
+        outputValue(section, key, value, default_v);
+        return value;
+    }
     //将字串转为枚举值
     template <typename T>
-    T transEnum(const std::string& value_str)
+    T getEnumFromString(const std::string& value_str)
     {
         return T(enum_map_[typeid(T).name()][value_str]);
     }
@@ -78,10 +130,11 @@ public:
     template <typename T>
     T getEnum(const std::string& section, const std::string& key, T default_value = T(0))
     {
-        std::string value_str = getString(section, key);
+        std::string value_str = INIReaderNoUnderline::getString(section, key);
+        T v = default_value;
         if (enum_map_[typeid(T).name()].count(value_str) > 0)
         {
-            return T(enum_map_[typeid(T).name()][value_str]);
+            v = T(enum_map_[typeid(T).name()][value_str]);
         }
         else
         {
@@ -89,18 +142,52 @@ public:
             {
                 LOG("Warning: undefined value \"{}\" for {}, set to {}!\n", value_str, key, getStringFromEnum(T(0)));
             }
-            return default_value;
         }
+        outputValue(section, key, getStringFromEnum(v), getStringFromEnum(default_value));
+        return v;
     }
 
     //反查枚举值为字串
     template <typename T>
     std::string getStringFromEnum(T e)
     {
-        return enum_map_reverse_[typeid(T).name()][e];
+        return enum_map_reverse_[typeid(T).name()][int(e)];
+    }
+
+public:
+    //去掉下划线，使输出略为美观
+    static std::string removeEndUnderline(const std::string& str)
+    {
+        if (!str.empty() && str.back() == '_')
+        {
+            return str.substr(0, str.size() - 1);
+        }
+        return str;
     }
 };
 
-//#define OPTION_GET_VALUE_INT(op, v, default_v) v = op->getInt("train", #v, default_v)
+//以下宏用于简化参数的读取，不可用于其他，必须预先定义option和section
+#define NAME_STR(a) (Option::removeEndUnderline(#a).c_str())
+#define OPTION_GET_INT(a) \
+    do { \
+        a = option->getInt(section, NAME_STR(a), a); \
+    } while (0)
+#define OPTION_GET_REAL(a) \
+    do { \
+        a = option->getReal(section, NAME_STR(a), a); \
+    } while (0)
+#define OPTION_GET_STRING(a) \
+    do { \
+        a = option->getString(section, NAME_STR(a), a); \
+    } while (0)
+#define OPTION_GET_NUMVECTOR(v, size, fill) \
+    do { \
+        v.resize(size, fill); \
+        v = option->getVector<double>(section, NAME_STR(v), ",", v); \
+    } while (0)
+#define OPTION_GET_STRINGVECTOR(v) \
+    do { \
+        v = option->getVector<std::string>(section, NAME_STR(v), ",", v); \
+    } while (0)
 
 }    // namespace cccc

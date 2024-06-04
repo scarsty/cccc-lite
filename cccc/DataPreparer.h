@@ -59,6 +59,10 @@ protected:
     std::string section_ = "data_preparer";
     Option* option_;
 
+    //for macro in Option.h
+    std::string& section = section_;
+    Option*& option = option_;
+
     //图的尺寸
     std::vector<int> dim0_, dim1_;
 
@@ -72,25 +76,6 @@ public:
     std::string getMessage(int i);
     int isFill() { return fill_; }
 
-protected:
-    //以下函数仅用于简化读取
-    template <typename T>
-    static void fillNumVector(std::vector<T>& v, double value, int size)
-    {
-        for (int i = v.size(); i < size; i++)
-        {
-            v.push_back(T(value));
-        }
-    }
-    //去掉下划线，使输出略为美观
-    static std::string removeEndUnderline(const std::string& str)
-    {
-        if (!str.empty() && str.back() == '_')
-        {
-            return str.substr(0, str.size() - 1);
-        }
-        return str;
-    }
 };
 
 //template <typename T>
@@ -109,49 +94,6 @@ protected:
 //        t.join();
 //    }
 //}
-//以下宏仅用于简化准备器的参数的读取，不可用于其他
-#define NAME_STR(a) (removeEndUnderline(#a).c_str())
-#define OPTION_GET_INT(a) \
-    do { \
-        a = option_->getInt(section_, #a, a); \
-        LOG("  {} = {}\n", NAME_STR(a), a); \
-    } while (0)
-#define OPTION_GET_INT2(a, v) \
-    do { \
-        a = option_->getInt(section_, #a, v); \
-        LOG("  {} = {}\n", NAME_STR(a), a); \
-    } while (0)
-#define OPTION_GET_REAL(a) \
-    do { \
-        a = option_->getReal(section_, #a, a); \
-        LOG("  {} = {}\n", NAME_STR(a), a); \
-    } while (0)
-#define OPTION_GET_REAL2(a, v) \
-    do { \
-        a = option_->getReal(section_, #a, v); \
-        LOG("  {} = {}\n", NAME_STR(a), a); \
-    } while (0)
-#define OPTION_GET_STRING(a) \
-    do { \
-        a = option_->getString(section_, #a, a); \
-        LOG("  {} = {}\n", NAME_STR(a), a); \
-    } while (0)
-#define OPTION_GET_NUMVECTOR(v, size, fill) \
-    do { \
-        v = option_->getRealVector(section_, #v, ",",  v); \
-        v.resize(size, fill); \
-        LOG("  {} = {}\n", NAME_STR(v), v); \
-    } while (0)
-#define OPTION_GET_NUMVECTOR2(v, size, fill, default_v) \
-    do { \
-        v = option_->getRealVector(section_, #v, ",", default_v); \
-        v.resize(size, fill); \
-        LOG("  {} = {}\n", NAME_STR(v), v); \
-    } while (0)
-#define OPTION_GET_STRINGVECTOR(v) \
-    do { \
-        v = strfunc::splitString(option_->getString(section_, #v), ","); \
-        LOG("  {} = {}\n", NAME_STR(v), v); \
-    } while (0)
+
 
 }    // namespace cccc

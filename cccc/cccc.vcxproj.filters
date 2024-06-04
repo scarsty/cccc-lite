@@ -11,9 +11,6 @@
     <Filter Include="base">
       <UniqueIdentifier>{e6a60d5c-664d-4817-bcf1-85ab3ff8dc78}</UniqueIdentifier>
     </Filter>
-    <Filter Include="brain">
-      <UniqueIdentifier>{0b817fea-8808-42c4-8adb-6c357148dd45}</UniqueIdentifier>
-    </Filter>
     <Filter Include="data">
       <UniqueIdentifier>{2a3933f8-115f-45e7-834d-0367a65f965c}</UniqueIdentifier>
       <Extensions>Data*.*</Extensions>
@@ -50,6 +47,9 @@
     <Filter Include="gpu">
       <UniqueIdentifier>{81cb7be8-6daa-48f2-99dd-17f39bfde5bc}</UniqueIdentifier>
     </Filter>
+    <Filter Include="mainprocess">
+      <UniqueIdentifier>{0b817fea-8808-42c4-8adb-6c357148dd45}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="DataPreparer.cpp">
@@ -58,8 +58,8 @@
     <ClCompile Include="Matrix.cpp">
       <Filter>matrix</Filter>
     </ClCompile>
-    <ClCompile Include="Brain.cpp">
-      <Filter>brain</Filter>
+    <ClCompile Include="MainProcess.cpp">
+      <Filter>mainprocess</Filter>
     </ClCompile>
     <ClCompile Include="Option.cpp">
       <Filter>option</Filter>
@@ -115,6 +115,12 @@
     <ClCompile Include="..\..\mlcc\filefunc.cpp">
       <Filter>mlcc</Filter>
     </ClCompile>
+    <ClCompile Include="TensorDesc.cpp">
+      <Filter>matrix</Filter>
+    </ClCompile>
+    <ClCompile Include="Log.cpp">
+      <Filter>log</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="DataPreparer.h">
@@ -126,8 +132,8 @@
     <ClInclude Include="VectorMath.h">
       <Filter>math</Filter>
     </ClInclude>
-    <ClInclude Include="Brain.h">
-      <Filter>brain</Filter>
+    <ClInclude Include="MainProcess.h">
+      <Filter>mainprocess</Filter>
     </ClInclude>
     <ClInclude Include="types.h">
       <Filter>base</Filter>
@@ -150,14 +156,8 @@
     <ClInclude Include="blas_types.h">
       <Filter>math</Filter>
     </ClInclude>
-    <ClInclude Include="cublas_real.h">
-      <Filter>math</Filter>
-    </ClInclude>
     <ClInclude Include="cblas_real.h">
       <Filter>math</Filter>
-    </ClInclude>
-    <ClInclude Include="cuda_half_hack.h">
-      <Filter>gpu</Filter>
     </ClInclude>
     <ClInclude Include="dll_export.h">
       <Filter>base</Filter>
@@ -229,14 +229,23 @@
     <ClInclude Include="math_supplement.h">
       <Filter>math</Filter>
     </ClInclude>
-    <ClInclude Include="rocblas_real.h">
-      <Filter>math</Filter>
-    </ClInclude>
     <ClInclude Include="..\..\mlcc\INIReaderBin.h">
       <Filter>mlcc</Filter>
     </ClInclude>
     <ClInclude Include="hip_libs.inc">
       <Filter>gpu</Filter>
+    </ClInclude>
+    <ClInclude Include="cublas_real.h">
+      <Filter>gpu</Filter>
+    </ClInclude>
+    <ClInclude Include="rocblas_real.h">
+      <Filter>gpu</Filter>
+    </ClInclude>
+    <ClInclude Include="TensorDesc.h">
+      <Filter>matrix</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\mlcc\vramusage.h">
+      <Filter>mlcc</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -248,8 +257,5 @@
     <None Include="cuda_libs.inc">
       <Filter>gpu</Filter>
     </None>
-  </ItemGroup>
-  <ItemGroup>
-    <ResourceCompile Include="cccc.rc" />
   </ItemGroup>
 </Project>

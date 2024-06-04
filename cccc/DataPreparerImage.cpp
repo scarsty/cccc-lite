@@ -29,7 +29,7 @@ void DataPreparerImage::init2()
     OPTION_GET_REAL(d_noise_);
 
     OPTION_GET_NUMVECTOR(d_contrast_, 2, 0);
-    OPTION_GET_NUMVECTOR(d_brightness_,  2, 0);
+    OPTION_GET_NUMVECTOR(d_brightness_, 2, 0);
 
     //LOG("Options for image processing {} end\n\n", section_);
 }
@@ -62,7 +62,7 @@ void DataPreparerImage::transOne(Matrix& X1, Matrix& Y1)
         need_limit = true;
         for (int i = 0; i < X1.getDataSize(); i++)
         {
-            X1.getData(i, 0) += rand_.rand() * d_noise_ * 2 - d_noise_;
+            X1.setData(i, 0, X1.getData(i, 0) + rand_.rand() * d_noise_ * 2 - d_noise_);
         }
     }
 

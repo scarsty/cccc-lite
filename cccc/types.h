@@ -1,15 +1,11 @@
 ﻿#pragma once
 
 #include "dll_export.h"
-#include <climits>
 #include <cfloat>
+#include <climits>
+#include <cstdint>
 
 #define VAR_NAME(a) #a
-
-//默认使用单精度，整个工程除公用部分，均应当使用real定义浮点数
-#ifndef REAL_PRECISION
-#define REAL_PRECISION 0
-#endif
 
 #define CCCC_NAMESPACE_BEGIN \
     namespace cccc \
@@ -19,28 +15,23 @@
 
 namespace cccc
 {
+using half = float;
 
-//realc的作用：某些半精度函数需要单精度的常数参数，例如池化和卷积
-//MYCUDNN_DATA_REAL_C作用类似
-#if REAL_PRECISION == 0
-using real = float;
-using realc = float;
-#define REAL_MAX FLT_MAX
-#define MYCUDNN_DATA_REAL CUDNN_DATA_FLOAT
-#define MYCUDNN_DATA_REAL_C CUDNN_DATA_FLOAT
-#elif REAL_PRECISION == 1
-using real = double;
-using realc = double;
-#define REAL_MAX DBL_MAX
-#define MYCUDNN_DATA_REAL CUDNN_DATA_DOUBLE
-#define MYCUDNN_DATA_REAL_C CUDNN_DATA_DOUBLE
-#elif REAL_PRECISION == 2
-using real = cccc_half;
-using realc = float;
-#define REAL_MAX 65504
-#define MYCUDNN_DATA_REAL CUDNN_DATA_HALF
-#define MYCUDNN_DATA_REAL_C CUDNN_DATA_FLOAT
-#endif
+//数据类型，因常用于Matrix，为避免重载冲突，使用严格的枚举类型
+enum class DataType
+{
+    FLOAT = 0,
+    DOUBLE = 1,
+    HALF = 2,
+    CURRENT = 65535,
+};
+
+//使用设备的类型，主要决定数据位置，同上使用严格的枚举类型
+enum class UnitType
+{
+    CPU = 0,
+    GPU,
+};
 
 //激活函数种类
 //注意如果需要引用CUDNN中的值，必须要按顺序写
@@ -158,6 +149,7 @@ enum AdjustLearnRateType
     ADJUST_LEARN_RATE_LINEAR_INTER,
     ADJUST_LEARN_RATE_STEPS,
     ADJUST_LEARN_RATE_STEPS_WARM,
+    ADJUST_LEARN_RATE_STEPS_AUTO,
 };
 
 enum BatchNormalizationType
@@ -214,6 +206,12 @@ enum PruneType
 {
     PRUNE_ACTIVE,
     PRUNE_WEIGHT,
+};
+
+struct TestInfo
+{
+    double accuracy = 0;
+    int64_t right = 0, total = 0;
 };
 
 }    // namespace cccc

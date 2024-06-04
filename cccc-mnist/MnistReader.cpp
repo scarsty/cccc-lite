@@ -29,21 +29,22 @@ void MnistReader::getDataSize(const std::string& file_image, int* w, int* h, int
     }
 }
 
-void MnistReader::readLabelFile(const std::string& filename, real* y_data)
+void MnistReader::readLabelFile(const std::string& filename, void* y_data, DataType data_type)
 {
     int s = label_;
     auto content = filefunc::readFile(filename);
     reverse(content.data() + 4, 4);
     int n = *(int*)(content.data() + 4);
-    memset(y_data, 0, sizeof(real) * n * s);
+    memset(y_data, 0, MatrixData::getDataTypeSize(data_type) * n * s);
     for (int i = 0; i < n; i++)
     {
         int pos = *(content.data() + 8 + i);
-        y_data[i * s + pos % s] = 1;
+        MatrixData::setData((char*)y_data + MatrixData::getDataTypeSize(data_type) * (i * s + pos % s), data_type, 1);
+        //y_data[i * s + pos % s] = 1;
     }
 }
 
-void MnistReader::readImageFile(const std::string& filename, real* x_data)
+void MnistReader::readImageFile(const std::string& filename, void* x_data, DataType data_type)
 {
     auto content = filefunc::readFile(filename);
     reverse(content.data() + 4, 4);
@@ -53,11 +54,12 @@ void MnistReader::readImageFile(const std::string& filename, real* x_data)
     int w = *(int*)(content.data() + 8);
     int h = *(int*)(content.data() + 12);
     int size = n * w * h;
-    memset(x_data, 0, sizeof(real) * size);
+    memset(x_data, 0, MatrixData::getDataTypeSize(data_type) * size);
     for (int i = 0; i < size; i++)
     {
         auto v = *(uint8_t*)(content.data() + 16 + i);
-        x_data[i] = real(v / 255.0);
+        auto p = (char*)x_data + MatrixData::getDataTypeSize(data_type) * i;
+        MatrixData::setData(p, data_type, v / 255.0);
     }
 }
 
@@ -68,8 +70,8 @@ void MnistReader::readData(const std::string& file_label, const std::string& fil
     X.resize(w, h, 1, n);
     Y.resize(label_, n);
     //train.createA();
-    readImageFile(file_image, X.getDataPtr());
-    readLabelFile(file_label, Y.getDataPtr());
+    readImageFile(file_image, X.getDataPtr(), X.getDataType());
+    readLabelFile(file_label, Y.getDataPtr(), Y.getDataType());
 }
 
 void MnistReader::reverse(char* c, int n)

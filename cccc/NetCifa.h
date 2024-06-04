@@ -21,12 +21,14 @@ private:
 
     std::map<cifa::Object, MatrixSP, CompareObject> map_matrix_;
     std::map<cifa::Object, std::vector<MatrixOp>, CompareObject> map_loss_;
+    std::map<cifa::Object, std::vector<MatrixSP>, CompareObject> map_matrix_group_;
 
     cifa::Object registerMatrix(MatrixSP&& m);
     cifa::Object registerLoss(std::vector<MatrixOp> loss);
+    cifa::Object registerMatrixGroup(std::vector<MatrixSP> mg);
     static std::vector<cifa::Object> getVector(cifa::ObjectVector& v, int index);
     static std::vector<int> getIntVector(cifa::ObjectVector& v, int index);
-    static std::vector<real> getRealVector(cifa::ObjectVector& v, int index);
+    static std::vector<float> getRealVector(cifa::ObjectVector& v, int index);
 
     std::string message_;
 

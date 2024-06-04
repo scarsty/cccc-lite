@@ -7,7 +7,12 @@ namespace cccc
 {
 
 DataPreparer::DataPreparer()
-    : X(UnitType::CPU), Y(UnitType::CPU), X0(UnitType::CPU), Y0(UnitType::CPU), LW(UnitType::CPU), LW0(UnitType::CPU)
+    : X(DataType::CURRENT, UnitType::CPU),
+      Y(DataType::CURRENT, UnitType::CPU),
+      X0(DataType::CURRENT, UnitType::CPU),
+      Y0(DataType::CURRENT, UnitType::CPU),
+      LW(DataType::CURRENT, UnitType::CPU),
+      LW0(DataType::CURRENT, UnitType::CPU)
 {
     //rand_.set_seed();
     rand_.set_parameter(0, 1);

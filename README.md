@@ -22,10 +22,9 @@ CCCC的功能并不及其他的开源平台，其特色是简单的配置和单�
 - 检查环境变量CUDA_PATH的值，通常应该是“C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\vxx.x”（后面的数字为版本号，有可能不同）。
 - 在cccc-cuda.vcproj文件中，有两处涉及cuda版本号，类似“CUDA xx.x.targets/props”，需按照自己的实际情况手动修改。
 - 需要安装线性代数库OpenBLAS（推荐使用vcpkg或者msys2），将其库文件置于链接器可以找到的位置。
-- 需要nvml库和nvml.dll，请使用显卡驱动中自带的，通常dll文件位于“C:\Program Files\NVIDIA Corporation\NVSMI”或者“C:\Windows\system32”，该目录有可能不在环境变量中，请自行设置或将dll文件复制出来。
-- 如需支持AMD的显卡，则应下载AMD的相关开发包并安装，同时检查gpu_lib.h中对应的宏。注意miopen尚没有Windows版本，目前计算卷积的速度很慢。
+- 如需支持AMD的显卡，则应下载AMD的相关开发包并安装，同时检查gpu_lib.h中对应的宏。注意miopen仅有非官方编译的Windows版本，目前计算卷积的速度很慢。
 - 查看gpu_lib.h开头的ENABLE_CUDA和ENABLE_HIP的设置，修改此处或配置中的预处理部分打开或关闭对应的平台。
-- 一些dll文件默认情况并不在PATH环境变量中，应手动复制到work目录或者PATH环境变量中的目录，包括：openblas.dll，nvml.dll等。
+- 一些dll文件默认情况并不在PATH环境变量中，应手动复制到work目录或者PATH环境变量中的目录，包括openblas.dll等。
 - 下载MNIST的文件解压后，放入work/mnist目录，文件名应为：t10k-images.idx3-ubyte，t10k-labels.idx1-ubyte，train-images.idx3-ubyte，train-labels.idx1-ubyte。某些解压软件可能解压后中间的.会变成-，请自行修改。
 - 编译Visual Studio工程，如只需要核心功能，请仅编译will-windows。执行以下命令测试效果，正常情况下准确率应在99%以上。
   ```shell
@@ -64,4 +63,8 @@ logo由Dr. Cheng ZD设计。
 
 ### 关于lite版
  
-lite版只支持几个基本的激活函数和卷积、池化等基本连接。仅能使用一张显卡训练。
+lite版只支持几个基本的激活函数和卷积、池化等基本连接。
+
+仅能使用一张显卡训练。
+
+不支持半精度。

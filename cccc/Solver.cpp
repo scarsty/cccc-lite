@@ -14,7 +14,7 @@ Solver::~Solver()
     destory();
 }
 
-real Solver::getMomentum() const
+float Solver::getMomentum() const
 {
     //if (momentum_clear_epoch_ > 0 && epoch % momentum_clear_epoch_ == 0)
     //{
@@ -24,32 +24,31 @@ real Solver::getMomentum() const
 }
 
 //求解器，即如何更新参数的定义
-void Solver::init(Option* op, std::string section, Matrix& W)
+void Solver::init(Option* option, std::string section, Matrix& W)
 {
-    dW_.resize(W);
+    dW_.resize(W.getDim());
     dW_.fillData(0);
     //batch_ = batch;
-    weight_decay_ = op->getReal(section, "weight_decay", 0);
-    weight_decay_l1_ = op->getReal(section, "weight_decay_l1", 0);
+    OPTION_GET_REAL(weight_decay_);
+    OPTION_GET_REAL(weight_decay_l1_);
 
-    restrict_dweight_ = op->getVector<real>(section, "restrict_dweight", ",", restrict_dweight_);
+    restrict_dweight_ = option->getVector<float>(section, "restrict_dweight", ",", restrict_dweight_);
     restrict_dweight_.resize(2);
 
     if (weight_decay_l1_ != 0)
     {
-        W_sign_.resize(W);
+        W_sign_.resize(W.getDim());
     }
 
     //求解器设定
-    solver_type_ = op->getEnum(section, "solver", SOLVER_SGD);
+    solver_type_ = option->getEnum(section, "solver", SOLVER_SGD);
+    //LOG("Solver type is {}\n", op->getStringFromEnum(solver_type_));
 
-    LOG("Solver type is {}\n", op->getStringFromEnum(solver_type_));
+    OPTION_GET_REAL(momentum_);
+    OPTION_GET_INT(momentum_clear_epoch_);
 
-    momentum_ = op->getReal(section, "momentum", 0.9);
-    momentum_clear_epoch_ = op->getInt(section, "momentum_clear_epoch", -1);
-
-    switch_sgd_epoch_ = op->getInt(section, "switch_sgd_epoch", -1);
-    switch_sgd_random_ = op->getReal(section, "switch_sgd_random", 0);
+    OPTION_GET_REAL(switch_sgd_epoch_);
+    OPTION_GET_REAL(switch_sgd_random_);
 
     destory();
 
@@ -60,49 +59,48 @@ void Solver::init(Option* op, std::string section, Matrix& W)
     case SOLVER_NAG:
         momentum_ = 0;
         real_vector_.resize(1);
-        real_vector_[0] = op->getReal(section, "momentum", 0.9);
+        real_vector_[0] = option->getReal(section, "momentum", 0.9);
         W_vector_.push_back(W.clone());
         break;
     case SOLVER_ADA_DELTA:
     case SOLVER_ADAM:
     case SOLVER_RMS_PROP:
         real_vector_.resize(4);
-        real_vector_[0] = op->getReal(section, "ada_epsilon", 1e-6);
-        real_vector_[1] = op->getReal(section, "ada_rou", 0.95);
-        real_vector_[2] = op->getReal(section, "ada_beta1", 0.95);
-        real_vector_[3] = op->getReal(section, "ada_beta2", 0.95);
+        real_vector_[0] = option->getReal(section, "ada_epsilon", 1e-6);
+        real_vector_[1] = option->getReal(section, "ada_rou", 0.95);
+        real_vector_[2] = option->getReal(section, "ada_beta1", 0.95);
+        real_vector_[3] = option->getReal(section, "ada_beta2", 0.95);
         if (solver_type_ == SOLVER_RMS_PROP)
         {
-            W_vector_.resize(2);
+            W_vector_.resize(1);
         }
         else
         {
-            W_vector_.resize(3);
+            W_vector_.resize(2);
         }
         for (auto& m : W_vector_)
         {
-            m.resize(W);
+            m.resize(W.getDim());
             m.fillData(0);
         }
         break;
     }
 
     //学习率相关参数
-    int train_epochs = op->getInt("train", "train_epochs", 1);
+    int train_epochs = 1;
+    OPTION_GET_INT(train_epochs);
+    lr_adjust_method_ = option->getEnum(section, "lr_adjust_method", ADJUST_LEARN_RATE_FIXED);
 
-    lr_adjust_method_ = op->getEnum(section, "lr_adjust_method", ADJUST_LEARN_RATE_FIXED);
-
-    learn_rate_base_ = op->getReal(section, "learn_rate_base", 1e-2);
+    OPTION_GET_REAL(learn_rate_base_);
     learn_rate_ = learn_rate_base_;
+    OPTION_GET_REAL(lr_weight_scale_);
+    OPTION_GET_REAL(lr_bias_scale_);
+    OPTION_GET_INT(lr_steps_);
+    OPTION_GET_REAL(lr_step_decay_);
+    OPTION_GET_INT(lr_test_stable_time_);
+    OPTION_GET_REAL(lr_test_std_limit_);
 
-    lr_weight_scale_ = op->getReal(section, "lr_weight_scale", 1);
-    lr_bias_scale_ = op->getReal(section, "lr_bias_scale", 2);
-
-    lr_steps_ = clip(op->getInt(section, "lr_steps", 3), 1, train_epochs);
-
-    lr_step_decay_ = op->getReal(section, "lr_step_decay", 10);
-
-    auto lr_inter_set = strfunc::splitString(op->getString(section, "lr_inter_set", ""), ",");
+    auto lr_inter_set = option->getStringVector(section, "lr_inter_set");
     for (auto& set_str : lr_inter_set)
     {
         auto sets = strfunc::splitString(set_str, ": ");
@@ -125,8 +123,10 @@ void Solver::init(Option* op, std::string section, Matrix& W)
 
 //以下求解器相关
 //调整学习率
-real Solver::adjustLearnRate(int epoch, int total_epoch)
+//返回值暂时无特殊定义
+int Solver::adjustLearnRate(int epoch, int total_epoch)
 {
+    auto pre_lr = learn_rate_;
     auto method = lr_adjust_method_;
     if (epoch == switch_sgd_epoch_ && solver_type_ != SOLVER_SGD)
     {
@@ -145,7 +145,7 @@ real Solver::adjustLearnRate(int epoch, int total_epoch)
         break;
     case ADJUST_LEARN_RATE_SCALE_INTER:
     {
-        real rate = lr_inter_rate_.back();
+        float rate = lr_inter_rate_.back();
         int i = findInter(epoch, lr_inter_epoch_);
         if (i < 0)
         {
@@ -160,7 +160,7 @@ real Solver::adjustLearnRate(int epoch, int total_epoch)
     }
     case ADJUST_LEARN_RATE_LINEAR_INTER:
     {
-        real rate = lr_inter_rate_.back();
+        float rate = lr_inter_rate_.back();
         int i = findInter(epoch, lr_inter_epoch_);
         if (i < 0)
         {
@@ -175,25 +175,35 @@ real Solver::adjustLearnRate(int epoch, int total_epoch)
     }
     case ADJUST_LEARN_RATE_STEPS:
     {
-        learn_rate_ = learn_rate_base_ * pow(lr_step_decay_, -(epoch - 1) / ((total_epoch + lr_steps_ - 1) / lr_steps_));
+        learn_rate_ = learn_rate_base_ * pow(lr_step_decay_, (epoch - 1) / ((total_epoch + lr_steps_ - 1) / lr_steps_));
         break;
     }
     case ADJUST_LEARN_RATE_STEPS_WARM:
     {
         if (epoch <= total_epoch / 5)
         {
-            learn_rate_ = learn_rate_base_ * pow(lr_step_decay_, (epoch - 1) / ((total_epoch / 5 + lr_steps_ - 1) / lr_steps_) - lr_steps_ + 1);
+            learn_rate_ = learn_rate_base_ * pow(lr_step_decay_, -(epoch - 1) / ((total_epoch / 5 + lr_steps_ - 1) / lr_steps_) + lr_steps_ - 1);
         }
         else
         {
-            learn_rate_ = learn_rate_base_ * pow(lr_step_decay_, -(epoch - 1 - total_epoch / 5) / ((total_epoch / 5 * 4 + lr_steps_ - 1) / lr_steps_));
+            learn_rate_ = learn_rate_base_ * pow(lr_step_decay_, (epoch - 1 - total_epoch / 5) / ((total_epoch / 5 * 4 + lr_steps_ - 1) / lr_steps_));
         }
         break;
     }
     default:
         break;
     }
-    return learn_rate_;
+    if (pre_lr != learn_rate_)
+    {
+        lr_keep_count_ = 0;
+        LOG("Learn rate is changed from {} to {}\n", pre_lr, learn_rate_);
+    }
+    return 0;
+}
+
+int Solver::adjustLearnRate2(int epoch, int total_epoch, const std::vector<std::vector<TestInfo>>& test_info)
+{
+    return 0;
 }
 
 void Solver::updateWeightBiasPre(Matrix& W)
@@ -239,7 +249,7 @@ void Solver::updateWeights(Matrix& W, int batch)
     {
     case SOLVER_SGD:
     case SOLVER_NAG:
-        Matrix::add(W.d(), dW_, dW_, 1, momentum_, 0);
+        Matrix::add(W.d(), dW_, dW_, 1, momentum_, 0);    //动量
         Matrix::add(W, dW_, W, 1 - weight_decay_ * learn_rate_, -learn_rate_ * lr_weight_scale_ / batch);
         //LOG("check dweight = {}, {}, {}\n", W.sumAbs(), dW.sumAbs() / batch, dW.sumAbs() / W.sumAbs() / batch);
         if (weight_decay_l1_ != 0)
@@ -249,28 +259,27 @@ void Solver::updateWeights(Matrix& W, int batch)
         }
         if (solver_type_ == SOLVER_NAG)
         {
-            Matrix::copyData(W, W_vector_[0]);
+            Matrix::copyData(W, W_vector_[0]);    //what's this?
         }
         break;
     case SOLVER_ADA_DELTA:
-        //LOG("ADADELTA\n");
-        //使用第0个矩阵作为真正的更新量，下同
-        MatrixEx::adaDeltaUpdate(W_vector_[1], W_vector_[2], W.d(), W_vector_[0], real_vector_[1], real_vector_[0]);
-        Matrix::add(W, W_vector_[0], W, 1 - weight_decay_ * learn_rate_, -1.0);
+        MatrixEx::adaDeltaUpdate(W_vector_[0], W_vector_[1], W.d(), dW_, real_vector_[1], real_vector_[0]);
+        Matrix::add(W, dW_, W, 1 - weight_decay_ * learn_rate_, -1.0);
         break;
     case SOLVER_ADAM:
-        MatrixEx::adamUpdate(W_vector_[1], W_vector_[2], W.d(), W_vector_[0], real_vector_[2], real_vector_[3], real_vector_[0], time_step_);
-        Matrix::add(W, W_vector_[0], W, 1 - weight_decay_ * learn_rate_, -learn_rate_ * lr_weight_scale_);
+        MatrixEx::adamUpdate(W_vector_[0], W_vector_[1], W.d(), dW_, real_vector_[2], real_vector_[3], real_vector_[0], time_step_);
+        Matrix::add(W, dW_, W, 1 - weight_decay_ * learn_rate_, -learn_rate_ * lr_weight_scale_);
         break;
     case SOLVER_RMS_PROP:
-        MatrixEx::adaRMSPropUpdate(W_vector_[1], W.d(), W_vector_[0], real_vector_[1], real_vector_[0]);
-        Matrix::add(W, W_vector_[0], W, 1, -learn_rate_ * lr_weight_scale_);
+        MatrixEx::adaRMSPropUpdate(W_vector_[0], W.d(), dW_, real_vector_[1], real_vector_[0]);
+        Matrix::add(W, dW_, W, 1, -learn_rate_ * lr_weight_scale_);
         break;
     }
 }
 
 void Solver::reset()
 {
+    dW_.fillData(0);
     for (auto& W : W_vector_)
     {
         W.fillData(0);
@@ -294,6 +303,7 @@ void Solver::destory()
 {
 }
 
+//在数组中查找x所在的区间，返回区间的左边界索引
 int Solver::findInter(int x, std::vector<int>& xv)
 {
     if (x < xv[0])

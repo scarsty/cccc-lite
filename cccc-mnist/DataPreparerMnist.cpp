@@ -69,7 +69,7 @@ void DataPreparerMnist::initData()
     {
         for (int i = 0; i < X0.getDataSize(); i++)
         {
-            X0.getData(i) = 1 - X0.getData(i);
+            X0.setData(i, 1 - X0.getData(i));
         }
     }
     LOG("Recheck fill_group: ");
@@ -106,7 +106,7 @@ void DataPreparerMnist::transOne(Matrix& X1, Matrix& Y1)
         {
             for (int iy = 0; iy < 20; iy++)
             {
-                X1.getData(4 + diff_x_ + ix, 4 + diff_y_ + iy, 0, 0) = x1c.getData(4 + ix, 4 + iy, 0, 0);
+                X1.setData(4 + diff_x_ + ix, 4 + diff_y_ + iy, 0, 0, x1c.getData(4 + ix, 4 + iy, 0, 0));
             }
         }
     }

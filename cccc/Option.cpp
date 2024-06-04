@@ -79,6 +79,19 @@ std::string Option::dealString(std::string str, bool allow_path)
 //第一项通常是默认项
 void Option::initEnums()
 {
+    registerEnum<DataType>(
+        {
+            { "float", DataType::FLOAT },
+            { "double", DataType::DOUBLE },
+            { "half", DataType::HALF },
+        });
+
+    registerEnum<UnitType>(
+        {
+            { "cpu", UnitType::CPU },
+            { "gpu", UnitType::GPU },
+        });
+
     registerEnum<ActiveFunctionType>(
         {
             { "none", ACTIVE_FUNCTION_NONE },
@@ -180,6 +193,7 @@ void Option::initEnums()
             { "linear_inter", ADJUST_LEARN_RATE_LINEAR_INTER },
             { "steps", ADJUST_LEARN_RATE_STEPS },
             { "steps_warm", ADJUST_LEARN_RATE_STEPS_WARM },
+            { "steps_auto", ADJUST_LEARN_RATE_STEPS_AUTO },
         });
 
     registerEnum<BatchNormalizationType>(

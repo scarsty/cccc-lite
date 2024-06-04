@@ -3,6 +3,8 @@
 enum
 {
     miopenFloat,
+    miopenDouble,
+    miopenHalf,
     miopenPoolingMax,
     miopenPoolingAverage,
     miopenPoolingAverageInclusive,

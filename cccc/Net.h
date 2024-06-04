@@ -24,6 +24,7 @@ protected:
     std::vector<MatrixOp> loss_;
 
     std::vector<Matrix*> weights_;
+    std::vector<Solver> solvers_for_weight_;
 
     MatrixSP X_, A_;
     MatrixSP Y_ = makeMatrixSP();
@@ -35,7 +36,7 @@ protected:
 
 public:
     void setGpu(GpuControl* gpu) { gpu_ = gpu; }
-    GpuControl* getCuda() { return gpu_; }
+    GpuControl* getGpu() { return gpu_; }
     void setDeviceSelf() { gpu_->setAsCurrent(); }
     Matrix& getAllWeights() { return all_weights_; }
     void setOption(Option* op) { option_ = op; }
@@ -48,10 +49,10 @@ public:
     Matrix& getY() { return *Y_; }
     Matrix& getA() { return *A_; }
     Matrix& getLossWeight() { return *loss_weight_; }
-    void initLossWeight() { loss_weight_->resize(*Y_); }
+    void initLossWeight() { loss_weight_->resize(Y_->getDim()); }
 
 public:
-    void active(Matrix* X, Matrix* Y, Matrix* A, bool back, realc* error);
+    void active(Matrix* X, Matrix* Y, Matrix* A, bool back, float* error);
 
     void updateWeight();
 
@@ -59,9 +60,9 @@ public:
     int loadWeight(const std::string& str, int load_mode = 0);
 
     int weightDataSize() const;
-    realc weightSumAbs() const;
-    realc weightNorm2() const;
-    void calNorm(int& n, realc& l1, realc& l2) const;
+    float weightSumAbs() const;
+    float weightNorm2() const;
+    void calNorm(int& n, float& l1, float& l2) const;
     void outputNorm() const;
 
 private:
@@ -69,8 +70,9 @@ private:
     std::vector<int> getTestGroup();
 
 public:
-    void setActivePhase(ActivePhaseType ap) {}
-    int test(const std::string& info, Matrix* X, Matrix* Y, Matrix* A, int output_group = 0, int test_type = 0, int attack_times = 0, realc* result = nullptr);
+    int test(Matrix* X, Matrix* Y, Matrix* A, const std::string& info = "",
+        int output_group = 0, int test_type = 0, int attack_times = 0,
+        double* result_ptr = nullptr, std::vector<std::vector<TestInfo>>* resultv_ptr = nullptr);
 
 protected:
     void combineWeights(std::vector<Matrix*>& weights, Matrix& result);
@@ -83,9 +85,9 @@ public:
 
 public:
     Solver& getSolver() { return solver_; }
-    virtual void adjustByEpoch(int epoch, int total_epoch);
 
 public:
+    virtual void doSomeThing() {}
     //Net* clone(int clone_data = 0);
 };
 

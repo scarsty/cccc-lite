@@ -35,14 +35,14 @@ private:
     std::vector<MatrixSP> out_;    //输出数据
     //以下参数一般外界不可见
     std::vector<int> para_int_;
-    std::vector<real> para_real_;
+    std::vector<float> para_real_;
     std::vector<Matrix> para_matrix_;    //某些计算需要的额外工作空间，因外界没有修改的必要，所以不用MatrixSP
     std::vector<std::vector<int>> para_int_v_;
 
 public:
     MatrixOp() = default;
     void set(MatrixOpType t, const std::vector<MatrixSP>& m_in, const std::vector<MatrixSP>& m_wb, const std::vector<MatrixSP>& m_out,
-        const std::vector<int>& i = {}, const std::vector<real>& r = {}, const std::vector<Matrix>& m2 = {}, const std::vector<std::vector<int>> iv = {})
+        const std::vector<int>& i = {}, const std::vector<float>& r = {}, const std::vector<Matrix>& m2 = {}, const std::vector<std::vector<int>> iv = {})
     {
         type_ = t;
         in_ = m_in;
@@ -54,7 +54,7 @@ public:
         para_int_v_ = iv;
         if (out_.size() > 0 && out_[0]->getDataSize() == 0)
         {
-            LOG(stderr, "Error: output is empty!\n");
+            LOG_ERR("Error: output is empty!\n");
         }
     }
 
@@ -81,20 +81,31 @@ public:
 
 public:
     static void getDefaultStridePadding(MatrixOpType type, const std::vector<int>& dim, std::vector<int>& stride, std::vector<int>& padding);
+    void setNeedReverse(bool r)
+    {
+        for (auto& m : in_)
+        {
+            m->setNeedBack(r);
+        }
+        for (auto& m : wb_)
+        {
+            m->setNeedBack(r);
+        }
+    }
 
 public:
     //下面这些函数会设置这个op的参数，并自动计算Y的尺寸返回
-    void as_scale(MatrixSP& X, MatrixSP& Y, real r);
-    void as_mul(MatrixSP& X1, MatrixSP& X2, MatrixSP& Y, real a = 1, std::vector<int> dim = {});
-    void as_elementMul(MatrixSP& X1, MatrixSP& X2, MatrixSP& Y, real a = 1);
-    void as_add(MatrixSP& X1, MatrixSP& X2, MatrixSP& Y, realc a = 1, realc b = 1);
+    void as_scale(MatrixSP& X, MatrixSP& Y, float r);
+    void as_mul(MatrixSP& X1, MatrixSP& X2, MatrixSP& Y, float a = 1, std::vector<int> dim = {});
+    void as_elementMul(MatrixSP& X1, MatrixSP& X2, MatrixSP& Y, float a = 1);
+    void as_add(MatrixSP& X1, MatrixSP& X2, MatrixSP& Y, float a = 1, float b = 1);
     void as_add(std::vector<MatrixSP>& X_vector, MatrixSP& Y);
-    void as_addBias(MatrixSP& X, MatrixSP& bias, MatrixSP& Y, realc a = 1, realc b = 1);
+    void as_addBias(MatrixSP& X, MatrixSP& bias, MatrixSP& Y, float a = 1, float b = 1);
     void as_concat(std::vector<MatrixSP>& X_vector, MatrixSP& Y);
     void as_active(MatrixSP& X, MatrixSP& Y, ActiveFunctionType af);
-    void as_active(MatrixSP& X, MatrixSP& Y, ActiveFunctionType af, std::vector<int>&& int_vector, std::vector<real>&& real_vector, std::vector<Matrix>&& matrix_vector);
-    void as_pool(MatrixSP& X, MatrixSP& Y, PoolingType pooling_type, int reverse, std::vector<int> window, std::vector<int> stride, std::vector<int> padding, realc a = 1);
-    void as_conv(MatrixSP& X, MatrixSP& W, MatrixSP& Y, std::vector<int> stride, std::vector<int> padding, int conv_type, realc a = 1);
+    void as_active(MatrixSP& X, MatrixSP& Y, ActiveFunctionType af, std::vector<int>&& int_vector, std::vector<float>&& real_vector, std::vector<Matrix>&& matrix_vector);
+    void as_pool(MatrixSP& X, MatrixSP& Y, PoolingType pooling_type, int reverse, std::vector<int> window, std::vector<int> stride, std::vector<int> padding, float a = 1);
+    void as_conv(MatrixSP& X, MatrixSP& W, MatrixSP& Y, std::vector<int> stride, std::vector<int> padding, int conv_type, float a = 1);
     void as_reshape(MatrixSP& X, MatrixSP& Y, std::vector<int>& dim);
     void as_max(MatrixSP& X1, MatrixSP& X2, MatrixSP& Y);
 

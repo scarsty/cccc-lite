@@ -20,7 +20,7 @@ inline int getError(const char* content)
 }
 
 #define HIP_FUNCTION22(name, function) \
-    static __global__ void name##kernel(realc* p1, realc* p2, unsigned int size, realc a1, realc a2) \
+    static __global__ void name##kernel(float* p1, float* p2, unsigned int size, float a1, float a2) \
     { \
         int i = cal_i(); \
         if (i < size) \
@@ -28,14 +28,14 @@ inline int getError(const char* content)
             function \
         } \
     } \
-    int hip_##name(realc* p1, realc* p2, unsigned int size, realc a1, realc a2) \
+    int hip_##name(float* p1, float* p2, unsigned int size, float a1, float a2) \
     { \
         name##kernel<<<blockNum(size), blockMax>>>(p1, p2, size, a1, a2); \
         return getError(#name); \
     }
 
 #define HIP_FUNCTION32(name, function) \
-    static __global__ void name##kernel(realc* p1, realc* p2, realc* p3, unsigned int size, realc a1, realc a2) \
+    static __global__ void name##kernel(float* p1, float* p2, float* p3, unsigned int size, float a1, float a2) \
     { \
         int i = cal_i(); \
         if (i < size) \
@@ -43,14 +43,14 @@ inline int getError(const char* content)
             function \
         } \
     } \
-    int hip_##name(realc* p1, realc* p2, realc* p3, unsigned int size, realc a1, realc a2) \
+    int hip_##name(float* p1, float* p2, float* p3, unsigned int size, float a1, float a2) \
     { \
         name##kernel<<<blockNum(size), blockMax>>>(p1, p2, p3, size, a1, a2); \
         return getError(#name); \
     }
 
 #define HIP_FUNCTION42(name, function) \
-    static __global__ void name##kernel(realc* p1, realc* p2, realc* p3, realc* p4, unsigned int size, realc a1, realc a2) \
+    static __global__ void name##kernel(float* p1, float* p2, float* p3, float* p4, unsigned int size, float a1, float a2) \
     { \
         int i = cal_i(); \
         if (i < size) \
@@ -58,14 +58,14 @@ inline int getError(const char* content)
             function \
         } \
     } \
-    int hip_##name(realc* p1, realc* p2, realc* p3, realc* p4, unsigned int size, realc a1, realc a2) \
+    int hip_##name(float* p1, float* p2, float* p3, float* p4, unsigned int size, float a1, float a2) \
     { \
         name##kernel<<<blockNum(size), blockMax>>>(p1, p2, p3, p4, size, a1, a2); \
         return getError(#name); \
     }
 
 #define HIP_FUNCTION44(name, function) \
-    static __global__ void name##kernel(realc* p1, realc* p2, realc* p3, realc* p4, unsigned int size, realc a1, realc a2, realc a3, realc a4) \
+    static __global__ void name##kernel(float* p1, float* p2, float* p3, float* p4, unsigned int size, float a1, float a2, float a3, float a4) \
     { \
         int i = cal_i(); \
         if (i < size) \
@@ -73,7 +73,7 @@ inline int getError(const char* content)
             function \
         } \
     } \
-    int hip_##name(realc* p1, realc* p2, realc* p3, realc* p4, unsigned int size, realc a1, realc a2, realc a3, realc a4) \
+    int hip_##name(float* p1, float* p2, float* p3, float* p4, unsigned int size, float a1, float a2, float a3, float a4) \
     { \
         name##kernel<<<blockNum(size), blockMax>>>(p1, p2, p3, p4, size, a1, a2, a3, a4); \
         return getError(#name); \
@@ -112,42 +112,42 @@ HIP_FUNCTION22(addnumber, { p2[i] = a1 + p1[i] * a2; });
 
 HIP_FUNCTION32(ada_update,
     {
-        realc& rou = a1;
-        realc& epsilon = a2;
-        p2[i] = p2[i] * rou + p3[i] * p3[i] * (realc(1) - rou);
+        float& rou = a1;
+        float& epsilon = a2;
+        p2[i] = p2[i] * rou + p3[i] * p3[i] * (float(1) - rou);
         p3[i] = p3[i] * sqrt((p1[i] + epsilon) / (p2[i] + epsilon));
-        p1[i] = p1[i] * rou + p3[i] * p3[i] * (realc(1) - rou);
+        p1[i] = p1[i] * rou + p3[i] * p3[i] * (float(1) - rou);
     });
 
 HIP_FUNCTION42(ada_delta_update,
     {
-        realc& rou = a1;
-        realc& epsilon = a2;
-        p1[i] = p1[i] * rou + p3[i] * p3[i] * (realc(1) - rou);
+        float& rou = a1;
+        float& epsilon = a2;
+        p1[i] = p1[i] * rou + p3[i] * p3[i] * (float(1) - rou);
         p4[i] = p3[i] * sqrt((p2[i] + epsilon) / (p1[i] + epsilon));
-        p2[i] = p2[i] * rou + p4[i] * p4[i] * (realc(1) - rou);
+        p2[i] = p2[i] * rou + p4[i] * p4[i] * (float(1) - rou);
     });
 
 HIP_FUNCTION44(adam_update,
     {
-        realc& beta1 = a1;
-        realc& beta2 = a2;
-        realc& epsilon = a3;
-        realc& t = a4;
-        p1[i] = p1[i] * beta1 + p3[i] * (realc(1) - beta1);
-        p2[i] = p2[i] * beta2 + p3[i] * p3[i] * (realc(1) - beta2);
-        p4[i] = p1[i] / (realc(1) - pow(beta1, t)) / (sqrt(p2[i] / (realc(1) - pow(beta2, t))) + epsilon);
+        float& beta1 = a1;
+        float& beta2 = a2;
+        float& epsilon = a3;
+        float& t = a4;
+        p1[i] = p1[i] * beta1 + p3[i] * (float(1) - beta1);
+        p2[i] = p2[i] * beta2 + p3[i] * p3[i] * (float(1) - beta2);
+        p4[i] = p1[i] / (float(1) - pow(beta1, t)) / (sqrt(p2[i] / (float(1) - pow(beta2, t))) + epsilon);
     });
 
 HIP_FUNCTION32(rms_prop_update,
     {
-        realc& rou = a1;
-        realc& epsilon = a2;
-        p1[i] = p1[i] * rou + p2[i] * p2[i] * (realc(1) - rou);
+        float& rou = a1;
+        float& epsilon = a2;
+        p1[i] = p1[i] * rou + p2[i] * p2[i] * (float(1) - rou);
         p3[i] = p2[i] / sqrt(p1[i] + epsilon);
     });
 
-static __global__ void addbiaskernel(realc* m, realc* b, realc* r, unsigned int size_m, unsigned int size_mchannel, unsigned int size_b, realc a1, realc a2)
+static __global__ void addbiaskernel(float* m, float* b, float* r, unsigned int size_m, unsigned int size_mchannel, unsigned int size_b, float a1, float a2)
 {
     int i = cal_i();
     if (i < size_m)
@@ -157,13 +157,13 @@ static __global__ void addbiaskernel(realc* m, realc* b, realc* r, unsigned int 
     }
 }
 
-int hip_addbias(realc* m, realc* b, realc* r, unsigned int size_m, unsigned int size_mchannel, unsigned int size_b, realc a1, realc a2)
+int hip_addbias(float* m, float* b, float* r, unsigned int size_m, unsigned int size_mchannel, unsigned int size_b, float a1, float a2)
 {
     addbiaskernel<<<blockNum(size_m), blockMax>>>(m, b, r, size_m, size_mchannel, size_b, a1, a2);
     return getError("addbias");
 }
 
-static __global__ void addbiasbkernel(realc* bd, realc* rd, unsigned int size_m, unsigned int size_mchannel, unsigned int size_b, realc a1, realc a2)
+static __global__ void addbiasbkernel(float* bd, float* rd, unsigned int size_m, unsigned int size_mchannel, unsigned int size_b, float a1, float a2)
 {
     int i = cal_i();
     if (i < size_b)
@@ -179,18 +179,18 @@ static __global__ void addbiasbkernel(realc* bd, realc* rd, unsigned int size_m,
     }
 }
 
-int hip_addbiasb(realc* bd, realc* rd, unsigned int size_m, unsigned int size_mchannel, unsigned int size_b, realc a1, realc a2)
+int hip_addbiasb(float* bd, float* rd, unsigned int size_m, unsigned int size_mchannel, unsigned int size_b, float a1, float a2)
 {
     addbiasbkernel<<<blockNum(size_b), blockMax>>>(bd, rd, size_m, size_mchannel, size_b, a1, a2);
     return getError("addbiasb");
 }
 
-static __global__ void softmaxkernel(realc* x, realc* y, unsigned int size, unsigned int channel, realc a1, realc a2)
+static __global__ void softmaxkernel(float* x, float* y, unsigned int size, unsigned int channel, float a1, float a2)
 {
     int i = cal_i();
     if (i < size / channel)
     {
-        realc min = 0;
+        float min = 0;
         for (int i1 = 0; i1 < channel; i1++)
         {
             //y[i1 + i * channel] = x[i1 + i * channel];
@@ -199,7 +199,7 @@ static __global__ void softmaxkernel(realc* x, realc* y, unsigned int size, unsi
                 min = x[i1 + i * channel];
             }
         }
-        realc sum = 0;
+        float sum = 0;
         for (int i1 = 0; i1 < channel; i1++)
         {
             sum += exp(x[i1 + i * channel] - min);
@@ -211,13 +211,13 @@ static __global__ void softmaxkernel(realc* x, realc* y, unsigned int size, unsi
     }
 }
 
-int hip_softmax(realc* x, realc* y, unsigned int size, unsigned int channel, realc a1, realc a2)
+int hip_softmax(float* x, float* y, unsigned int size, unsigned int channel, float a1, float a2)
 {
     softmaxkernel<<<blockNum(size / channel), blockMax>>>(x, y, size, channel, a1, a2);
     return getError("softmax");
 }
 
-static __global__ void poolkernel(realc* x, realc* y, unsigned int w0, unsigned w0h0, unsigned int w1, unsigned int w1h1, unsigned int size_win, unsigned int size, int type, realc a1, realc a2)
+static __global__ void poolkernel(float* x, float* y, unsigned int w0, unsigned w0h0, unsigned int w1, unsigned int w1h1, unsigned int size_win, unsigned int size, int type, float a1, float a2)
 {
     int i = cal_i();
     if (i < size)
@@ -227,7 +227,7 @@ static __global__ void poolkernel(realc* x, realc* y, unsigned int w0, unsigned 
         int y1 = i % w1;
         int x0 = x1 * size_win;
         int y0 = y1 * size_win;
-        realc v = type == 0 ? -1e8 : 0;
+        float v = type == 0 ? -1e8 : 0;
         for (int ix = x0; ix < x0 + size_win; ix++)
         {
             for (int iy = y0; iy < y0 + size_win; iy++)
@@ -247,13 +247,13 @@ static __global__ void poolkernel(realc* x, realc* y, unsigned int w0, unsigned 
     }
 }
 
-int hip_pool(realc* x, realc* y, unsigned int w0, unsigned int h0, unsigned int c, unsigned n, unsigned int w1, unsigned int h1, unsigned int size_win, int type, realc a1, realc a2)
+int hip_pool(float* x, float* y, unsigned int w0, unsigned int h0, unsigned int c, unsigned n, unsigned int w1, unsigned int h1, unsigned int size_win, int type, float a1, float a2)
 {
     poolkernel<<<blockNum(w1 * h1 * c * n), blockMax>>>(x, y, w0, w0 * h0, w1, w1 * h1, size_win, w1 * h1 * c * n, type, a1, a2);
     return getError("pool");
 }
 
-static __global__ void poolbkernel(realc* x, realc* dx, realc* y, realc* dy, unsigned int w0, unsigned w0h0, unsigned int w1, unsigned int w1h1, unsigned int size_win, unsigned int size, int type, realc a1, realc a2)
+static __global__ void poolbkernel(float* x, float* dx, float* y, float* dy, unsigned int w0, unsigned w0h0, unsigned int w1, unsigned int w1h1, unsigned int size_win, unsigned int size, int type, float a1, float a2)
 {
     int i = cal_i();
     if (i < size)
@@ -282,13 +282,13 @@ static __global__ void poolbkernel(realc* x, realc* dx, realc* y, realc* dy, uns
     }
 }
 
-int hip_poolb(realc* x, realc* dx, realc* y, realc* dy, unsigned int w0, unsigned int h0, unsigned int c, unsigned n, unsigned int w1, unsigned int h1, unsigned int size_win, int type, realc a1, realc a2)
+int hip_poolb(float* x, float* dx, float* y, float* dy, unsigned int w0, unsigned int h0, unsigned int c, unsigned n, unsigned int w1, unsigned int h1, unsigned int size_win, int type, float a1, float a2)
 {
     poolbkernel<<<blockNum(w0 * h0 * c * n), blockMax>>>(x, dx, y, dy, w0, w0 * h0, w1, w1 * h1, size_win, w0 * h0 * c * n, type, a1, a2);
     return getError("poolb");
 }
 
-static __global__ void conv2dkernel(realc* x, realc* w, realc* y, int w0, int h0, int c0, int n, int w1, int h1, int c1, int winw, int winh, int stride, int padding, realc a1, realc a2)
+static __global__ void conv2dkernel(float* x, float* w, float* y, int w0, int h0, int c0, int n, int w1, int h1, int c1, int winw, int winh, int stride, int padding, float a1, float a2)
 {
     int i = cal_i();
     if (i < w1 * h1 * c1 * n)
@@ -301,7 +301,7 @@ static __global__ void conv2dkernel(realc* x, realc* w, realc* y, int w0, int h0
         int iw0_begin = iw1 * stride - padding;
         int ih0_begin = ih1 * stride - padding;
 
-        realc v = 0;
+        float v = 0;
         for (int ic0 = 0; ic0 < c0; ic0++)
         {
             for (int iwinh = 0; iwinh < winh; iwinh++)
@@ -323,14 +323,14 @@ static __global__ void conv2dkernel(realc* x, realc* w, realc* y, int w0, int h0
     }
 }
 
-int hip_conv2d(realc* x, realc* w, realc* y, int w0, int h0, int c0, int n, int w1, int h1, int c1, int winw, int winh, int stride, int padding, realc a1, realc a2)
+int hip_conv2d(float* x, float* w, float* y, int w0, int h0, int c0, int n, int w1, int h1, int c1, int winw, int winh, int stride, int padding, float a1, float a2)
 {
     conv2dkernel<<<blockNum(w1 * h1 * c1 * n), blockMax>>>(x, w, y, w0, h0, c0, n, w1, h1, c1, winw, winh, stride, padding, a1, a2);
     return getError("conv2d");
 }
 
 
-static __global__ void conv2db_dkernel(realc* dx, realc* w, realc* dy, int w0, int h0, int c0, int n, int w1, int h1, int c1, int winw, int winh, int stride, int padding, realc a1, realc a2)
+static __global__ void conv2db_dkernel(float* dx, float* w, float* dy, int w0, int h0, int c0, int n, int w1, int h1, int c1, int winw, int winh, int stride, int padding, float a1, float a2)
 {
     int i = cal_i();
     if (i < w0 * h0 * c0 * n)
@@ -343,7 +343,7 @@ static __global__ void conv2db_dkernel(realc* dx, realc* w, realc* dy, int w0, i
         int iw1_begin = iw0 * stride + padding;
         int ih1_begin = ih0 * stride + padding;
 
-        realc v = 0;
+        float v = 0;
         for (int ic1 = 0; ic1 < c1; ic1++)
         {
             for (int iwinh = 0; iwinh < winh; iwinh++)
@@ -366,14 +366,14 @@ static __global__ void conv2db_dkernel(realc* dx, realc* w, realc* dy, int w0, i
 }
 
 
-int hip_conv2db_d(realc* dx, realc* w, realc* dy, int w0, int h0, int c0, int n, int w1, int h1, int c1, int winw, int winh, int stride, int padding, realc a1, realc a2)
+int hip_conv2db_d(float* dx, float* w, float* dy, int w0, int h0, int c0, int n, int w1, int h1, int c1, int winw, int winh, int stride, int padding, float a1, float a2)
 {
     conv2db_dkernel<<<blockNum(w0 * h0 * c0 * n), blockMax>>>(dx, w, dy, w0, h0, c0, n, w1, h1, c1, winw, winh, stride, padding, a1, a2);
     return getError("conv2db_d");
 }
 
 
-static __global__ void conv2db_wkernel(realc* x, realc* dw, realc* dy, int w0, int h0, int c0, int n, int w1, int h1, int c1, int winw, int winh, int stride, int padding, realc a1, realc a2)
+static __global__ void conv2db_wkernel(float* x, float* dw, float* dy, int w0, int h0, int c0, int n, int w1, int h1, int c1, int winw, int winh, int stride, int padding, float a1, float a2)
 {
     int i = cal_i();
     if (i < winw * winh * c0 * c1)
@@ -383,7 +383,7 @@ static __global__ void conv2db_wkernel(realc* x, realc* dw, realc* dy, int w0, i
         int iwinh = i / winw % winh;
         int iwinw = i % winw;
 
-        realc v = 0;
+        float v = 0;
         for (int in = 0; in < n; in++)
         {
             for (int iw1 = 0; iw1 < w1; iw1++)
@@ -406,7 +406,7 @@ static __global__ void conv2db_wkernel(realc* x, realc* dw, realc* dy, int w0, i
 }
 
 
-int hip_conv2db_w(realc* x, realc* dw, realc* dy, int w0, int h0, int c0, int n, int w1, int h1, int c1, int winw, int winh, int stride, int padding, realc a1, realc a2)
+int hip_conv2db_w(float* x, float* dw, float* dy, int w0, int h0, int c0, int n, int w1, int h1, int c1, int winw, int winh, int stride, int padding, float a1, float a2)
 {
     conv2db_wkernel<<<blockNum(winw * winh * c0 * c1), blockMax>>>(x, dw, dy, w0, h0, c0, n, w1, h1, c1, winw, winh, stride, padding, a1, a2);
     return getError("conv2db_d");

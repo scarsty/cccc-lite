@@ -30,11 +30,11 @@ void DataPreparerTxt::fillData0()
         int r = rand_.rand() * (content_.size() / 2 - input_ - output_);
         for (int i = 0; i < input_; i++)
         {
-            X.getData(i, index) = getContent(r + i);
+            X.setData(i, index, getContent(r + i));
         }
         for (int i = 0; i < output_; i++)
         {
-            Y.getData(i, index) = getContent(r + i + input_);
+            Y.setData(i, index, getContent(r + i + input_));
         }
     }
 }

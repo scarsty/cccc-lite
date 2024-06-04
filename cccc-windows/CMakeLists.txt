@@ -7,7 +7,8 @@ set(CMAKE_VERBOSE_MAKEFILE on)
 set(CMAKE_CXX_COMPILER $ENV{CXX})
 set(CMAKE_CXX_FLAGS "-O3 -std=c++17 -pthread -fopenmp -DNDEBUG")
 
-include_directories(../../mlcc ../cccc-cuda ../include ../cccc /opt/rocm/include)
+include_directories(/usr/include /usr/local/include /usr/local/cuda/include /usr/local/cuda/include/crt ../../mlcc ../cccc-cuda ../include ../cccc /opt/rocm/include)
+link_directories(/usr/local/cuda/lib64)
 
 add_executable(cccc-windows ${SRC_LIST})
 target_link_libraries(cccc-windows cccc)
