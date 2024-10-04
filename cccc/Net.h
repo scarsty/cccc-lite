@@ -35,20 +35,30 @@ protected:
     int seperate_update_weight_ = 0;
 
 public:
-    void setGpu(GpuControl* gpu) { gpu_ = gpu; }
-    GpuControl* getGpu() { return gpu_; }
-    void setDeviceSelf() { gpu_->setAsCurrent(); }
-    Matrix& getAllWeights() { return all_weights_; }
-    void setOption(Option* op) { option_ = op; }
-    int getBatch() { return getX().getNumber(); }
     int init();
     virtual int init2() = 0;
 
+    void setGpu(GpuControl* gpu) { gpu_ = gpu; }
+
+    GpuControl* getGpu() { return gpu_; }
+
+    void setDeviceSelf() { gpu_->setAsCurrent(); }
+
+    Matrix& getAllWeights() { return all_weights_; }
+
+    void setOption(Option* op) { option_ = op; }
+
+    int getBatch() { return getX().getNumber(); }
+
 public:
     Matrix& getX() { return *X_; }
+
     Matrix& getY() { return *Y_; }
+
     Matrix& getA() { return *A_; }
+
     Matrix& getLossWeight() { return *loss_weight_; }
+
     void initLossWeight() { loss_weight_->resize(Y_->getDim()); }
 
 public:
@@ -88,6 +98,7 @@ public:
 
 public:
     virtual void doSomeThing() {}
+
     //Net* clone(int clone_data = 0);
 };
 

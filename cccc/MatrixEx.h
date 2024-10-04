@@ -15,7 +15,7 @@ public:
 
     //按channel加偏置
     static void addBias(const Matrix& X, const Matrix& bias, Matrix& Y, float a = 1, float b = 1);
-    static void addBiasBackward(Matrix& X, Matrix& bias, const Matrix& Y, float a = 1, float b = 1);
+    static void addBiasBackward(const Matrix& X, Matrix& bias, const Matrix& Y, float a = 1, float b = 1);
 
     // the function is private for concat the data and append the data
     static void concatByChannel(const std::vector<MatrixSP>& X_vector, Matrix& Y);
@@ -35,22 +35,32 @@ public:
     static void activeForwardSimple(const Matrix& X, Matrix& Y, ActiveFunctionType af, float a = 1, float r = 0);
     static void activeBackwardSimple(Matrix& X, const Matrix& Y, ActiveFunctionType af, float a = 1, float r = 0);
 
-    static void poolingForward(const Matrix& X, Matrix& Y, PoolingType pooling_type, int reverse, std::vector<Matrix>& workspaces,
-        const std::vector<int>& window, const std::vector<int>& stride, const std::vector<int>& padding, float a = 1, float r = 0);
-    static void poolingBackward(Matrix& X, const Matrix& Y, PoolingType pooling_type, int reverse, std::vector<Matrix>& workspaces,
-        const std::vector<int>& window, const std::vector<int>& stride, const std::vector<int>& padding, float a = 1, float r = 0);
+    static void poolingForward(const Matrix& X, Matrix& Y, PoolingType pooling_type, PoolingReverseType reverse_type,
+        const std::vector<int>& window, const std::vector<int>& stride, const std::vector<int>& padding,
+        float a = 1, float r = 0, Matrix* workspace = nullptr);
+    static void poolingBackward(Matrix& X, const Matrix& Y, PoolingType pooling_type, PoolingReverseType reverse_type,
+        const std::vector<int>& window, const std::vector<int>& stride, const std::vector<int>& padding,
+        float a = 1, float r = 0, Matrix* workspace = nullptr);
 
-    enum
-    {
-        conv_method_count = 8
-    };
     struct ConvMethod
     {
+        int algo = -1, math_type = -1, group_number = 0;
     };
-    static void convolutionForward(const Matrix& X, const Matrix& W, Matrix& Y, std::vector<int>& methods, std::vector<Matrix>& workspaces,
-        const std::vector<int>& stride, const std::vector<int>& padding, float a = 1, float r = 0);
-    static void convolutionBackward(Matrix& X, Matrix& W, const Matrix& Y, std::vector<int>& methods, std::vector<Matrix>& workspaces,
-        const std::vector<int>& stride, const std::vector<int>& padding, float a = 1, float rx = 0, float rw = 0);
+
+    static const int conv_method_count = 8;
+    static void convolutionForward(const Matrix& X, const Matrix& W, Matrix& Y,
+        const std::vector<int>& stride, const std::vector<int>& padding,
+        float a = 1, float r = 0, ConvMethod* method = nullptr, Matrix* workspace = nullptr);
+    static void convolutionBackward(Matrix& X, Matrix& W, const Matrix& Y,
+        const std::vector<int>& stride, const std::vector<int>& padding,
+        float a = 1, float rx = 0, float aw = 1, float rw = 0,
+        ConvMethod* method_dx = nullptr, ConvMethod* method_dw = nullptr, Matrix* workspace_dx = nullptr, Matrix* workspace_dw = nullptr);
+    static void convolutionBackwardDX(Matrix& X, const Matrix& W, const Matrix& Y,
+        const std::vector<int>& stride, const std::vector<int>& padding,
+        float a = 1, float r = 0, ConvMethod* method_dx = nullptr, Matrix* workspace_dx = nullptr);
+    static void convolutionBackwardDW(const Matrix& X, Matrix& W, const Matrix& Y,
+        const std::vector<int>& stride, const std::vector<int>& padding,
+        float a = 1, float r = 0, ConvMethod* method_dw = nullptr, Matrix* workspace_dw = nullptr);
 
     static void dropoutForward(const Matrix& X, Matrix& Y, ActivePhaseType work_phase, float v, int seed, Matrix& rg_stat, Matrix& reverse_space);
     static void dropoutBackward(Matrix& X, const Matrix& Y, float v, int seed, Matrix& rg_stat, Matrix& reverse_space);

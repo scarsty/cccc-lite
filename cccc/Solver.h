@@ -21,7 +21,7 @@ protected:
 
     float weight_decay_ = 0, weight_decay_l1_ = 0;    //正则化参数或权重的衰减
 
-    float momentum_ = 0.9;              //上次的dWeight保留，即动量
+    float momentum_ = 0.9;             //上次的dWeight保留，即动量
     int momentum_clear_epoch_ = -1;    //每隔数个epoch将动量积累清零
 
     //学习率调整相关
@@ -30,8 +30,8 @@ protected:
     int lr_keep_count_ = 0;      //学习率保持不变的计数
     int lr_change_count_ = 0;    //学习率改变的计数
 
-    float learn_rate_base_ = 0.01;     //基础学习率
-    float learn_rate_ = 0.01;          //学习率
+    float learn_rate_base_ = 0.01;    //基础学习率
+    float learn_rate_ = 0.01;         //学习率
 
     int lr_steps_ = 3;
     float lr_step_decay_ = 0.1;
@@ -51,7 +51,7 @@ protected:
     float switch_sgd_random_ = 0;
     int switch_solver_ = 0;
 
-    std::vector<float> restrict_dweight_{ 0, 0 };         //是否需要限制梯度，以L1为准，梯度除以batch后，不应超过此值乘以权重
+    std::vector<float> restrict_dweight_{ 0, 0 };        //是否需要限制梯度，以L1为准，梯度除以batch后，不应超过此值乘以权重
     std::vector<int> restrict_dweight_count_{ 0, 0 };    //上述操作的计数
 
     //求解器所需要的特殊参数
@@ -61,15 +61,29 @@ protected:
 
     Matrix dW_;    //实际用于更新的权重梯度
 
+    float dw_scale_ = 1e-4;    //dw的放大率，减小可以避免一些数值溢出
+
 public:
     SolverType getSolverType() const { return solver_type_; }
+
     float getMomentum() const;
+
     void setMomentum(float m) { momentum_ = m; }
+
     void setLearnRateBase(float lrb) { learn_rate_base_ = lrb; }
+
     float getLearnRateBase() const { return learn_rate_base_; }
+
     float getLearnRate() const { return learn_rate_; }
+
     void resetTimeStep() { time_step_ = 0; }
+
     std::vector<Matrix>& getWVector() { return W_vector_; }
+
+    float getDWScale() const { return dw_scale_; }
+
+    void setDWScale(float s) { dw_scale_ = s; }
+
     //int getTrainEpochs() const { return train_epochs_; }
 
 public:

@@ -1,9 +1,6 @@
 ﻿#include "NetLayer.h"
-#include "ConsoleControl.h"
-#include "Timer.h"
 #include "VectorMath.h"
-#include "filefunc.h"
-#include <algorithm>
+#include "strfunc.h"
 
 namespace cccc
 {

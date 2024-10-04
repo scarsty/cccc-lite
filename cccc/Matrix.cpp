@@ -34,14 +34,21 @@ Matrix::Matrix(const std::vector<int>& dim, DataType data_type, UnitType device_
     }
 }
 
+Matrix::Matrix(std::initializer_list<int> dim, DataType data_type, UnitType device_type, bool create_d) :
+    Matrix(std::vector<int>(dim), data_type, device_type, create_d)
+{
+}
+
 //4阶张量形式
-Matrix::Matrix(int w, int h, int c, int n, DataType data_type, UnitType device_type) : Matrix(std::vector<int>{ w, h, c, n }, data_type, device_type)
+Matrix::Matrix(int w, int h, int c, int n, DataType data_type, UnitType device_type) :
+    Matrix(std::vector<int>{ w, h, c, n }, data_type, device_type)
 {
 }
 
 //普通二维矩阵构造函数
 //这样生成的矩阵在以张量形式处理时认为是4维张量，但是所有张量的row都是前面项的积
-Matrix::Matrix(int m, int n, DataType data_type, UnitType device_type) : Matrix(std::vector<int>{ m, n }, data_type, device_type)
+Matrix::Matrix(int m, int n, DataType data_type, UnitType device_type) :
+    Matrix(std::vector<int>{ m, n }, data_type, device_type)
 {
 }
 
@@ -49,14 +56,16 @@ Matrix::Matrix(int m, int n, DataType data_type, UnitType device_type) : Matrix(
 //{
 //}
 
-Matrix::Matrix(const std::vector<int>& dim, void* data, DataType data_type, UnitType device_type) : Matrix(std::vector<int>{ 0, 0 }, data_type, device_type)
+Matrix::Matrix(const std::vector<int>& dim, void* data, DataType data_type, UnitType device_type) :
+    Matrix(std::vector<int>{ 0, 0 }, data_type, device_type)
 {
     data_ = data;
     resize(dim);
 }
 
 //空矩阵，后期再调整
-Matrix::Matrix(DataType data_type, UnitType device_type) : Matrix(std::vector<int>{ 0, 0 }, data_type, device_type)
+Matrix::Matrix(DataType data_type, UnitType device_type) :
+    Matrix(std::vector<int>{ 0, 0 }, data_type, device_type)
 {
 }
 
@@ -281,21 +290,6 @@ void Matrix::printAsMatrix() const
     LOG("\n");
 }
 
-//int Matrix::save(SaveBuffer& buffer) const
-//{
-//    auto temp = dataMirrorCPU();
-//    buffer.save(temp->data_, sizeof(real) * data_size_);
-//    return data_size_;
-//}
-//
-//int Matrix::load(SaveBuffer& buffer)
-//{
-//    auto temp = dataMirrorCPU(false);
-//    buffer.load(temp->data_, sizeof(real) * data_size_);
-//    copyDataPtr(DeviceType::CPU, temp->data_, getDeviceType(), getDataPtr(), data_size_);
-//    return data_size_;
-//}
-
 int64_t Matrix::save(void* buffer, int64_t size) const
 {
     return MatrixData::copy(getApiType(), getDataPtr(), API_UNKNOWN, (float*)buffer, std::min(data_size_, size), getDataType());
@@ -305,20 +299,6 @@ int64_t Matrix::load(const void* buffer, int64_t size)
 {
     return MatrixData::copy(API_UNKNOWN, (float*)buffer, getApiType(), getDataPtr(), std::min(data_size_, size), getDataType());
 }
-
-//int Matrix::save(const std::string filename)
-//{
-//    SaveBuffer s;
-//    save(s);
-//    return s.writeToFile(filename);
-//}
-//
-//int Matrix::load(const std::string filename)
-//{
-//    SaveBuffer s;
-//    s.loadFromFile(filename);
-//    return load(s);
-//}
 
 //将外界的值复制到矩阵，参数指针必须指向Host内存！
 void Matrix::copyDataInFromHost(float* src, int64_t size)
@@ -1203,6 +1183,7 @@ void Matrix::sign(Matrix& A, Matrix& R, float v, float section)
     }
     else if (A.isHip())
     {
+        hip_sign(A.getDataTypeByInt(), A.data(), R.data(), A.data_size_, v, section);
     }
     else
     {
@@ -1246,6 +1227,7 @@ void Matrix::reciprocal(float scale)
     }
     else if (isHip())
     {
+        hip_reciprocal(getDataTypeByInt(), data(), data(), data_size_, scale, 0.0);
     }
     else
     {
@@ -1259,21 +1241,7 @@ void Matrix::reciprocal(float scale)
 //加上一个数字，a = v + scale .* a;
 void Matrix::addNumber(float v, float scale)
 {
-    if (isCuda())
-    {
-        cuda_addnumber(getDataTypeByInt(), data(), data(), data_size_, v, scale);
-    }
-    else if (isHip())
-    {
-        hip_addnumber(data(), data(), data_size_, v, scale);
-    }
-    else
-    {
-        for (int i = 0; i < data_size_; i++)
-        {
-            setData(i, v + scale * getData(i));
-        }
-    }
+    addNumber(*this, *this, v, scale);
 }
 
 void Matrix::addNumber(const Matrix& A, Matrix& R, float v, float scale)
@@ -1285,7 +1253,7 @@ void Matrix::addNumber(const Matrix& A, Matrix& R, float v, float scale)
     }
     else if (A.isHip())
     {
-        hip_addnumber(A.data(), R.data(), A.data_size_, v, scale);
+        hip_addnumber(A.getDataTypeByInt(), A.data(), R.data(), A.data_size_, v, scale);
     }
     else
     {
@@ -1304,7 +1272,7 @@ void Matrix::addNumberCol(float v, float scale, int c)
     }
     else if (isHip())
     {
-        hip_addnumber(getDataType(), getDataPtr(0, c), getDataPtr(0, c), row_, v, scale);
+        hip_addnumber(getDataTypeByInt(), getDataPtr(0, c), getDataPtr(0, c), row_, v, scale);
     }
     else
     {
@@ -1324,6 +1292,7 @@ void Matrix::elementPow(const Matrix& A, Matrix& R, float e, float bias)
     }
     else if (A.isHip())
     {
+        hip_pow(A.getDataTypeByInt(), A.data(), R.data(), A.data_size_, e, bias);
     }
     else
     {
@@ -1343,6 +1312,7 @@ void Matrix::elementDiv(const Matrix& A, const Matrix& B, Matrix& R, float a, fl
     }
     else if (A.isHip())
     {
+        hip_div(A.getDataTypeByInt(), A.data(), B.data(), R.data(), A.data_size_, a, b, scale);
     }
     else
     {
@@ -1362,6 +1332,7 @@ void Matrix::crossEntropy(const Matrix& A, const Matrix& Y, Matrix& R, float a, 
     }
     else if (A.isHip())
     {
+        hip_cross_entropy(A.getDataTypeByInt(), A.data(), Y.data(), R.data(), A.data_size_, a, scale);
     }
     else
     {
@@ -1382,6 +1353,7 @@ void Matrix::crossEntropy2(const Matrix& A, const Matrix& Y, Matrix& R, float a,
     }
     else if (A.isHip())
     {
+        hip_cross_entropy2(A.getDataTypeByInt(), A.data(), Y.data(), R.data(), A.data_size_, a, scale);
     }
     else
     {

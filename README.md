@@ -1,17 +1,21 @@
 # CCCC
 <img src='https://raw.githubusercontent.com/scarsty/neural-demo/master/logo.png'>
 
+cccc为will的核心部分，负责神经网络的计算与推理。
+
+英文代号“will”意为“心愿”。
+
 ## 简介
 
-CCCC是同时支持第一代基于层和第二代基于操作的神经网络工具包，但是安装和使用远比同类工具简单。
+cccc是同时支持第一代基于层和第二代基于操作的神经网络工具包，但是安装和使用远比同类工具简单。
 
-CCCC正式支持Windows，且以Windows为主要开发平台。可以在不需要nccl的情况下进行并行。
+cccc正式支持Windows，且以Windows为主要开发平台。可以在不需要nccl的情况下进行并行。
 
-CCCC的设计同时支持动态图和静态图，目前只有静态图形式，动态图需少量修改代码。
+cccc的设计同时支持动态图和静态图，目前只有静态图形式，动态图需少量修改代码。
 
-CCCC同时支持N卡和A卡，无需为不同的显卡平台编译两个版本。甚至可以在同一电脑上安装两种显卡并行计算（目前因效率问题不要这样做）。
+cccc同时支持N卡和A卡，无需为不同的显卡平台编译两个版本。甚至可以在同一电脑上安装两种显卡并行计算（目前因效率问题不要这样做）。
 
-CCCC的功能并不及其他的开源平台，其特色是简单的配置和单机下的速度，请酌情使用。
+cccc的功能并不及其他的开源平台，其特色是简单的配置和单机下的速度，请酌情使用。
 
 ## 编译说明
 
@@ -28,7 +32,7 @@ CCCC的功能并不及其他的开源平台，其特色是简单的配置和单�
 - 下载MNIST的文件解压后，放入work/mnist目录，文件名应为：t10k-images.idx3-ubyte，t10k-labels.idx1-ubyte，train-images.idx3-ubyte，train-labels.idx1-ubyte。某些解压软件可能解压后中间的.会变成-，请自行修改。
 - 编译Visual Studio工程，如只需要核心功能，请仅编译will-windows。执行以下命令测试效果，正常情况下准确率应在99%以上。
   ```shell
-  will-windows -c mnist-cv.ini
+  cccc-windows -c mnist-cv.ini
   ```
 - 也可以使用FashionMNIST来测试，通过mnist_path选项可以设置不同的文件所在目录。通常测试集上准确率可以到91%左右。
 

@@ -1,12 +1,7 @@
 ﻿#pragma once
-#include "MatrixEx.h"
 #include "MatrixOp.h"
 #include "Option.h"
-#include "Solver.h"
-#include "Timer.h"
-#include <functional>
 #include <string>
-#include <thread>
 #include <vector>
 
 namespace cccc

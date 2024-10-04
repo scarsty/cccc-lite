@@ -4,7 +4,6 @@
 #include "TensorDesc.h"
 #include "blas_types.h"
 #include "types.h"
-#include <algorithm>
 #include <memory>
 #include <string>
 #include <vector>
@@ -75,6 +74,7 @@ public:
     //Matrix(const Matrix& src);
 
     Matrix(const std::vector<int>& dim, DataType data_type = DataType::CURRENT, UnitType device_type = UnitType::GPU, bool create_d = true);
+    Matrix(std::initializer_list<int> dim, DataType data_type = DataType::CURRENT, UnitType device_type = UnitType::GPU, bool create_d = true);
     Matrix(int w, int h, int c, int n, DataType data_type = DataType::CURRENT, UnitType device_type = UnitType::GPU);
     Matrix(int m, int n, DataType data_type = DataType::CURRENT, UnitType device_type = UnitType::GPU);
     //Matrix(size_t size, DataType data_type = DataType::CURRENT, UnitType device_type = UnitType::GPU);
@@ -295,6 +295,7 @@ public:
 };
 
 using MatrixSP = std::shared_ptr<Matrix>;
+using MatrixUP = std::unique_ptr<Matrix>;
 template <typename... Args>
 inline MatrixSP makeMatrixSP(Args... args) { return std::make_shared<Matrix>(args...); }
 

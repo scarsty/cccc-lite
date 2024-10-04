@@ -50,6 +50,7 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LinkIncremental>false</LinkIncremental>
     <OutDir>$(SolutionDir)$(Platform)\$(Configuration)\</OutDir>
+    <PreBuildEventUseInBuild>true</PreBuildEventUseInBuild>
   </PropertyGroup>
   <PropertyGroup Label="Vcpkg" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <VcpkgUseStatic>true</VcpkgUseStatic>
@@ -65,7 +66,9 @@
       <PreprocessToFile>false</PreprocessToFile>
       <OpenMPSupport>false</OpenMPSupport>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
-      <LanguageStandard>stdcpplatest</LanguageStandard>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <ScanSourceForModuleDependencies>false</ScanSourceForModuleDependencies>
+      <TranslateIncludes>true</TranslateIncludes>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -99,6 +102,9 @@
       <SDLCheck>false</SDLCheck>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <LanguageStandard>stdcpplatest</LanguageStandard>
+      <ConformanceMode>true</ConformanceMode>
+      <ScanSourceForModuleDependencies>false</ScanSourceForModuleDependencies>
+      <TranslateIncludes>false</TranslateIncludes>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -114,7 +120,7 @@
       <IgnoreSpecificDefaultLibraries>amdhip64.lib</IgnoreSpecificDefaultLibraries>
     </Link>
     <Lib>
-      <AdditionalDependencies>cccc-cuda.lib;openblas.lib;nvml.lib;cudart.lib;cublas.lib;cudnn_adv_infer.lib;cudnn_adv_train.lib;cudnn_cnn_infer.lib;cudnn_cnn_train.lib;cudnn_ops_infer.lib;cudnn_ops_train.lib</AdditionalDependencies>
+      <AdditionalDependencies>cccc-cuda.lib;openblas.lib</AdditionalDependencies>
     </Lib>
     <Lib>
       <AdditionalLibraryDirectories>$(CUDA_PATH)/lib/x64;../lib/x64;$(SolutionDir)$(Platform)\$(Configuration)\</AdditionalLibraryDirectories>
@@ -125,8 +131,8 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="..\..\mlcc\Cifa.cpp" />
-    <ClCompile Include="..\..\mlcc\strfunc.cpp" />
     <ClCompile Include="..\..\mlcc\filefunc.cpp" />
+    <ClCompile Include="..\..\mlcc\strfunc.cpp" />
     <ClCompile Include="GpuControl.cpp" />
     <ClCompile Include="gpu_lib.cpp" />
     <ClCompile Include="DataPreparerFactory.cpp" />
@@ -183,7 +189,6 @@
     <ClInclude Include="Matrix.h" />
     <ClInclude Include="MatrixEx.h" />
     <ClInclude Include="predict.h" />
-    <ClInclude Include="resource.h" />
     <ClInclude Include="rocblas_real.h" />
     <ClInclude Include="Solver.h" />
     <ClInclude Include="TensorDesc.h" />
@@ -199,6 +204,9 @@
   <ItemGroup>
     <Text Include="..\CMakeLists.txt" />
     <Text Include="CMakeLists.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="cccc.rc" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

@@ -23,4 +23,4 @@ private:
     int createAndConnectLayers();
 };
 
-}    // namespace cccc
+}    //namespace cccc

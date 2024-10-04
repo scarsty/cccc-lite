@@ -1,5 +1,8 @@
 #include <hip/hip_runtime.h>
+#include <hip/hip_fp16.h>
 #include "hip_functions.h"
+
+#define half _Float16
 
 #define blockMax 1024
 
@@ -19,132 +22,409 @@ inline int getError(const char* content)
     return 0;
 }
 
+static __global__ void half2floatkernel(half* p1, float* p2, unsigned int size)
+{
+    int i = cal_i();
+    if (i < size)
+    {
+        p2[i] = __half2float(p1[i]);
+    }
+}
+
+int hip_half2float(void* p1, void* p2, unsigned int size)
+{
+    half2floatkernel<<<blockNum(size), blockMax>>>((half*)p1, (float*)p2, size);
+    return getError("half2float");
+}
+
+#define PATCH_HALF1(func) \
+    inline __device__ half func(half a) { return h##func(a); }
+#define PATCH_HALF11(func) \
+    inline __device__ half func(half a) { return __h##func(a); }
+#define PATCH_HALF2(func) \
+    inline __device__ half func(half a) { return __float2half(func(__half2float(a))); }
+
+PATCH_HALF1(log)
+PATCH_HALF1(floor)
+PATCH_HALF11(abs)
+PATCH_HALF2(round)
+PATCH_HALF1(sin)
+PATCH_HALF1(cos)
+PATCH_HALF1(sqrt)
+
+//inline __device__ half pow(half a, half b) { return __float2half(pow(__half2float(a), __half2float(b))); }
+
 #define HIP_FUNCTION22(name, function) \
-    static __global__ void name##kernel(float* p1, float* p2, unsigned int size, float a1, float a2) \
+    static __global__ void name##kernel##float(float* p1, float* p2, unsigned int size, float a1, float a2) \
     { \
         int i = cal_i(); \
-        if (i < size) \
-        { \
-            function \
-        } \
+        using fp = float; \
+        if (i < size) { function; } \
     } \
-    int hip_##name(float* p1, float* p2, unsigned int size, float a1, float a2) \
+    static __global__ void name##kernel##double(double* p1, double* p2, unsigned int size, double a1, double a2) \
     { \
-        name##kernel<<<blockNum(size), blockMax>>>(p1, p2, size, a1, a2); \
+        int i = cal_i(); \
+        using fp = double; \
+        if (i < size) { function; } \
+    } \
+    static __global__ void name##kernel##half(half* p1, half* p2, unsigned int size, half a1, half a2) \
+    { \
+        int i = cal_i(); \
+        using fp = half; \
+        if (i < size) { function; } \
+    } \
+    int hip_##name(int type, void* p1, void* p2, unsigned int size, float a1, float a2) \
+    { \
+        if (type == 0) { name##kernel##float<<<blockNum(size), blockMax>>>((float*)p1, (float*)p2, size, a1, a2); } \
+        else if (type == 1) { name##kernel##double<<<blockNum(size), blockMax>>>((double*)p1, (double*)p2, size, a1, a2); } \
+        else if (type == 2) { name##kernel##half<<<blockNum(size), blockMax>>>((half*)p1, (half*)p2, size, a1, a2); } \
         return getError(#name); \
     }
-
+#define HIP_FUNCTION23(name, function) \
+    static __global__ void name##kernel##float(float* p1, float* p2, unsigned int size, float a1, float a2, float a3) \
+    { \
+        int i = cal_i(); \
+        using fp = float; \
+        if (i < size) { function; } \
+    } \
+    static __global__ void name##kernel##double(double* p1, double* p2, unsigned int size, double a1, double a2, double a3) \
+    { \
+        int i = cal_i(); \
+        using fp = double; \
+        if (i < size) { function; } \
+    } \
+    static __global__ void name##kernel##half(half* p1, half* p2, unsigned int size, half a1, half a2, half a3) \
+    { \
+        int i = cal_i(); \
+        using fp = half; \
+        if (i < size) { function; } \
+    } \
+    int hip_##name(int type, void* p1, void* p2, unsigned int size, float a1, float a2, float a3) \
+    { \
+        if (type == 0) { name##kernel##float<<<blockNum(size), blockMax>>>((float*)p1, (float*)p2, size, a1, a2, a3); } \
+        else if (type == 1) { name##kernel##double<<<blockNum(size), blockMax>>>((double*)p1, (double*)p2, size, a1, a2, a3); } \
+        else if (type == 2) { name##kernel##half<<<blockNum(size), blockMax>>>((half*)p1, (half*)p2, size, a1, a2, a3); } \
+        return getError(#name); \
+    }
 #define HIP_FUNCTION32(name, function) \
-    static __global__ void name##kernel(float* p1, float* p2, float* p3, unsigned int size, float a1, float a2) \
+    static __global__ void name##kernel##float(float* p1, float* p2, float* p3, unsigned int size, float a1, float a2) \
     { \
         int i = cal_i(); \
-        if (i < size) \
-        { \
-            function \
-        } \
+        using fp = float; \
+        if (i < size) { function; } \
     } \
-    int hip_##name(float* p1, float* p2, float* p3, unsigned int size, float a1, float a2) \
+    static __global__ void name##kernel##double(double* p1, double* p2, double* p3, unsigned int size, double a1, double a2) \
     { \
-        name##kernel<<<blockNum(size), blockMax>>>(p1, p2, p3, size, a1, a2); \
+        int i = cal_i(); \
+        using fp = double; \
+        if (i < size) { function; } \
+    } \
+    static __global__ void name##kernel##half(half* p1, half* p2, half* p3, unsigned int size, half a1, half a2) \
+    { \
+        int i = cal_i(); \
+        using fp = half; \
+        if (i < size) { function; } \
+    } \
+    int hip_##name(int type, void* p1, void* p2, void* p3, unsigned int size, float a1, float a2) \
+    { \
+        if (type == 0) { name##kernel##float<<<blockNum(size), blockMax>>>((float*)p1, (float*)p2, (float*)p3, size, a1, a2); } \
+        else if (type == 1) { name##kernel##double<<<blockNum(size), blockMax>>>((double*)p1, (double*)p2, (double*)p3, size, a1, a2); } \
+        else if (type == 2) { name##kernel##half<<<blockNum(size), blockMax>>>((half*)p1, (half*)p2, (half*)p3, size, a1, a2); } \
         return getError(#name); \
     }
-
+#define HIP_FUNCTION33(name, function) \
+    static __global__ void name##kernel##float(float* p1, float* p2, float* p3, unsigned int size, float a1, float a2, float a3) \
+    { \
+        int i = cal_i(); \
+        using fp = float; \
+        if (i < size) { function; } \
+    } \
+    static __global__ void name##kernel##double(double* p1, double* p2, double* p3, unsigned int size, double a1, double a2, double a3) \
+    { \
+        int i = cal_i(); \
+        using fp = double; \
+        if (i < size) { function; } \
+    } \
+    static __global__ void name##kernel##half(half* p1, half* p2, half* p3, unsigned int size, half a1, half a2, half a3) \
+    { \
+        int i = cal_i(); \
+        using fp = half; \
+        if (i < size) { function; } \
+    } \
+    int hip_##name(int type, void* p1, void* p2, void* p3, unsigned int size, float a1, float a2, float a3) \
+    { \
+        if (type == 0) { name##kernel##float<<<blockNum(size), blockMax>>>((float*)p1, (float*)p2, (float*)p3, size, a1, a2, a3); } \
+        else if (type == 1) { name##kernel##double<<<blockNum(size), blockMax>>>((double*)p1, (double*)p2, (double*)p3, size, a1, a2, a3); } \
+        else if (type == 2) { name##kernel##half<<<blockNum(size), blockMax>>>((half*)p1, (half*)p2, (half*)p3, size, a1, a2, a3); } \
+        return getError(#name); \
+    }
 #define HIP_FUNCTION42(name, function) \
-    static __global__ void name##kernel(float* p1, float* p2, float* p3, float* p4, unsigned int size, float a1, float a2) \
+    static __global__ void name##kernel##float(float* p1, float* p2, float* p3, float* p4, unsigned int size, float a1, float a2) \
     { \
         int i = cal_i(); \
-        if (i < size) \
-        { \
-            function \
-        } \
+        using fp = float; \
+        if (i < size) { function; } \
     } \
-    int hip_##name(float* p1, float* p2, float* p3, float* p4, unsigned int size, float a1, float a2) \
+    static __global__ void name##kernel##double(double* p1, double* p2, double* p3, double* p4, unsigned int size, double a1, double a2) \
     { \
-        name##kernel<<<blockNum(size), blockMax>>>(p1, p2, p3, p4, size, a1, a2); \
+        int i = cal_i(); \
+        using fp = double; \
+        if (i < size) { function; } \
+    } \
+    static __global__ void name##kernel##half(half* p1, half* p2, half* p3, half* p4, unsigned int size, half a1, half a2) \
+    { \
+        int i = cal_i(); \
+        using fp = half; \
+        if (i < size) { function; } \
+    } \
+    int hip_##name(int type, void* p1, void* p2, void* p3, void* p4, unsigned int size, float a1, float a2) \
+    { \
+        if (type == 0) { name##kernel##float<<<blockNum(size), blockMax>>>((float*)p1, (float*)p2, (float*)p3, (float*)p4, size, a1, a2); } \
+        else if (type == 1) { name##kernel##double<<<blockNum(size), blockMax>>>((double*)p1, (double*)p2, (double*)p3, (double*)p4, size, a1, a2); } \
+        else if (type == 2) { name##kernel##half<<<blockNum(size), blockMax>>>((half*)p1, (half*)p2, (half*)p3, (half*)p4, size, a1, a2); } \
         return getError(#name); \
     }
-
+#define HIP_FUNCTION43(name, function) \
+    static __global__ void name##kernel##float(float* p1, float* p2, float* p3, float* p4, unsigned int size, float a1, float a2, float a3) \
+    { \
+        int i = cal_i(); \
+        using fp = float; \
+        if (i < size) { function; } \
+    } \
+    static __global__ void name##kernel##double(double* p1, double* p2, double* p3, double* p4, unsigned int size, double a1, double a2, double a3) \
+    { \
+        int i = cal_i(); \
+        using fp = double; \
+        if (i < size) { function; } \
+    } \
+    static __global__ void name##kernel##half(half* p1, half* p2, half* p3, half* p4, unsigned int size, half a1, half a2, half a3) \
+    { \
+        int i = cal_i(); \
+        using fp = half; \
+        if (i < size) { function; } \
+    } \
+    int hip_##name(int type, void* p1, void* p2, void* p3, void* p4, unsigned int size, float a1, float a2, float a3) \
+    { \
+        if (type == 0) { name##kernel##float<<<blockNum(size), blockMax>>>((float*)p1, (float*)p2, (float*)p3, (float*)p4, size, a1, a2, a3); } \
+        else if (type == 1) { name##kernel##double<<<blockNum(size), blockMax>>>((double*)p1, (double*)p2, (double*)p3, (double*)p4, size, a1, a2, a3); } \
+        else if (type == 2) { name##kernel##half<<<blockNum(size), blockMax>>>((half*)p1, (half*)p2, (half*)p3, (half*)p4, size, a1, a2, a3); } \
+        return getError(#name); \
+    }
 #define HIP_FUNCTION44(name, function) \
-    static __global__ void name##kernel(float* p1, float* p2, float* p3, float* p4, unsigned int size, float a1, float a2, float a3, float a4) \
+    static __global__ void name##kernel##float(float* p1, float* p2, float* p3, float* p4, unsigned int size, float a1, float a2, float a3, float a4) \
     { \
         int i = cal_i(); \
-        if (i < size) \
-        { \
-            function \
-        } \
+        using fp = float; \
+        if (i < size) { function; } \
     } \
-    int hip_##name(float* p1, float* p2, float* p3, float* p4, unsigned int size, float a1, float a2, float a3, float a4) \
+    static __global__ void name##kernel##double(double* p1, double* p2, double* p3, double* p4, unsigned int size, double a1, double a2, double a3, double a4) \
     { \
-        name##kernel<<<blockNum(size), blockMax>>>(p1, p2, p3, p4, size, a1, a2, a3, a4); \
+        int i = cal_i(); \
+        using fp = double; \
+        if (i < size) { function; } \
+    } \
+    static __global__ void name##kernel##half(half* p1, half* p2, half* p3, half* p4, unsigned int size, half a1, half a2, half a3, half a4) \
+    { \
+        int i = cal_i(); \
+        using fp = half; \
+        if (i < size) { function; } \
+    } \
+    int hip_##name(int type, void* p1, void* p2, void* p3, void* p4, unsigned int size, float a1, float a2, float a3, float a4) \
+    { \
+        if (type == 0) { name##kernel##float<<<blockNum(size), blockMax>>>((float*)p1, (float*)p2, (float*)p3, (float*)p4, size, a1, a2, a3, a4); } \
+        else if (type == 1) { name##kernel##double<<<blockNum(size), blockMax>>>((double*)p1, (double*)p2, (double*)p3, (double*)p4, size, a1, a2, a3, a4); } \
+        else if (type == 2) { name##kernel##half<<<blockNum(size), blockMax>>>((half*)p1, (half*)p2, (half*)p3, (half*)p4, size, a1, a2, a3, a4); } \
+        return getError(#name); \
+    }
+#define HIP_FUNCTION63(name, function) \
+    static __global__ void name##kernel##float(float* p1, float* p2, float* p3, float* p4, float* p5, float* p6, unsigned int size, float a1, float a2, float a3) \
+    { \
+        int i = cal_i(); \
+        using fp = float; \
+        if (i < size) { function; } \
+    } \
+    static __global__ void name##kernel##double(double* p1, double* p2, double* p3, double* p4, double* p5, double* p6, unsigned int size, double a1, double a2, double a3) \
+    { \
+        int i = cal_i(); \
+        using fp = double; \
+        if (i < size) { function; } \
+    } \
+    static __global__ void name##kernel##half(half* p1, half* p2, half* p3, half* p4, half* p5, half* p6, unsigned int size, half a1, half a2, half a3) \
+    { \
+        int i = cal_i(); \
+        using fp = half; \
+        if (i < size) { function; } \
+    } \
+    int hip_##name(int type, void* p1, void* p2, void* p3, void* p4, void* p5, void* p6, unsigned int size, float a1, float a2, float a3) \
+    { \
+        if (type == 0) { name##kernel##float<<<blockNum(size), blockMax>>>((float*)p1, (float*)p2, (float*)p3, (float*)p4, (float*)p5, (float*)p6, size, a1, a2, a3); } \
+        else if (type == 1) { name##kernel##double<<<blockNum(size), blockMax>>>((double*)p1, (double*)p2, (double*)p3, (double*)p4, (double*)p5, (double*)p6, size, a1, a2, a3); } \
+        else if (type == 2) { name##kernel##half<<<blockNum(size), blockMax>>>((half*)p1, (half*)p2, (half*)p3, (half*)p4, (half*)p5, (half*)p6, size, a1, a2, a3); } \
         return getError(#name); \
     }
 
-HIP_FUNCTION22(sigmoid,
+HIP_FUNCTION22(reciprocal,
     {
-        p2[i] = a1 * exp(p1[i]) / (1 + exp(p1[i])) + a2 * p2[i];
+        p2[i] = a1 / (p1[i] + a2);
     });
-
-HIP_FUNCTION42(sigmoidb,
-    {
-        p4[i] = a1 * p2[i] * p1[i] * (1 - p1[i]) + a2 * p4[i];
-    });
-
-HIP_FUNCTION22(relu,
-    {
-        p2[i] = a1 * max(0, p1[i]) + a2 * p2[i];
-    });
-
-HIP_FUNCTION42(relub,
-    {
-        if (p3[i] >= 0)
-        {
-            p4[i] = p2[i] * a1 + p4[i] * a2;
-        }
-        else
-        {
-            p4[i] = p4[i] * a2;
-        }
-    });
-
-HIP_FUNCTION22(reciprocal, { p2[i] = a1 / (p1[i] + a2); });
 
 HIP_FUNCTION22(addnumber, { p2[i] = a1 + p1[i] * a2; });
 
+HIP_FUNCTION22(pow, { p2[i] = pow(p1[i] + a2, a1); });
+
+HIP_FUNCTION22(sparse,
+    {
+        p2[i] = ((fp(1) - a1) / (fp(1) - p1[i]) - a1 / p1[i]) * a2;
+    });
+
+HIP_FUNCTION22(sign,
+    {
+        if (p1[i] > a2)
+        {
+            p2[i] = a1;
+            return;
+        }
+        if (p1[i] < -a2)
+        {
+            p2[i] = -a1;
+            return;
+        }
+        p2[i] = 0;
+    });
+
+HIP_FUNCTION32(cross_entropy, { p3[i] = -a2 * p2[i] * log(p1[i] + a1); });
+
+HIP_FUNCTION32(cross_entropy2, { p3[i] = -a2 * (p2[i] * log(p1[i] + a1) + (fp(1) - p2[i]) * log(fp(1) - p1[1] + a1)); });
+
+HIP_FUNCTION32(add, { p3[i] = p1[i] * a1 + p2[i] * a2; });
+
+HIP_FUNCTION32(mul, { p3[i] = p1[i] * p2[i] * a1 + p3[i] * a2; });
+
+HIP_FUNCTION33(div, { p3[i] = a3 * (p1[i] + a1) / (p2[i] + a2); });
+
+HIP_FUNCTION32(sectionlimit,
+    {
+        if (p3 != p1)
+        {
+            p3[i] = p1[i];
+        }
+        if (p3[i] < a1)
+        {
+            p3[i] = a1;
+        }
+        if (p3[i] > a2)
+        {
+            p3[i] = a2;
+        }
+    });
+
 HIP_FUNCTION32(ada_update,
     {
-        float& rou = a1;
-        float& epsilon = a2;
-        p2[i] = p2[i] * rou + p3[i] * p3[i] * (float(1) - rou);
+        fp& rou = a1;
+        fp& epsilon = a2;
+        p2[i] = p2[i] * rou + p3[i] * p3[i] * (fp(1) - rou);
         p3[i] = p3[i] * sqrt((p1[i] + epsilon) / (p2[i] + epsilon));
-        p1[i] = p1[i] * rou + p3[i] * p3[i] * (float(1) - rou);
+        p1[i] = p1[i] * rou + p3[i] * p3[i] * (fp(1) - rou);
     });
 
 HIP_FUNCTION42(ada_delta_update,
     {
-        float& rou = a1;
-        float& epsilon = a2;
-        p1[i] = p1[i] * rou + p3[i] * p3[i] * (float(1) - rou);
+        fp& rou = a1;
+        fp& epsilon = a2;
+        p1[i] = p1[i] * rou + p3[i] * p3[i] * (fp(1) - rou);
         p4[i] = p3[i] * sqrt((p2[i] + epsilon) / (p1[i] + epsilon));
-        p2[i] = p2[i] * rou + p4[i] * p4[i] * (float(1) - rou);
+        p2[i] = p2[i] * rou + p4[i] * p4[i] * (fp(1) - rou);
     });
 
 HIP_FUNCTION44(adam_update,
     {
-        float& beta1 = a1;
-        float& beta2 = a2;
-        float& epsilon = a3;
-        float& t = a4;
-        p1[i] = p1[i] * beta1 + p3[i] * (float(1) - beta1);
-        p2[i] = p2[i] * beta2 + p3[i] * p3[i] * (float(1) - beta2);
-        p4[i] = p1[i] / (float(1) - pow(beta1, t)) / (sqrt(p2[i] / (float(1) - pow(beta2, t))) + epsilon);
+        fp& beta1 = a1;
+        fp& beta2 = a2;
+        fp& epsilon = a3;
+        fp& t = a4;
+        p1[i] = p1[i] * beta1 + p3[i] * (fp(1) - beta1);
+        p2[i] = p2[i] * beta2 + p3[i] * p3[i] * (fp(1) - beta2);
+        p4[i] = p1[i] / (fp(1) - pow(beta1, t)) / (sqrt(p2[i] / (fp(1) - pow(beta2, t))) + epsilon);
     });
 
 HIP_FUNCTION32(rms_prop_update,
     {
-        float& rou = a1;
-        float& epsilon = a2;
-        p1[i] = p1[i] * rou + p2[i] * p2[i] * (float(1) - rou);
+        fp& rou = a1;
+        fp& epsilon = a2;
+        p1[i] = p1[i] * rou + p2[i] * p2[i] * (fp(1) - rou);
         p3[i] = p2[i] / sqrt(p1[i] + epsilon);
+    });
+
+HIP_FUNCTION22(sin,
+    {
+        p2[i] = sin(a1 * p1[i] + a2);
+    });
+
+HIP_FUNCTION22(cos,
+    {
+        p2[i] = cos(a1 * p1[i] + a2);
+    });
+
+HIP_FUNCTION22(zigzag,
+    {
+        p2[i] = a1 * (p1[i] + a2 - fp(2) * floor((p1[i] + a2 - fp(1)) / fp(2)) - fp(2));
+    });
+
+HIP_FUNCTION42(zigzagb,
+    {
+        if (abs(p1[i]) > fp(1 - 1e-2))
+        {
+            p2[i] = -p4[i] * fp(100);
+            return;
+        }
+        p2[i] = p4[i];
+    });
+
+HIP_FUNCTION22(step,
+    {
+        p2[i] = round(p1[i] * fp(256)) / fp(256);
+    });
+
+HIP_FUNCTION23(leaky_relu,
+    {
+        if (p1[i] >= fp(0))
+        {
+            p2[i] = p1[i] * a2 + p2[i] * a3;
+        }
+        else
+        {
+            p2[i] = p1[i] * a1 * a2 + p2[i] * a3;
+        }
+    });
+
+HIP_FUNCTION43(leaky_relub,
+    {
+        if (p1[i] >= fp(0))
+        {
+            p2[i] = p4[i] * a2 + p2[i] * a3;
+        }
+        else
+        {
+            p2[i] = p4[i] * a1 * a2 + p2[i] * a3;
+        }
+    });
+
+HIP_FUNCTION33(max,
+    {
+        p3[i] = p1[i] > p2[i] ? p1[i] : p2[i];
+    });
+HIP_FUNCTION63(maxb,
+    {
+        if (p1[i] == p5[i])
+        {
+            p2[i] = a3 * p6[i] + a1 * p2[i];
+            p4[i] = a2 * p4[i];
+        }
+        else
+        {
+            p2[i] = a1 * p2[i];
+            p4[i] = a3 * p6[i] + a2 * p4[i];
+        }
     });
 
 static __global__ void addbiaskernel(float* m, float* b, float* r, unsigned int size_m, unsigned int size_mchannel, unsigned int size_b, float a1, float a2)

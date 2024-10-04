@@ -1,6 +1,7 @@
 ﻿#include "NetCifa.h"
 #include "Log.h"
 #include "Option.h"
+#include "strfunc.h"
 
 namespace cccc
 {
@@ -13,39 +14,20 @@ NetCifa::~NetCifa()
 {
 }
 
-cifa::Object NetCifa::registerMatrix(MatrixSP&& m)
-{
-    cifa::Object o(count_++, "Matrix");
-    map_matrix_[o] = std::move(m);
-    return o;
-}
-
-cifa::Object NetCifa::registerLoss(std::vector<MatrixOp> loss)
-{
-    cifa::Object o(count_++, "Loss");
-    map_loss_[o] = std::move(loss);
-    return o;
-}
-
-cifa::Object NetCifa::registerMatrixGroup(std::vector<MatrixSP> mg)
-{
-    cifa::Object o(count_++, "MatrixGroup");
-    map_matrix_group_[o] = std::move(mg);
-    return o;
-}
-
 std::vector<cifa::Object> NetCifa::getVector(cifa::ObjectVector& v, int index)
 {
     std::vector<cifa::Object> r;
-    if (index < 0 || index >= v.size())
+    //可能是一个union中的逗号表达式
+    //cifa的计算，如果union中只有一个，则直接返回，如果是逗号表达式，则返回一个递归形式的结果
+    if (index < 0 || index >= v.size() || (!v[index].hasValue() && v[index].subV().empty()))
     {
         return r;
     }
-    std::function<void(cifa::Object&)> expand = [&r, &expand](cifa::Object& o)
+    std::function<void(const cifa::Object&)> expand = [&r, &expand](const cifa::Object& o)
     {
-        if (o.v.size() > 0)
+        if (o.subV().size() > 0)
         {
-            for (auto& o1 : o.v)
+            for (auto& o1 : o.subV())
             {
                 expand(o1);
             }
@@ -65,7 +47,7 @@ std::vector<int> NetCifa::getIntVector(cifa::ObjectVector& v, int index)
     std::vector<int> r;
     for (auto& o : vo)
     {
-        r.push_back(o.value);
+        r.push_back(o.toInt());
     }
     return r;
 }
@@ -76,7 +58,7 @@ std::vector<float> NetCifa::getRealVector(cifa::ObjectVector& v, int index)
     std::vector<float> r;
     for (auto& o : vo)
     {
-        r.push_back(o.value);
+        r.push_back(o.toDouble());
     }
     return r;
 }
@@ -89,7 +71,7 @@ int NetCifa::init2()
     //cudnnTensorDescriptor_t t;
     //auto s = sizeof(*t);
     loss_.clear();
-    map_loss_.clear();
+    //map_loss_.clear();
 
     runScript(option_->getString("cifa", "parameter"));
     if (runScript(option_->getString("cifa", "structure")))
@@ -97,7 +79,7 @@ int NetCifa::init2()
         LOG("Error in script!\n");
         return -1;
     }
-    map_matrix_.clear();
+    //map_matrix_.clear();
 #ifdef _DEBUG
     //LOG("{}\n", MatrixOp::ir(op_queue_));
     //MatrixOp::ir(loss_);
@@ -118,11 +100,12 @@ int NetCifa::runScript(const std::string& script)
 {
     for (auto section : option_->getAllSections())
     {
+        std::map<std::string, cifa::Object> m;
         for (auto key : option_->getAllKeys(section))
         {
-            cifa_.register_parameter(strfunc::toLowerCase(section) + "::" + strfunc::toLowerCase(key),
-                cifa::Object(option_->INIReaderNoUnderline::getReal(section, key), option_->INIReaderNoUnderline::getString(section, key)));
+            m[strfunc::toLowerCase(key)] = cifa::Object(option_->INIReaderNoUnderline::getReal(section, key), option_->INIReaderNoUnderline::getString(section, key));
         }
+        cifa_.register_parameter(strfunc::toLowerCase(section), m);
     }
 
     auto lines = strfunc::splitString(strfunc::replaceAllSubString(script, "\r", ""), "\n");
@@ -135,11 +118,11 @@ int NetCifa::runScript(const std::string& script)
         }
         LOG("\n");
     }
-    cifa_.setOutputError(false);
+    cifa_.set_output_error(false);
     auto o = cifa_.run_script(script);
-    if (o.type == "Error")
+    if (o.getSpecialType() == "Error" && o.isType<std::string>() && o.toString().find("Error") == 0)
     {
-        LOG("{}", o.content);
+        LOG("{}", o.toString());
         return -1;
     }
     return 0;
@@ -153,65 +136,65 @@ int NetCifa::registerFunctions()
             std::vector<int> dim;
             for (int i = 0; i < v.size(); i++)
             {
-                dim.push_back(v[i].value);
+                dim.push_back(v[i]);
             }
-            return registerMatrix(makeMatrixSP(dim));
+            return cifa::Object(makeMatrixSP(dim));
         });
     cifa_.register_function("M", [this](cifa::ObjectVector& v)
         {
             std::vector<int> dim;
             for (int i = 0; i < v.size(); i++)
             {
-                dim.push_back(v[i].value);
+                dim.push_back(v[i]);
             }
-            return registerMatrix(makeMatrixSP(dim));
+            return cifa::Object(makeMatrixSP(dim));
         });
     cifa_.register_function("Mb", [this](cifa::ObjectVector& v)
         {
             std::vector<int> dim = getIntVector(v, 0);
-            auto o = registerMatrix(makeMatrixSP(dim));
-            map_matrix_[o]->setNeedBack(v[1].value);
+            auto o = cifa::Object(makeMatrixSP(dim));
+            o.to<MatrixSP>()->setNeedBack(v[1].toInt());
             return o;
         });
     cifa_.register_function("setValue", [this](cifa::ObjectVector& v)
         {
-            auto& m = map_matrix_[v[0]];
+            auto m = v[0].to<MatrixSP>();
             auto values = getVector(v, 1);
             std::vector<float> values_real(values.size());
             for (int i = 0; i < values.size(); i++)
             {
-                values_real[i] = values[i].value;
+                values_real[i] = values[i].toDouble();
             }
             m->importData(values_real.data(), values_real.size());
             return cifa::Object();
         });
     cifa_.register_function("repeat", [this](cifa::ObjectVector& v)
         {
-            auto& m = map_matrix_[v[0]];
+            auto m = v[0].to<MatrixSP>();
             m->repeat(1);
             return cifa::Object();
         });
     cifa_.register_function("scale", [this](cifa::ObjectVector& v)
         {
-            auto& m = map_matrix_[v[0]];
-            m->scale(v[1].value);
+            auto m = v[0].to<MatrixSP>();
+            m->scale(v[1].toDouble());
             return cifa::Object();
         });
     cifa_.register_function("print_message", [this](cifa::ObjectVector& v)
         {
-            LOG("{}\n", v[0].value);
-            map_matrix_[v[0]]->message();
+            LOG("{}\n", v[0].toDouble());
+            v[0].to<MatrixSP>()->message();
             return cifa::Object();
         });
     cifa_.register_function("setXY", [this](cifa::ObjectVector& v)
         {
             //为方便理解，注意名字的区别
-            setXA(map_matrix_[v[0]], map_matrix_[v[1]]);
+            setXA(v[0].to<MatrixSP>(), v[1].to<MatrixSP>());
             return cifa::Object();
         });
     cifa_.register_function("setLossWeight", [this](cifa::ObjectVector& v)
         {
-            loss_weight_ = map_matrix_[v[0]];
+            loss_weight_ = v[0].to<MatrixSP>();
             return cifa::Object();
         });
     cifa_.register_function("clearWeight", [this](cifa::ObjectVector& v)
@@ -223,81 +206,82 @@ int NetCifa::registerFunctions()
         {
             for (auto& o : v)
             {
-                weights_.push_back(map_matrix_[o].get());
+                weights_.push_back(o.to<MatrixSP>().get());
             }
             return cifa::Object();
         });
     cifa_.register_function("addBias", [this](cifa::ObjectVector& v)
         {
             MatrixOp op;
-            auto o = registerMatrix(makeMatrixSP());
-            op.as_addBias(map_matrix_[v[0]], map_matrix_[v[1]], map_matrix_[o]);
+            auto o = cifa::Object(makeMatrixSP());
+            op.as_addBias(v[0].to<MatrixSP>(), v[1].to<MatrixSP>(), o.to<MatrixSP>());
             op_queue_.push_back(op);
             return o;
         });
     cifa_.register_function("add", [this](cifa::ObjectVector& v)
         {
             MatrixOp op;
-            auto o = registerMatrix(makeMatrixSP());
-            op.as_add(map_matrix_[v[0]], map_matrix_[v[1]], map_matrix_[o]);
+            auto o = cifa::Object(makeMatrixSP());
+            op.as_add(v[0].to<MatrixSP>(), v[1].to<MatrixSP>(), o.to<MatrixSP>());
             op_queue_.push_back(op);
             return o;
         });
-    cifa_.user_add = [this](const cifa::Object& l, const cifa::Object& r)
-    {
-        if (l.type == "Matrix" && r.type == "Matrix")
+    cifa_.user_add.push_back([this](const cifa::Object& l, const cifa::Object& r)
         {
-            MatrixOp op;
-            auto o = registerMatrix(makeMatrixSP());
-            if (map_matrix_[r]->getNumber() == 1 && map_matrix_[r]->getDataSize() != map_matrix_[l]->getDataSize())    //注意这个判断不严格
+            if (l.isType<MatrixSP>() && r.isType<MatrixSP>())
             {
-                op.as_addBias(map_matrix_[l], map_matrix_[r], map_matrix_[o]);
+                MatrixOp op;
+                auto o = cifa::Object(makeMatrixSP());
+                if (r.to<MatrixSP>()->getNumber() == 1 && r.to<MatrixSP>()->getDataSize() != l.to<MatrixSP>()->getDataSize())    //注意这个判断不严格
+                {
+                    op.as_addBias(l.to<MatrixSP>(), r.to<MatrixSP>(), o.to<MatrixSP>());
+                }
+                else
+                {
+                    op.as_add(l.to<MatrixSP>(), r.to<MatrixSP>(), o.to<MatrixSP>());
+                }
+                op_queue_.push_back(op);
+                return o;
             }
-            else
+            if (l.isType<Loss>() && r.isType<Loss>())
             {
-                op.as_add(map_matrix_[l], map_matrix_[r], map_matrix_[o]);
+                return cifa::Object(l.to<Loss>() + r.to<Loss>());
             }
-            op_queue_.push_back(op);
-            return o;
-        }
-        if (l.type == "Loss" && r.type == "Loss")
+            return cifa::Object();
+        });
+    cifa_.user_mul.push_back([this](const cifa::Object& l, const cifa::Object& r)
         {
-            return registerLoss(map_loss_[l] + map_loss_[r]);
-        }
-        return cifa::Object(l.value + r.value);
-    };
-    cifa_.user_mul = [this](const cifa::Object& l, const cifa::Object& r)
-    {
-        if (l.type == "Matrix" && r.type == "Matrix")
-        {
-            MatrixOp op;
-            auto o = registerMatrix(makeMatrixSP());
-            op.as_mul(map_matrix_[l], map_matrix_[r], map_matrix_[o]);
-            op_queue_.push_back(op);
-            return o;
-        }
-        if (l.type == "Loss" || r.type == "Loss")
-        {
-            std::vector<MatrixOp> q;
-            if (l.type == "Loss")
+            if (l.isType<MatrixSP>() && r.isType<MatrixSP>())
             {
-                q = r.value * map_loss_[l];
+                MatrixOp op;
+                auto o = cifa::Object(makeMatrixSP());
+                op.as_mul(l.to<MatrixSP>(), r.to<MatrixSP>(), o.to<MatrixSP>());
+                op_queue_.push_back(op);
+                return o;
             }
-            else
+            if (l.isType<Loss>() || r.isType<Loss>())
             {
-                q = l.value * map_loss_[r];
+                Loss q;
+                if (l.isType<Loss>())
+                {
+                    q = r.toDouble() * l.to<Loss>();
+                }
+                else
+                {
+                    q = l.toDouble() * r.to<Loss>();
+                }
+                return cifa::Object(q);
             }
-            return registerLoss(q);
-        }
-        return cifa::Object(l.value * r.value);
-    };
+            return cifa::Object();
+        });
     cifa_.register_function("conv", [this](cifa::ObjectVector& v)
         {
             auto stride = getIntVector(v, 2);
             auto padding = getIntVector(v, 3);
             MatrixOp op;
-            auto o = registerMatrix(makeMatrixSP());
-            op.as_conv(map_matrix_[v[0]], map_matrix_[v[1]], map_matrix_[o], stride, padding, 0);
+            auto o = cifa::Object(makeMatrixSP());
+            auto conv_algo = option_->getInt("train", "conv_algo", -1);
+            op.as_conv(v[0].to<MatrixSP>(), v[1].to<MatrixSP>(), o.to<MatrixSP>(), stride, padding, conv_algo);
             op_queue_.push_back(op);
             return o;
         });
@@ -306,8 +290,8 @@ int NetCifa::registerFunctions()
             auto stride = getIntVector(v, 2);
             auto padding = getIntVector(v, 3);
             MatrixOp op;
-            auto o = registerMatrix(makeMatrixSP());
-            op.as_conv(map_matrix_[v[0]], map_matrix_[v[1]], map_matrix_[o], stride, padding, 1);
+            auto o = cifa::Object(makeMatrixSP());
+            op.as_conv(v[0].to<MatrixSP>(), v[1].to<MatrixSP>(), o.to<MatrixSP>(), stride, padding, 1);
             op_queue_.push_back(op);
             return o;
         });
@@ -317,8 +301,8 @@ int NetCifa::registerFunctions()
             auto stride = getIntVector(v, 3);
             auto padding = getIntVector(v, 4);
             MatrixOp op;
-            auto o = registerMatrix(makeMatrixSP());
-            op.as_pool(map_matrix_[v[0]], map_matrix_[o], PoolingType(int(v[1])), 0, window, stride, padding);
+            auto o = cifa::Object(makeMatrixSP());
+            op.as_pool(v[0].to<MatrixSP>(), o.to<MatrixSP>(), PoolingType(int(v[1])), POOLING_NOT_REVERSE, window, stride, padding);
             op_queue_.push_back(op);
             return o;
         });
@@ -328,8 +312,8 @@ int NetCifa::registerFunctions()
             auto stride = getIntVector(v, 2);
             auto padding = getIntVector(v, 3);
             MatrixOp op;
-            auto o = registerMatrix(makeMatrixSP());
-            op.as_pool(map_matrix_[v[0]], map_matrix_[o], POOLING_MAX, 0, window, stride, padding);
+            auto o = cifa::Object(makeMatrixSP());
+            op.as_pool(v[0].to<MatrixSP>(), o.to<MatrixSP>(), POOLING_MAX, POOLING_NOT_REVERSE, window, stride, padding);
             op_queue_.push_back(op);
             return o;
         });
@@ -339,8 +323,8 @@ int NetCifa::registerFunctions()
             auto stride = getIntVector(v, 2);
             auto padding = getIntVector(v, 3);
             MatrixOp op;
-            auto o = registerMatrix(makeMatrixSP());
-            op.as_pool(map_matrix_[v[0]], map_matrix_[o], POOLING_AVERAGE_NOPADDING, 0, window, stride, padding);
+            auto o = cifa::Object(makeMatrixSP());
+            op.as_pool(v[0].to<MatrixSP>(), o.to<MatrixSP>(), POOLING_AVERAGE_NOPADDING, POOLING_NOT_REVERSE, window, stride, padding);
             op_queue_.push_back(op);
             return o;
         });
@@ -350,66 +334,66 @@ int NetCifa::registerFunctions()
             auto stride = getIntVector(v, 2);
             auto padding = getIntVector(v, 3);
             MatrixOp op;
-            auto o = registerMatrix(makeMatrixSP());
-            op.as_pool(map_matrix_[v[0]], map_matrix_[o], POOLING_AVERAGE_NOPADDING, 1, window, stride, padding);
+            auto o = cifa::Object(makeMatrixSP());
+            op.as_pool(v[0].to<MatrixSP>(), o.to<MatrixSP>(), POOLING_AVERAGE_NOPADDING, POOLING_REVERSE, window, stride, padding);
             op_queue_.push_back(op);
             return o;
         });
     cifa_.register_function("width", [this](cifa::ObjectVector& v)
         {
-            return cifa::Object(map_matrix_[v[0]]->getWidth());
+            return cifa::Object(v[0].to<MatrixSP>()->getWidth());
         });
     cifa_.register_function("height", [this](cifa::ObjectVector& v)
         {
-            return cifa::Object(map_matrix_[v[0]]->getHeight());
+            return cifa::Object(v[0].to<MatrixSP>()->getHeight());
         });
     cifa_.register_function("row", [this](cifa::ObjectVector& v)
         {
-            return cifa::Object(map_matrix_[v[0]]->getRow());
+            return cifa::Object(v[0].to<MatrixSP>()->getRow());
         });
     cifa_.register_function("channel", [this](cifa::ObjectVector& v)
         {
-            return cifa::Object(map_matrix_[v[0]]->getChannel());
+            return cifa::Object(v[0].to<MatrixSP>()->getChannel());
         });
     cifa_.register_function("reshape", [this](cifa::ObjectVector& v)
         {
             auto dim = getIntVector(v, 1);
             MatrixOp op;
-            auto o = registerMatrix(makeMatrixSP());
-            op.as_reshape(map_matrix_[v[0]], map_matrix_[o], dim);
+            auto o = cifa::Object(makeMatrixSP());
+            op.as_reshape(v[0].to<MatrixSP>(), o.to<MatrixSP>(), dim);
             op_queue_.push_back(op);
             return o;
         });
     cifa_.register_function("setneedback", [this](cifa::ObjectVector& v)
         {
-            map_matrix_[v[0]]->setNeedBack(v[1].value);
+            v[0].to<MatrixSP>()->setNeedBack(v[1].toInt());
             return v[1];
         });
     cifa_.register_function("mul", [this](cifa::ObjectVector& v)
         {
             auto dim = getIntVector(v, 2);
             MatrixOp op;
-            auto o = registerMatrix(makeMatrixSP());
-            op.as_mul(map_matrix_[v[0]], map_matrix_[v[1]], map_matrix_[o], 1, dim);
+            auto o = cifa::Object(makeMatrixSP());
+            op.as_mul(v[0].to<MatrixSP>(), v[1].to<MatrixSP>(), o.to<MatrixSP>(), 1, dim);
             op_queue_.push_back(op);
             return o;
         });
     cifa_.register_function("active", [this](cifa::ObjectVector& v)
         {
             MatrixOp op;
-            auto o = registerMatrix(makeMatrixSP());
-            op.as_active(map_matrix_[v[0]], map_matrix_[o], ActiveFunctionType(int(v[1])), getIntVector(v, 2), getRealVector(v, 3), {});
+            auto o = cifa::Object(makeMatrixSP());
+            op.as_active(v[0].to<MatrixSP>(), o.to<MatrixSP>(), ActiveFunctionType(int(v[1])), getIntVector(v, 2), getRealVector(v, 3), {});
             op_queue_.push_back(op);
             return o;
         });
     cifa_.register_function("concat", [this](cifa::ObjectVector& v)
         {
             MatrixOp op;
-            auto o = registerMatrix(makeMatrixSP());
-            if (v.size() == 1 && v[0].type == "MatrixGroup")
+            auto o = cifa::Object(makeMatrixSP());
+            if (v.size() == 1 && v[0].isType<MatrixGroup>())
             {
-                auto& vm = map_matrix_group_[v[0]];
-                op.as_concat(vm, map_matrix_[o]);
+                auto vm = v[0].to<MatrixGroup>();
+                op.as_concat(vm, o.to<MatrixSP>());
             }
             else
             {
@@ -417,9 +401,9 @@ int NetCifa::registerFunctions()
                 std::vector<MatrixSP> vm;
                 for (auto& o1 : vo)
                 {
-                    vm.push_back(map_matrix_[o1]);
+                    vm.push_back(o1.to<MatrixSP>());
                 }
-                op.as_concat(vm, map_matrix_[o]);
+                op.as_concat(vm, o.to<MatrixSP>());
             }
             op_queue_.push_back(op);
             return o;
@@ -427,8 +411,8 @@ int NetCifa::registerFunctions()
     cifa_.register_function("max", [this](cifa::ObjectVector& v)
         {
             MatrixOp op;
-            auto o = registerMatrix(makeMatrixSP());
-            op.as_max(map_matrix_[v[0]], map_matrix_[v[1]], map_matrix_[o]);
+            auto o = cifa::Object(makeMatrixSP());
+            op.as_max(v[0].to<MatrixSP>(), v[1].to<MatrixSP>(), o.to<MatrixSP>());
             op_queue_.push_back(op);
             return o;
         });
@@ -436,23 +420,23 @@ int NetCifa::registerFunctions()
         {
             for (auto& o : v)
             {
-                loss_ = loss_ + map_loss_[o];
+                loss_ = loss_ + o.to<Loss>();
             }
             return cifa::Object();
         });
     //cifa_.register_function("crossEntropy", [this](cifa::ObjectVector& v)
-    //    { return registerLoss(crossEntropy(map_matrix_[v[0]], map_matrix_[v[1]])); });
+    //    { return registerLoss(crossEntropy(v[0].to<MatrixSP>(), v[1].to<MatrixSP>())); });
     cifa_.register_function("L2", [this](cifa::ObjectVector& v)
         {
-            return registerLoss(L2(map_matrix_[v[0]]));
+            return Loss(L2(v[0].to<MatrixSP>()));
         });
     cifa_.register_function("MatrixGroup", [this](cifa::ObjectVector& v)
         {
-            return registerMatrixGroup({});
+            return MatrixGroup({});
         });
     cifa_.register_function("addIntoGroup", [this](cifa::ObjectVector& v)
         {
-            map_matrix_group_[v[0]].push_back(map_matrix_[v[1]]);
+            v[0].to<MatrixGroup>().push_back(v[1].to<MatrixSP>());
             return cifa::Object();
         });
     for (int i = -1; i < 100; i++)
@@ -464,9 +448,9 @@ int NetCifa::registerFunctions()
             cifa_.register_function(str, [this, i](cifa::ObjectVector& v)
                 {
                     MatrixOp op;
-                    auto o = registerMatrix(makeMatrixSP());
-                    auto& Y = map_matrix_[o];
-                    op.as_active(map_matrix_[v[0]], Y, ActiveFunctionType(i), getIntVector(v, 1), getRealVector(v, 2), {});
+                    auto o = cifa::Object(makeMatrixSP());
+                    auto Y = o.to<MatrixSP>();
+                    op.as_active(v[0].to<MatrixSP>(), Y, ActiveFunctionType(i), getIntVector(v, 1), getRealVector(v, 2), {});
                     op_queue_.push_back(op);
                     return o;
                 });

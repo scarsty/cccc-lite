@@ -93,6 +93,7 @@ inline cudnnDataType_t toCudnnDataType(DataType dt)
     const cudnnDataType_t t[] = { CUDNN_DATA_FLOAT, CUDNN_DATA_DOUBLE, CUDNN_DATA_HALF };
     return t[int(dt)];
 }
+
 inline miopenDataType_t toMiopenDataType(DataType dt)
 {
     const miopenDataType_t t[] = { miopenFloat, miopenDouble, miopenHalf };
@@ -123,6 +124,7 @@ inline miopenDataType_t toMiopenDataType(DataType dt)
     public: \
         cudnn##T##Descriptor_t operator()() { return (cudnn##T##Descriptor_t)desc_; } \
     };
+
 class cudnnConvolutionDesc
 {
 private:
@@ -133,6 +135,7 @@ public:
     {
         desc_[23] = 1;    //此值从cudnn的create结果推断得到，原理不负责
     }
+
     cudnnConvolutionDescriptor_t operator()() { return (cudnnConvolutionDescriptor_t)desc_; }
 };
 CUDNN_DESC2(Tensor)
@@ -178,5 +181,7 @@ MIOPEN_DESC2(Activation)
 MIOPEN_DESC2(Dropout)
 MIOPEN_DESC2(RNN)
 MIOPEN_DESC2(LRN)
+
+void find_gpu_functions();
 
 }    //namespace cccc

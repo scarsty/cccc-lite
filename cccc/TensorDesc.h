@@ -1,6 +1,5 @@
 #pragma once
 #include "types.h"
-#include <string>
 #include <typeinfo>
 #include <unordered_map>
 #include <vector>

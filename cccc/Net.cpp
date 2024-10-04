@@ -1,12 +1,9 @@
 ﻿#include "Net.h"
 #include "ConsoleControl.h"
 #include "INIReaderBin.h"
-#include "Layer.h"
-#include "Timer.h"
+#include "MatrixEx.h"
 #include "VectorMath.h"
 #include "filefunc.h"
-#include "strfunc.h"
-#include <algorithm>
 
 namespace cccc
 {
@@ -208,7 +205,7 @@ int Net::loadWeight(const std::string& str, int load_mode)
     std::string buffer;
     if (filefunc::fileExist(str))
     {
-        buffer = strfunc::readStringFromFile(str);
+        buffer = filefunc::readFileToString(str);
     }
     else if (load_mode)
     {

@@ -21,11 +21,20 @@ thread_local GpuControl* current_gpu_ = nullptr;    //当前使用的cuda设备
 int GpuControl::device_count_ = -1;
 int GpuControl::device_count_c_ = 0;
 int GpuControl::device_count_h_ = 0;
-std::vector<int> GpuControl::cuda_devices_turn_;        //cuda设备按优劣的排序
+std::vector<int> GpuControl::gpu_devices_turn_;        //cuda设备按优劣的排序
 std::atomic<int> GpuControl::auto_choose_turn_{ 0 };    //若自动选择，当前使用哪个设备
 
 GpuControl::GpuControl()
 {
+}
+
+static void setCurrentCuda(GpuControl* gpu)
+{
+    if (gpu)
+    {
+        gpu->setAsCurrent();
+    }
+    current_gpu_ = nullptr;
 }
 
 GpuControl::~GpuControl()
@@ -89,6 +98,234 @@ void GpuControl::checkDevices()
         LOG("Error: No GPU devices!!\n");
     }
     evaluateDevices();
+}
+
+int GpuControl::getDeviceCount()
+{
+    return device_count_;
+}
+
+GpuControl* GpuControl::getCurrentCuda()
+{
+    return current_gpu_;
+}
+
+void GpuControl::setUseCPU()
+{
+    current_gpu_ = nullptr;
+}
+
+cccc::UnitType GpuControl::getGlobalCudaType()
+{
+    if (current_gpu_)
+    {
+        return UnitType::GPU;
+    }
+    return UnitType::CPU;
+}
+
+// 为每个设备评分
+void GpuControl::evaluateDevices()
+{
+    auto getSPcores = [](cudaDeviceProp& devive_prop) -> int
+    {
+        int mp = devive_prop.multiProcessorCount;
+        int major = devive_prop.major;
+        int minor = devive_prop.minor;
+
+        typedef struct
+        {
+            int SM;    // 0xMm (hexadecimal notation), M = SM Major version,
+            // and m = SM minor version
+            int Cores;
+        } sSMtoCores;
+
+        sSMtoCores nGpuArchCoresPerSM[] = {
+            { 0x30, 192 },
+            { 0x32, 192 },
+            { 0x35, 192 },
+            { 0x37, 192 },
+            { 0x50, 128 },
+            { 0x52, 128 },
+            { 0x53, 128 },
+            { 0x60, 64 },
+            { 0x61, 128 },
+            { 0x62, 128 },
+            { 0x70, 64 },
+            { 0x72, 64 },
+            { 0x75, 64 },
+            { 0x80, 64 },
+            { 0x86, 128 },
+            { 0x87, 128 },
+            { 0x89, 128 },
+            { 0x90, 128 },
+            { -1, -1 }
+        };
+
+        int index = 0;
+
+        while (nGpuArchCoresPerSM[index].SM != -1)
+        {
+            if (nGpuArchCoresPerSM[index].SM == ((major << 4) + minor))
+            {
+                return mp * nGpuArchCoresPerSM[index].Cores;
+            }
+            index++;
+        }
+
+        // If we don't find the values, we default use the previous one
+        // to run properly
+        LOG("MapSMtoCores for SM {}.{} is undefined, default to use {} Cores/SM\n",
+            major, minor, nGpuArchCoresPerSM[index - 1].Cores);
+
+        return mp * nGpuArchCoresPerSM[index - 1].Cores;
+    };
+
+    if (device_count_ <= 0)
+    {
+        return;
+    }
+
+    struct Info
+    {
+        int id;
+        double state_score = 0;
+        int pci;
+    };
+
+    double best_state = -1e8;
+    std::vector<Info> infos(device_count_);
+    int best_i = 0;
+    int i_info = 0;
+    for (int i = 0; i < device_count_c_; i++)
+    {
+        infos[i_info].id = i_info;
+        auto& state = infos[i_info].state_score;
+        state = 0;
+        infos[i_info].pci = i;
+
+        cudaDeviceProp device_prop;
+        cudaGetDeviceProperties(&device_prop, i);
+        cudaSetDevice(i);
+        if (device_prop.computeMode != cudaComputeModeProhibited)
+        {
+            //通常情况系数是2，800M系列是1，但是不管了
+            double flops = 2.0e3 * device_prop.clockRate * getSPcores(device_prop);
+            char pci_info[128];
+            cudaDeviceGetPCIBusId(pci_info, 128, i);
+            size_t free, total;
+            cudaMemGetInfo(&free, &total);
+#ifdef _WIN32
+            size_t resident;
+            get_free_mem_by_luid(*(LUID*)device_prop.luid, &resident, nullptr);
+            free = total - resident;
+#endif
+            LOG("Device {} ({}): {}, {:7.5f} TFLOPS, {:7.2f}/{:7.2f} MB free/total\n",
+                i, pci_info, device_prop.name, flops / 1e12, free / 1048576.0, total / 1048576.0);
+            state = flops / 1e12 + free / 1e9;
+            infos[i].pci = device_prop.pciBusID;
+            if (state > best_state)
+            {
+                best_state = state;
+                best_i = i;
+            }
+        }
+        i_info++;
+    }
+
+    for (int i = 0; i < device_count_h_; i++)
+    {
+        infos[i_info].id = i_info;
+        auto& state = infos[i_info].state_score;
+        state = 0;
+        infos[i_info].pci = i;
+
+        hipDeviceProp_t device_prop;
+        hipGetDeviceProperties(&device_prop, i);
+
+        hipSetDevice(i);
+        double flops = 4.0e3 * device_prop.clockRate * device_prop.multiProcessorCount * 128;
+        char pci_info[128];
+        hipDeviceGetPCIBusId(pci_info, 128, i);
+        size_t free, total;
+        hipMemGetInfo(&free, &total);
+#ifdef _WIN32
+        size_t resident;
+        get_free_mem_by_pcibus(device_prop.pciBusID, &resident, nullptr);
+        free = total - resident;
+#endif
+        LOG("Device {} ({}): {}, {:7.5f} TFLOPS, {:7.2f}/{:7.2f} MB free/total\n",
+            i + device_count_c_, pci_info, device_prop.name, flops / 1e12, free / 1048576.0, total / 1048576.0);
+        state = flops / 1e12 + free / 1e9;
+        infos[i].pci = device_prop.pciBusID;
+    }
+    //这里需要重新计算，考虑与最好设备的距离
+    for (int i = 0; i < device_count_; i++)
+    {
+        infos[i].state_score -= std::abs((infos[i].pci - infos[best_i].pci)) / 50.0;
+    }
+
+    std::sort(infos.begin(), infos.end(), [](const Info& l, const Info& r)
+        {
+            return l.state_score > r.state_score;
+        });
+    auto_choose_turn_ = best_i;
+    gpu_devices_turn_.resize(device_count_);
+    for (int i = 0; i < device_count_; i++)
+    {
+        gpu_devices_turn_[i] = infos[i].id;
+    }
+}
+
+std::vector<int> GpuControl::gpuDevicesTurn()
+{
+    return gpu_devices_turn_;
+}
+
+void GpuControl::setAsCurrent()
+{
+    if (device_count_ <= 0)
+    {
+        current_gpu_ = nullptr;
+        return;
+    }
+    current_gpu_ = this;
+    if (api_type_ == API_CUDA)
+    {
+        cudaSetDevice(api_id_);
+    }
+    else if (api_type_ == API_HIP)
+    {
+        hipSetDevice(api_id_);
+    }
+}
+
+void GpuControl::getFreeMemory(size_t& free, size_t& total) const
+{
+    if (api_type_ == API_CUDA)
+    {
+        cudaSetDevice(api_id_);
+        cudaMemGetInfo(&free, &total);
+#ifdef _WIN32
+        cudaDeviceProp device_prop;
+        cudaGetDeviceProperties(&device_prop, api_id_);
+        uint64_t resident;
+        get_free_mem_by_luid(*(LUID*)device_prop.luid, &resident, nullptr);
+        free = total - resident;
+#endif
+    }
+    else if (api_type_ == API_HIP)
+    {
+        hipSetDevice(api_id_);
+        hipMemGetInfo(&free, &total);
+#ifdef _WIN32
+        hipDeviceProp_t device_prop;
+        hipGetDeviceProperties(&device_prop, api_id_);
+        uint64_t resident;
+        get_free_mem_by_pcibus(device_prop.pciBusID, &resident, nullptr);
+        free = total - resident;
+#endif
+    }
 }
 
 //返回0正常，其他情况都有问题
@@ -222,90 +459,6 @@ int GpuControl::memcpy(void* dst, const void* src, size_t count, memcpyKind kind
     return 1;
 }
 
-int GpuControl::getDeviceCount()
-{
-    return device_count_;
-}
-
-GpuControl* GpuControl::getCurrentCuda()
-{
-    return current_gpu_;
-}
-
-static void setCurrentCuda(GpuControl* gpu)
-{
-    if (gpu)
-    {
-        gpu->setAsCurrent();
-    }
-    current_gpu_ = nullptr;
-}
-
-void GpuControl::setUseCPU()
-{
-    current_gpu_ = nullptr;
-}
-
-void GpuControl::setAsCurrent()
-{
-    if (device_count_ <= 0)
-    {
-        current_gpu_ = nullptr;
-        return;
-    }
-    current_gpu_ = this;
-    if (api_type_ == API_CUDA)
-    {
-        cudaSetDevice(api_id_);
-    }
-    else if (api_type_ == API_HIP)
-    {
-        hipSetDevice(api_id_);
-    }
-}
-
-cccc::UnitType GpuControl::getGlobalCudaType()
-{
-    if (current_gpu_)
-    {
-        return UnitType::GPU;
-    }
-    return UnitType::CPU;
-}
-
-std::vector<int> GpuControl::cudaDevicesTurn()
-{
-    return cuda_devices_turn_;
-}
-
-void GpuControl::getFreeMemory(size_t& free, size_t& total) const
-{
-    if (api_type_ == API_CUDA)
-    {
-        cudaSetDevice(api_id_);
-        cudaMemGetInfo(&free, &total);
-#ifdef _WIN32
-        cudaDeviceProp device_prop;
-        cudaGetDeviceProperties(&device_prop, api_id_);
-        uint64_t resident;
-        get_free_mem_by_luid(*(LUID*)device_prop.luid, &resident, nullptr);
-        free = total - resident;
-#endif
-    }
-    else if (api_type_ == API_HIP)
-    {
-        hipSetDevice(api_id_);
-        hipMemGetInfo(&free, &total);
-#ifdef _WIN32
-        hipDeviceProp_t device_prop;
-        hipGetDeviceProperties(&device_prop, api_id_);
-        uint64_t resident;
-        get_free_mem_by_pcibus(device_prop.pciBusID, &resident, nullptr);
-        free = total - resident;
-#endif
-    }
-}
-
 int GpuControl::autoChooseId()
 {
     int turn = auto_choose_turn_;
@@ -315,158 +468,7 @@ int GpuControl::autoChooseId()
         turn = 0;
     }
     auto_choose_turn_ = turn;
-    return cuda_devices_turn_[turn];
-}
-
-// 为每个设备评分
-void GpuControl::evaluateDevices()
-{
-    auto getSPcores = [](cudaDeviceProp& devive_prop) -> int
-    {
-        int mp = devive_prop.multiProcessorCount;
-        int major = devive_prop.major;
-        int minor = devive_prop.minor;
-
-        typedef struct
-        {
-            int SM;    // 0xMm (hexadecimal notation), M = SM Major version,
-            // and m = SM minor version
-            int Cores;
-        } sSMtoCores;
-
-        sSMtoCores nGpuArchCoresPerSM[] = {
-            { 0x30, 192 },
-            { 0x32, 192 },
-            { 0x35, 192 },
-            { 0x37, 192 },
-            { 0x50, 128 },
-            { 0x52, 128 },
-            { 0x53, 128 },
-            { 0x60, 64 },
-            { 0x61, 128 },
-            { 0x62, 128 },
-            { 0x70, 64 },
-            { 0x72, 64 },
-            { 0x75, 64 },
-            { 0x80, 64 },
-            { 0x86, 128 },
-            { 0x87, 128 },
-            { 0x89, 128 },
-            { 0x90, 128 },
-            { -1, -1 }
-        };
-
-        int index = 0;
-
-        while (nGpuArchCoresPerSM[index].SM != -1)
-        {
-            if (nGpuArchCoresPerSM[index].SM == ((major << 4) + minor))
-            {
-                return mp * nGpuArchCoresPerSM[index].Cores;
-            }
-            index++;
-        }
-
-        // If we don't find the values, we default use the previous one
-        // to run properly
-        LOG("MapSMtoCores for SM {}.{} is undefined, default to use {} Cores/SM\n",
-            major, minor, nGpuArchCoresPerSM[index - 1].Cores);
-
-        return mp * nGpuArchCoresPerSM[index - 1].Cores;
-    };
-
-    if (device_count_ <= 0)
-    {
-        return;
-    }
-
-    struct Info
-    {
-        int id;
-        double state_score = 0;
-        int pci;
-    };
-
-    double best_state = -1e8;
-    std::vector<Info> infos(device_count_);
-    int best_i = 0;
-    for (int i = 0; i < device_count_c_; i++)
-    {
-        infos[i].id = i;
-        auto& state = infos[i].state_score;
-        state = 0;
-        infos[i].pci = i;
-
-        cudaDeviceProp device_prop;
-        cudaGetDeviceProperties(&device_prop, i);
-        cudaSetDevice(i);
-        if (device_prop.computeMode != cudaComputeModeProhibited)
-        {
-            //通常情况系数是2，800M系列是1，但是不管了
-            double flops = 2.0e3 * device_prop.clockRate * getSPcores(device_prop);
-            char pci_info[128];
-            cudaDeviceGetPCIBusId(pci_info, 128, i);
-            size_t free, total;
-            cudaMemGetInfo(&free, &total);
-#ifdef _WIN32
-            size_t resident;
-            get_free_mem_by_luid(*(LUID*)device_prop.luid, &resident, nullptr);
-            free = total - resident;
-#endif
-            LOG("Device {} ({}): {}, {:7.5f} TFLOPS, {:7.2f}/{:7.2f} MB free/total\n",
-                i, pci_info, device_prop.name, flops / 1e12, free / 1048576.0, total / 1048576.0);
-            state = flops / 1e12 + free / 1e9;
-            infos[i].pci = device_prop.pciBusID;
-            if (state > best_state)
-            {
-                best_state = state;
-                best_i = i;
-            }
-        }
-    }
-
-    for (int i = 0; i < device_count_h_; i++)
-    {
-        infos[i].id = i;
-        auto& state = infos[i].state_score;
-        state = 0;
-        infos[i].pci = i;
-
-        hipDeviceProp_t device_prop;
-        hipGetDeviceProperties(&device_prop, i);
-
-        hipSetDevice(i);
-        double flops = 4.0e3 * device_prop.clockRate * device_prop.multiProcessorCount * 128;
-        char pci_info[128];
-        hipDeviceGetPCIBusId(pci_info, 128, i);
-        size_t free, total;
-        hipMemGetInfo(&free, &total);
-#ifdef _WIN32
-        size_t resident;
-        get_free_mem_by_pcibus(device_prop.pciBusID, &resident, nullptr);
-        free = total - resident;
-#endif
-        LOG("Device {} ({}): {}, {:7.5f} TFLOPS, {:7.2f}/{:7.2f} MB free/total\n",
-            i + device_count_c_, pci_info, device_prop.name, flops / 1e12, free / 1048576.0, total / 1048576.0);
-        state = flops / 1e12 + free / 1e9;
-        infos[i].pci = device_prop.pciBusID;
-    }
-    //这里需要重新计算，考虑与最好设备的距离
-    for (int i = 0; i < device_count_; i++)
-    {
-        infos[i].state_score -= std::abs((infos[i].pci - infos[best_i].pci)) / 50.0;
-    }
-
-    std::sort(infos.begin(), infos.end(), [](const Info& l, const Info& r)
-        {
-            return l.state_score > r.state_score;
-        });
-    auto_choose_turn_ = best_i;
-    cuda_devices_turn_.resize(device_count_);
-    for (int i = 0; i < device_count_; i++)
-    {
-        cuda_devices_turn_[i] = infos[i].id;
-    }
+    return gpu_devices_turn_[turn];
 }
 
 void GpuControl::setActivationDesc(void* activation, int mode, double v)

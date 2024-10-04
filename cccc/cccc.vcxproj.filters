@@ -109,9 +109,6 @@
     <ClCompile Include="..\..\mlcc\Cifa.cpp">
       <Filter>mlcc</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\mlcc\strfunc.cpp">
-      <Filter>mlcc</Filter>
-    </ClCompile>
     <ClCompile Include="..\..\mlcc\filefunc.cpp">
       <Filter>mlcc</Filter>
     </ClCompile>
@@ -120,6 +117,9 @@
     </ClCompile>
     <ClCompile Include="Log.cpp">
       <Filter>log</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\mlcc\strfunc.cpp">
+      <Filter>mlcc</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -195,7 +195,6 @@
     <ClInclude Include="predict.h">
       <Filter>predict</Filter>
     </ClInclude>
-    <ClInclude Include="resource.h" />
     <ClInclude Include="..\..\mlcc\Random.h">
       <Filter>mlcc</Filter>
     </ClInclude>
@@ -257,5 +256,8 @@
     <None Include="cuda_libs.inc">
       <Filter>gpu</Filter>
     </None>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="cccc.rc" />
   </ItemGroup>
 </Project>

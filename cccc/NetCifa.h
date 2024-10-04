@@ -6,44 +6,31 @@
 namespace cccc
 {
 
-struct CompareObject
-{
-    bool operator()(const cifa::Object& l, const cifa::Object& r) const
-    {
-        return l.type + std::to_string(l.value) + l.content < r.type + std::to_string(r.value) + r.content;
-    }
-};
-
 class DLL_EXPORT NetCifa : public Net
 {
+public:
+    NetCifa();
+    ~NetCifa();
+
 private:
     cifa::Cifa cifa_;
 
-    std::map<cifa::Object, MatrixSP, CompareObject> map_matrix_;
-    std::map<cifa::Object, std::vector<MatrixOp>, CompareObject> map_loss_;
-    std::map<cifa::Object, std::vector<MatrixSP>, CompareObject> map_matrix_group_;
-
-    cifa::Object registerMatrix(MatrixSP&& m);
-    cifa::Object registerLoss(std::vector<MatrixOp> loss);
-    cifa::Object registerMatrixGroup(std::vector<MatrixSP> mg);
+    using Loss = std::vector<MatrixOp>;
+    using MatrixGroup = std::vector<MatrixSP>;
     static std::vector<cifa::Object> getVector(cifa::ObjectVector& v, int index);
     static std::vector<int> getIntVector(cifa::ObjectVector& v, int index);
     static std::vector<float> getRealVector(cifa::ObjectVector& v, int index);
 
     std::string message_;
 
-    int count_;    //没有初始化，爱咋咋地
-
 public:
-    NetCifa();
-    ~NetCifa();
     virtual int init2() override;
 
     int runScript(const std::string& script);
     int registerFunctions();
 
 private:
-    void setXA(MatrixSP& X, MatrixSP& A)
+    void setXA(const MatrixSP& X, const MatrixSP& A)
     {
         X_ = X;
         A_ = A;

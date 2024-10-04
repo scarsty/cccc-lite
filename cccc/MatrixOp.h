@@ -1,7 +1,8 @@
 ﻿#pragma once
+#include <any>
+
 #include "Log.h"
 #include "Matrix.h"
-#include "MatrixEx.h"
 
 namespace cccc
 {
@@ -26,6 +27,27 @@ enum class MatrixOpType
     L2,
 };
 
+struct Any;
+template <typename T>
+concept notParaAny = !std::is_same_v<std::decay_t<T>, Any>;
+
+struct Any : std::any
+{
+    template <notParaAny T>
+    const T& to() const { return std::any_cast<const T&>(*this); }
+
+    template <notParaAny T>
+    T& to() { return std::any_cast<T&>(*this); }
+
+    template <notParaAny T>
+    Any(T&& t) :
+        std::any(std::forward<T>(t))
+    {
+    }
+};
+
+using VectorAny = std::vector<Any>;
+
 class DLL_EXPORT MatrixOp
 {
 private:
@@ -34,24 +56,38 @@ private:
     std::vector<MatrixSP> wb_;     //参数，通常是权重和偏置
     std::vector<MatrixSP> out_;    //输出数据
     //以下参数一般外界不可见
-    std::vector<int> para_int_;
-    std::vector<float> para_real_;
-    std::vector<Matrix> para_matrix_;    //某些计算需要的额外工作空间，因外界没有修改的必要，所以不用MatrixSP
-    std::vector<std::vector<int>> para_int_v_;
+    //常用的类型
+    std::vector<float> a_, b_;
+    std::vector<int> window_, stride_, padding_;
+    std::vector<Matrix> workspace_;
+    //未知或多变的类型
+    VectorAny anys_;
+
+    //float dw_scale_ = 1;
 
 public:
     MatrixOp() = default;
-    void set(MatrixOpType t, const std::vector<MatrixSP>& m_in, const std::vector<MatrixSP>& m_wb, const std::vector<MatrixSP>& m_out,
-        const std::vector<int>& i = {}, const std::vector<float>& r = {}, const std::vector<Matrix>& m2 = {}, const std::vector<std::vector<int>> iv = {})
+
+    void set(MatrixOpType t, const std::vector<MatrixSP>& m_in, const std::vector<MatrixSP>& m_wb, const std::vector<MatrixSP>& m_out, std::vector<float>&& a = {}, std::vector<float>&& b = {}, VectorAny&& pv = {}, std::vector<Matrix>&& workspace = {},
+        std::vector<int>&& window = {}, std::vector<int>&& stride = {}, std::vector<int>&& padding = {})
     {
         type_ = t;
         in_ = m_in;
         wb_ = m_wb;
         out_ = m_out;
-        para_int_ = i;
-        para_real_ = r;
-        para_matrix_ = m2;
-        para_int_v_ = iv;
+
+        a_ = a;
+        b_ = b;
+        a_.resize(in_.size(), 1);
+        b_.resize(out_.size(), 0);
+
+        anys_ = pv;
+
+        window_ = window;
+        stride_ = stride;
+        padding_ = padding;
+        workspace_ = workspace;
+
         if (out_.size() > 0 && out_[0]->getDataSize() == 0)
         {
             LOG_ERR("Error: output is empty!\n");
@@ -68,11 +104,12 @@ public:
     std::string print() const;
 
     MatrixOpType getType() { return type_; }
+
     std::vector<MatrixSP>& getMatrixIn() { return in_; }
+
     std::vector<MatrixSP>& getMatrixWb() { return wb_; }
+
     std::vector<MatrixSP>& getMatrixOut() { return out_; }
-    std::vector<int>& getPataInt() { return para_int_; }
-    std::vector<std::vector<int>>& getPataInt2() { return para_int_v_; }
 
     ActiveFunctionType getActiveType() const;
     int setActiveType(ActiveFunctionType af);
@@ -81,6 +118,7 @@ public:
 
 public:
     static void getDefaultStridePadding(MatrixOpType type, const std::vector<int>& dim, std::vector<int>& stride, std::vector<int>& padding);
+
     void setNeedReverse(bool r)
     {
         for (auto& m : in_)
@@ -93,21 +131,23 @@ public:
         }
     }
 
+    //void setDWScale(float s) { dw_scale_ = s; }
+
 public:
     //下面这些函数会设置这个op的参数，并自动计算Y的尺寸返回
-    void as_scale(MatrixSP& X, MatrixSP& Y, float r);
-    void as_mul(MatrixSP& X1, MatrixSP& X2, MatrixSP& Y, float a = 1, std::vector<int> dim = {});
-    void as_elementMul(MatrixSP& X1, MatrixSP& X2, MatrixSP& Y, float a = 1);
-    void as_add(MatrixSP& X1, MatrixSP& X2, MatrixSP& Y, float a = 1, float b = 1);
-    void as_add(std::vector<MatrixSP>& X_vector, MatrixSP& Y);
-    void as_addBias(MatrixSP& X, MatrixSP& bias, MatrixSP& Y, float a = 1, float b = 1);
-    void as_concat(std::vector<MatrixSP>& X_vector, MatrixSP& Y);
-    void as_active(MatrixSP& X, MatrixSP& Y, ActiveFunctionType af);
-    void as_active(MatrixSP& X, MatrixSP& Y, ActiveFunctionType af, std::vector<int>&& int_vector, std::vector<float>&& real_vector, std::vector<Matrix>&& matrix_vector);
-    void as_pool(MatrixSP& X, MatrixSP& Y, PoolingType pooling_type, int reverse, std::vector<int> window, std::vector<int> stride, std::vector<int> padding, float a = 1);
-    void as_conv(MatrixSP& X, MatrixSP& W, MatrixSP& Y, std::vector<int> stride, std::vector<int> padding, int conv_type, float a = 1);
-    void as_reshape(MatrixSP& X, MatrixSP& Y, std::vector<int>& dim);
-    void as_max(MatrixSP& X1, MatrixSP& X2, MatrixSP& Y);
+    void as_scale(const MatrixSP& X, const MatrixSP& Y, float r);
+    void as_mul(const MatrixSP& X1, const MatrixSP& X2, const MatrixSP& Y, float a = 1, std::vector<int> dim = {});
+    void as_elementMul(const MatrixSP& X1, const MatrixSP& X2, const MatrixSP& Y, float a = 1);
+    void as_add(const MatrixSP& X1, const MatrixSP& X2, const MatrixSP& Y, float a = 1, float b = 1);
+    void as_add(const std::vector<MatrixSP>& X_vector, const MatrixSP& Y);
+    void as_addBias(const MatrixSP& X, const MatrixSP& bias, const MatrixSP& Y, float a = 1, float b = 1);
+    void as_concat(const std::vector<MatrixSP>& X_vector, const MatrixSP& Y);
+    void as_active(const MatrixSP& X, const MatrixSP& Y, ActiveFunctionType af);
+    void as_active(const MatrixSP& X, const MatrixSP& Y, ActiveFunctionType af, std::vector<int>&& int_vector, std::vector<float>&& real_vector, std::vector<Matrix>&& matrix_vector);
+    void as_pool(const MatrixSP& X, const MatrixSP& Y, PoolingType pooling_type, PoolingReverseType reverse_type, std::vector<int> window, std::vector<int> stride, std::vector<int> padding, float a = 1);
+    void as_conv(const MatrixSP& X, const MatrixSP& W, const MatrixSP& Y, std::vector<int> stride, std::vector<int> padding, int conv_algo, float a = 1);
+    void as_reshape(const MatrixSP& X, const MatrixSP& Y, std::vector<int>& dim);
+    void as_max(const MatrixSP& X1, const MatrixSP& X2, const MatrixSP& Y);
 
     //以下专为处理损失函数
 private:
@@ -122,6 +162,7 @@ private:
 
 public:
     double calc(const MatrixOp& op) { return op.value_ * op.scale_; }
+
     double calc(const std::vector<MatrixOp>& ops)
     {
         double sum = 0;
@@ -141,8 +182,8 @@ std::vector<MatrixOp>& operator+=(std::vector<MatrixOp>& A, const std::vector<Ma
 std::vector<MatrixOp> operator*(const std::vector<MatrixOp>& A, double v);
 std::vector<MatrixOp> operator*(double v, const std::vector<MatrixOp>& A);
 
-std::vector<MatrixOp> crossEntropy(MatrixSP& A, MatrixSP& Y);
-std::vector<MatrixOp> L2(MatrixSP& A);
+std::vector<MatrixOp> crossEntropy(const MatrixSP& A, const MatrixSP& Y);
+std::vector<MatrixOp> L2(const MatrixSP& A);
 std::vector<MatrixOp> L2(const std::vector<MatrixSP>& v);
 
 }    // namespace cccc

@@ -1,5 +1,5 @@
 ﻿#include "Option.h"
-#include <algorithm>
+#include "strfunc.h"
 
 namespace cccc
 {

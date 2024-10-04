@@ -103,7 +103,8 @@ void OtherDesc::create<void*>(void** p)
 {
 }
 CREATE_CUDNN_DESC(PoolingDescriptor)
-#elif ENABLE_HIP
+#endif
+#if ENABLE_HIP
 #define CREATE_MIOPEN_DESC(type) \
     template <> \
     void OtherDesc::create<miopen##type##_t>(void** p) \
@@ -114,7 +115,8 @@ CREATE_CUDNN_DESC(PoolingDescriptor)
 CREATE_MIOPEN_DESC(ConvolutionDescriptor)
 CREATE_MIOPEN_DESC(ActivationDescriptor)
 CREATE_MIOPEN_DESC(PoolingDescriptor)
-#else
+#endif
+#if !ENABLE_CUDA && !ENABLE_HIP
 template <>
 void OtherDesc::create<void*>(void** p)
 {

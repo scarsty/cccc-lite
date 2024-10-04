@@ -1,6 +1,7 @@
-#include "Application.h"
+﻿#include "Application.h"
 #include "MainProcess.h"
 #include "filefunc.h"
+#include "strfunc.h"
 
 namespace cccc
 {
@@ -28,8 +29,8 @@ void Application::run()
         {
             LOG_ERR("{} doesn't exist!\n", filename.c_str());
         }
-        auto ini_str = strfunc::readStringFromFile(filename);
-        //�滻��һЩ�ַ�
+        auto ini_str = filefunc::readFileToString(filename);
+        //替换掉一些字符
         for (auto rp : replace_pairs)
         {
             strfunc::replaceAllSubStringRef(ini_str, rp.first, rp.second);

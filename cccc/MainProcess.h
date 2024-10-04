@@ -18,10 +18,10 @@ public:
     MainProcess& operator=(const MainProcess&) = delete;
 
 public:
-    int brain_id_;
+    int brain_id_ = 0;
 
 protected:
-    int batch_;
+    int batch_ = 0;
     std::function<void(MainProcess*)> running_callback_ = nullptr;    //回调函数
     Option option_;
     Timer timer_total_;
@@ -32,6 +32,7 @@ protected:
 
 public:
     void setCallback(std::function<void(MainProcess*)> f) { running_callback_ = f; }
+
     Option* getOption() { return &option_; }
 
 protected:
@@ -41,10 +42,12 @@ protected:
 
 public:
     int getIterCount() { return iter_count_; }
+
     void setIterCount(int ic) { iter_count_ = ic; }
 
 public:
     DataPreparerFactory::UniquePtr data_preparer_;    //训练集准备器
+
     DataPreparerFactory::UniquePtr& getDataPreparer() { return data_preparer_; }
 
     DataPreparerFactory::UniquePtr data_preparer2_;    //测试集准备器
@@ -73,23 +76,27 @@ private:
     //在主线程进行数据准备，副线程进行训练和测试
     struct TrainInfo
     {
-        std::atomic<int> data_prepared;           //0 未准备好，1 cpu准备完毕， 2 gpu准备完毕
-        std::atomic<int> data_distributed;        //已经复制过的线程
-        std::atomic<int> stop;                    //结束信息
-        std::atomic<int> trained;                 //已经训练完成的网络个数
-        std::atomic<int> parameters_collected;    //数据同步完毕
-        std::atomic<int> need_reset;              //需要重置求解器的信号
+        std::atomic<int> data_prepared;          //0 未准备好，1 cpu准备完毕， 2 gpu准备完毕
+        std::atomic<int> data_distributed;       //复制完数据的线程数
+        std::atomic<int> stop;                   //结束信息
+        std::atomic<int> trained;                //已经训练完成的网络个数
+        std::atomic<int> dweight_uncollected;    //梯度同步完毕
+
+        //std::atomic<int> need_reset;             //需要重置求解器的信号
+
+        TrainInfo() { reset(); }
+
         void reset()
         {
             data_prepared = 0;
             data_distributed = 0;
             stop = 0;
             trained = 0;
-            parameters_collected = 0;
+            dweight_uncollected = 0;
         }
-        TrainInfo() { reset(); }
     };
-    void trainOneNet(std::vector<std::unique_ptr<Net>>& nets, int net_id, TrainInfo& train_info, int total_epochs);
+
+    void trainOneNet(std::vector<std::unique_ptr<Net>>& nets, int net_id, TrainInfo& ti, int total_epochs);
 
     bool checkTestEffective(std::vector<TestInfo>& resultv_max, std::vector<TestInfo>& resultv);
     bool checkTrainHealth(const std::vector<TestInfo>& resultvp, const std::vector<TestInfo>& resultv, float l1p, float l2p, float l1, float l2, double increase_limited, int effective_epoch_count);
@@ -104,6 +111,7 @@ public:
         }
         return nullptr;
     }
+
     const std::vector<std::unique_ptr<Net>>& getNets() { return nets_; }
 
 public:

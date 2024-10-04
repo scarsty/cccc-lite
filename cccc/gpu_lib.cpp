@@ -4,10 +4,9 @@
 #include <string>
 #include <vector>
 
-#if defined(_WIN32) && defined(AUTO_LOAD_GPU_FUNCTIONS)
-
 namespace cccc
 {
+#if defined(_WIN32) && defined(AUTO_LOAD_GPU_FUNCTIONS)
 
 #define UNIMPORT_OR_BLANKTEMP(func)
 
@@ -20,14 +19,18 @@ namespace cccc
 #endif
 #undef IMPORT
 
-class cuda_assist_class_t
+class gpu_assist_class_t
 {
 public:
-    cuda_assist_class_t()
+    gpu_assist_class_t()
     {
         std::vector<std::string> strs;
 #define IMPORT(func, ...) \
-    strs = { #func, __VA_ARGS__ }; \
+    strs = \
+        { \
+            #func, \
+            __VA_ARGS__ \
+        }; \
     for (auto& lib : libs) \
     { \
         for (auto str : strs) \
@@ -37,9 +40,10 @@ public:
             { \
                 if (std::string(#func) == str) \
                 { /*LOG(stderr, "Found {} in {}\n", #func, lib);*/ \
+                    libs_used[lib].push_back(#func); \
                 } \
                 else \
-                { /*LOG(stderr, "Found {}() in {}\n", #func, str, lib);*/ \
+                { \
                 } \
                 break; \
             } \
@@ -67,23 +71,27 @@ public:
             //LOG("Loaded dynamic library {} for {} functions\n", lu.first, lu.second.size());
             sum += lu.second.size();
         }
-        //LOG("Found {} functions, {} failed\n", sum, func_c_failed.size() + func_h_failed.size());
+        LOG("Found {} functions, {} failed\n", sum, func_c_failed.size() + func_h_failed.size());
+#if ENABLE_CUDA
         if (func_c.size() > 0 && func_c_failed.size() > 0)
         {
             LOG("Some CUDA functions are lost: {}\n", func_c_failed);
-        }
-        if (func_h.size() > 0 && func_h_failed.size() > 0)
-        {
-            LOG("Some HIP functions are lost: {}\n", func_h_failed);
         }
         if (func_c.size() == 0)
         {
             LOG("No CUDA libraries!\n");
         }
+#endif
+#if ENABLE_HIP
+        if (func_h.size() > 0 && func_h_failed.size() > 0)
+        {
+            LOG("Some HIP functions are lost: {}\n", func_h_failed);
+        }
         if (func_h.size() == 0)
         {
             LOG("No HIP libraries!\n");
         }
+#endif
     }
 
 private:
@@ -113,8 +121,15 @@ private:
     std::map<std::string, std::vector<std::string>> libs_used;
     std::vector<std::string> func_c, func_h, func_c_failed, func_h_failed;
 };
-static cuda_assist_class_t cuda_assist_class;
 
-};    // namespace cccc
+void find_gpu_functions()
+{
+    static gpu_assist_class_t gpu_assist_class;
+}
 
+#else
+void find_gpu_functions()
+{
+}
 #endif
+}    //namespace cccc

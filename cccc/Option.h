@@ -1,9 +1,7 @@
 ﻿#pragma once
 #include "ConsoleControl.h"
 #include "Log.h"
-#include "strfunc.h"
 #include "types.h"
-#include <functional>
 #include <string>
 #include <typeinfo>
 #define VIRTUAL_GET_STRING
@@ -50,8 +48,10 @@ private:
             return l1 < r1;
         }
     };
+
     std::map<std::string, std::map<std::string, int, CompareNoUnderline>> enum_map_;
     std::map<std::string, std::map<int, std::string>> enum_map_reverse_;
+
     //注册枚举值
     template <typename T>
     void registerEnum(std::vector<std::pair<std::string, T>> members)
@@ -66,6 +66,7 @@ private:
             }
         }
     }
+
     void initEnums();
 
     mutable std::map<std::string, std::map<std::string, int>> outputed_keys_;
@@ -87,6 +88,7 @@ private:
             ConsoleControl::setColor(CONSOLE_COLOR_NONE);
         }
     }
+
     int output_ = 1;    //0表示不输出，1表示输出，2表示若与默认值不同则输出
 
 public:
@@ -94,24 +96,28 @@ public:
     {
         output_ = output;
     }
+
     std::string getString(const std::string& section, const std::string& key, const std::string& default_value = "") const
     {
         auto value = INIReaderNoUnderline::getString(section, key, default_value);
         outputValue(section, key, value.substr(0, value.find_first_of(";\n")), default_value);
         return value;
     }
+
     int getInt(const std::string& section, const std::string& key, int default_value = 0) const
     {
         auto value = INIReaderNoUnderline::getInt(section, key, default_value);
         outputValue(section, key, value, default_value);
         return value;
     }
+
     float getReal(const std::string& section, const std::string& key, float default_value = 0) const
     {
         float value = INIReaderNoUnderline::getReal(section, key, default_value);
         outputValue(section, key, value, default_value);
         return value;
     }
+
     template <typename T>
     std::vector<T> getVector(const std::string& section, const std::string& key, const std::string& split_chars = ",", const std::vector<T>& default_v = {}) const
     {
@@ -119,12 +125,14 @@ public:
         outputValue(section, key, value, default_v);
         return value;
     }
+
     //将字串转为枚举值
     template <typename T>
     T getEnumFromString(const std::string& value_str)
     {
         return T(enum_map_[typeid(T).name()][value_str]);
     }
+
     //从配置中直接读出枚举值
     //按照C++推荐，最后的参数默认值应为T{}，但swig不能正确识别
     template <typename T>

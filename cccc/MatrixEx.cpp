@@ -74,39 +74,32 @@ void MatrixEx::addBias(const Matrix& X, const Matrix& bias, Matrix& Y, float a /
     }
 }
 
-void MatrixEx::addBiasBackward(Matrix& X, Matrix& bias, const Matrix& Y, float a /*= 1*/, float b /*= 1*/)
+void MatrixEx::addBiasBackward(const Matrix& X, Matrix& bias, const Matrix& Y, float a /*= 1*/, float b /*= 1*/)
 {
     assert(checkMatrixDevice({ &X, &bias, &Y }));
-    if (X.needBack())
+    if (X.isCuda())
     {
-        Matrix::add(X.d(), Y.d(), X.d(), a, 1, 0);
+        //用卷积反向代替一般反向，此处待验证
+        auto gpu = Y.gpu();
+        cudnnConvolutionBackwardBias(gpu->cudnn_handle_, &a, Y.cudnn_desc(), Y.d().data(), &b, bias.cudnn_desc(), bias.d().data());
     }
-    if (bias.needBack())
+    else if (X.isHip())
     {
-        if (X.isCuda())
+        auto gpu = Y.gpu();
+        //b = 0;    //todo: miopen unfinished
+        miopenConvolutionBackwardBias(gpu->miopen_handle_, &a, Y.miopen_desc(), Y.d().data(), &b, bias.miopen_desc(), bias.d().data());
+    }
+    else
+    {
+        if (bias.d().data())
         {
-            //用卷积反向代替一般反向，此处待验证
-            auto gpu = Y.gpu();
-            cudnnConvolutionBackwardBias(gpu->cudnn_handle_, &const_real_1, Y.cudnn_desc(), Y.d().data(), &b, bias.cudnn_desc(), bias.d().data());
-        }
-        else if (X.isHip())
-        {
-            auto gpu = Y.gpu();
-            //b = 0;    //todo: miopen unfinished
-            miopenConvolutionBackwardBias(gpu->miopen_handle_, &const_real_1, Y.miopen_desc(), Y.d().data(), &b, bias.miopen_desc(), bias.d().data());
-        }
-        else
-        {
-            if (bias.d().data())
+            //bias.DMatrix().scale(r);
+            //这个就是对对应的dR求和
+            for (int n = 0; n < Y.number_; n++)
             {
-                //bias.DMatrix().scale(r);
-                //这个就是对对应的dR求和
-                for (int n = 0; n < Y.number_; n++)
+                for (int c = 0; c < Y.channel_; c++)
                 {
-                    for (int c = 0; c < Y.channel_; c++)
-                    {
-                        bias.d().setData(0, 0, c, 0, bias.d().getData(0, 0, c, 0) + b * VectorMath::sum((float*)Y.d().getDataPtr(0, 0, c, n), Y.width_ * Y.height_));
-                    }
+                    bias.d().setData(0, 0, c, 0, bias.d().getData(0, 0, c, 0) + a * VectorMath::sum((float*)Y.d().getDataPtr(0, 0, c, n), Y.width_ * Y.height_));
                 }
             }
         }
@@ -617,11 +610,7 @@ void MatrixEx::activeBackwardSimple(Matrix& X, const Matrix& Y, ActiveFunctionTy
 
 //池化
 //gpu部分，平均模式下对padding的支持目前还有问题
-void MatrixEx::poolingForward(const Matrix& X, Matrix& Y, PoolingType pooling_type, int reverse, std::vector<Matrix>& workspaces,
-    const std::vector<int>& window, const std::vector<int>& stride,
-    const std::vector<int>& padding, float a /*= 1*/
-    ,
-    float r /*= 0*/)
+void MatrixEx::poolingForward(const Matrix& X, Matrix& Y, PoolingType pooling_type, PoolingReverseType reverse_type, const std::vector<int>& window, const std::vector<int>& stride, const std::vector<int>& padding, float a, float r, Matrix* workspace)
 {
     assert(checkMatrixDevice({ &X, &Y }));
     assert(window.size() >= 2 && stride.size() >= 2 && padding.size() >= 2);
@@ -649,7 +638,7 @@ void MatrixEx::poolingForward(const Matrix& X, Matrix& Y, PoolingType pooling_ty
                 window.size(), wr.data(), pr.data(), sr.data());
         }
         cudnnStatus_t s;
-        if (reverse == 0)
+        if (reverse_type == POOLING_NOT_REVERSE)
         {
             s = cudnnPoolingForward(gpu->cudnn_handle_, pooling_desc(), &a, X.cudnn_desc(), X.data(), &r, Y.cudnn_desc(), Y.data());
         }
@@ -675,25 +664,27 @@ void MatrixEx::poolingForward(const Matrix& X, Matrix& Y, PoolingType pooling_ty
         {
             miopenSet2dPoolingDescriptor(op_desc(), pooling_type_c, window[1], window[0], padding[1], padding[0], stride[1], stride[0]);
         }
-        if (workspaces.size() == 0)
+        std::unique_ptr<Matrix> workspace_ptr;
+        if (workspace == nullptr)
         {
-            workspaces.resize(1);
+            workspace_ptr.reset(new Matrix());
+            workspace = workspace_ptr.get();
         }
-        if (workspaces[0].getDataSizeInByte() == 0)
+        if (workspace->getDataSizeInByte() == 0)
         {
             size_t ws;
             miopenPoolingGetWorkSpaceSize(Y.miopen_desc(), &ws);
-            workspaces[0].resize(1, 1, 1, ws);
+            workspace->resize(1, 1, 1, ws);
         }
         miopenStatus_t s;
         bool back = gpu->active_phase_ == ACTIVE_PHASE_TRAIN;
-        if (reverse == 0)
+        if (reverse_type == POOLING_NOT_REVERSE)
         {
-            s = miopenPoolingForward(gpu->miopen_handle_, op_desc(), &a, X.miopen_desc(), X.data(), &r, Y.miopen_desc(), Y.data(), back, workspaces[0].data(), workspaces[0].getDataSizeInByte());
+            s = miopenPoolingForward(gpu->miopen_handle_, op_desc(), &a, X.miopen_desc(), X.data(), &r, Y.miopen_desc(), Y.data(), back, workspace->data(), workspace->getDataSizeInByte());
         }
         else
         {
-            s = miopenPoolingBackward(gpu->miopen_handle_, op_desc(), &a, X.miopen_desc(), X.data(), X.miopen_desc(), X.data(), Y.miopen_desc(), Y.data(), &r, Y.miopen_desc(), Y.data(), workspaces[0].data());
+            s = miopenPoolingBackward(gpu->miopen_handle_, op_desc(), &a, X.miopen_desc(), X.data(), X.miopen_desc(), X.data(), Y.miopen_desc(), Y.data(), &r, Y.miopen_desc(), Y.data(), workspace->data());
             Y.scale(VectorMath::multiply(window));
         }
     }
@@ -754,12 +745,7 @@ void MatrixEx::poolingForward(const Matrix& X, Matrix& Y, PoolingType pooling_ty
     }
 }
 
-//使用cpu时利用了record -- 取消，直接计算
-void MatrixEx::poolingBackward(Matrix& X, const Matrix& Y, PoolingType pooling_type, int reverse,
-    std::vector<Matrix>& workspaces, const std::vector<int>& window, const std::vector<int>& stride,
-    const std::vector<int>& padding, float a /*= 1*/
-    ,
-    float r /*= 0*/)
+void MatrixEx::poolingBackward(Matrix& X, const Matrix& Y, PoolingType pooling_type, PoolingReverseType reverse_type, const std::vector<int>& window, const std::vector<int>& stride, const std::vector<int>& padding, float a, float r, Matrix* workspace)
 {
     assert(checkMatrixDevice({ &X, &Y }));
     assert(window.size() >= 2 && stride.size() >= 2 && padding.size() >= 2);
@@ -788,7 +774,7 @@ void MatrixEx::poolingBackward(Matrix& X, const Matrix& Y, PoolingType pooling_t
                 window.size(), wr.data(), pr.data(), sr.data());
         }
         cudnnStatus_t s;
-        if (reverse == 0)
+        if (reverse_type == POOLING_NOT_REVERSE)
         {
             s = cudnnPoolingBackward(gpu->cudnn_handle_, pooling_desc(),
                 &a, Y.cudnn_desc(), Y.data(), Y.cudnn_desc(), Y.d().data(), X.cudnn_desc(), X.data(), &r, X.cudnn_desc(), X.d().data());
@@ -815,13 +801,19 @@ void MatrixEx::poolingBackward(Matrix& X, const Matrix& Y, PoolingType pooling_t
         }
         miopenStatus_t s;
         bool back = gpu->active_phase_ == ACTIVE_PHASE_TRAIN;
-        if (reverse == 0)
+        std::unique_ptr<Matrix> workspace_ptr;
+        if (workspace == nullptr)
         {
-            s = miopenPoolingBackward(gpu->miopen_handle_, op_desc, &a, Y.miopen_desc(), Y.data(), Y.miopen_desc(), Y.d().data(), X.miopen_desc(), X.data(), &r, X.miopen_desc(), X.d().data(), workspaces[0].data());
+            workspace_ptr.reset(new Matrix());
+            workspace = workspace_ptr.get();    //注意此时结果实际上是不正确的
+        }
+        if (reverse_type == POOLING_NOT_REVERSE)
+        {
+            s = miopenPoolingBackward(gpu->miopen_handle_, op_desc, &a, Y.miopen_desc(), Y.data(), Y.miopen_desc(), Y.d().data(), X.miopen_desc(), X.data(), &r, X.miopen_desc(), X.d().data(), workspace->data());
         }
         else
         {
-            s = miopenPoolingForward(gpu->miopen_handle_, op_desc, &a, Y.miopen_desc(), Y.d().data(), &r, X.miopen_desc(), X.d().data(), back, workspaces[0].data(), workspaces[0].getDataSizeInByte());
+            s = miopenPoolingForward(gpu->miopen_handle_, op_desc, &a, Y.miopen_desc(), Y.d().data(), &r, X.miopen_desc(), X.d().data(), back, workspace->data(), workspace->getDataSizeInByte());
             X.d().scale(1.0 / VectorMath::multiply(window));
         }
     }
@@ -880,7 +872,8 @@ void MatrixEx::poolingBackward(Matrix& X, const Matrix& Y, PoolingType pooling_t
                             {
                                 if (X.haveData(wdX, hdX, p, 0))
                                 {
-                                    X.d().setData(wdX, hdX, p, 0, X.d().getData(wdX, hdX, p, 0) + a * v);    // +r * X.d().getData(wdX, hdX, p, 0);
+                                    X.d().setData(wdX, hdX, p, 0, X.d().getData(wdX, hdX, p, 0) + a * v);
+                                    // +r * X.d().getData(wdX, hdX, p, 0);
                                 }
                             }
                         }
@@ -914,26 +907,30 @@ void MatrixEx::poolingBackward(Matrix& X, const Matrix& Y, PoolingType pooling_t
 //当使用CUDA计算时，不需要辅助转换的整数数组，这时该数组会被初始化为两个元素，分别为算法和所需的工作空间大小，在首次计算的时候完成
 //CPU模式仅支持stride为1，padding为0的二维卷积
 //methods保存信息为3个: 算法，类型，组数。若考虑反向则应为9个，后面对应反向数据和反向权重
-void MatrixEx::convolutionForward(const Matrix& X, const Matrix& W, Matrix& Y, std::vector<int>& methods, std::vector<Matrix>& workspaces,
-    const std::vector<int>& stride, const std::vector<int>& padding, float a /*= 1*/, float r /*= 0*/)
+void MatrixEx::convolutionForward(const Matrix& X, const Matrix& W, Matrix& Y, const std::vector<int>& stride, const std::vector<int>& padding, float a, float r, ConvMethod* method, Matrix* workspace)
 {
     assert(checkMatrixDevice({ &X, &W, &Y }));
     assert(stride.size() >= 2 && padding.size() >= 2);
     assert(X.getChannel() == W.getChannel() && Y.getChannel() == W.getNumber());
 
-    if (methods.size() < 3)
+    //若工作空间为空则创建一个
+    std::unique_ptr<ConvMethod> method_ptr;
+    std::unique_ptr<Matrix> workspace_ptr;
+    if (method == nullptr)
     {
-        methods.resize(3, 0);
+        method_ptr.reset(new ConvMethod());
+        method = method_ptr.get();
+    }
+    if (workspace == nullptr)
+    {
+        workspace_ptr.reset(new Matrix());
+        workspace = workspace_ptr.get();
     }
     auto gpu = X.gpu();
     if (Y.isCuda())
     {
         cudnnConvolutionDesc conv_desc;
         cudnnFilterDesc filter_desc;
-        if (workspaces.size() < 2)
-        {
-            workspaces.resize(2);
-        }
         cudnnStatus_t scd, sfd;
         if (stride.size() == 2)
         {
@@ -955,60 +952,52 @@ void MatrixEx::convolutionForward(const Matrix& X, const Matrix& W, Matrix& Y, s
         }
         cudnnSetConvolutionMathType(conv_desc(), CUDNN_TENSOR_OP_MATH);
         //寻找最快的算法
-        if (methods[2] <= 0)
+        if (method->algo < 0)
         {
             size_t ws_size;
-            if (0)
-            {
-                cudnnGetConvolutionForwardWorkspaceSize(gpu->cudnn_handle_, X.cudnn_desc(), filter_desc(), conv_desc(), Y.cudnn_desc(), (cudnnConvolutionFwdAlgo_t)0, &ws_size);
-                methods[0] = 0;
-                methods[1] = 0;
-            }
-            else
-            {
-                int n;
-                cudnnConvolutionFwdAlgoPerf_t cfap[conv_method_count];
-                auto t = cudnnFindConvolutionForwardAlgorithm(gpu->cudnn_handle_, X.cudnn_desc(),
-                    filter_desc(), conv_desc(), Y.cudnn_desc(), conv_method_count, &n, cfap);
+            int n;
+            cudnnConvolutionFwdAlgoPerf_t cfap[conv_method_count];
+            auto t = cudnnFindConvolutionForwardAlgorithm(gpu->cudnn_handle_, X.cudnn_desc(),
+                filter_desc(), conv_desc(), Y.cudnn_desc(), conv_method_count, &n, cfap);
 
-                //for (int i = 0; i < 8; i++)
-                //{
-                //    //该算法小组数可能需要更大缓冲区，此处是测试代码
-                //    if (cfap[i].algo == CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_PRECOMP_GEMM)
-                //    {
-                //        std::swap(cfap[0], cfap[i]);
-                //    }
-                //}
-                methods[0] = cfap[0].algo;
-                methods[1] = cfap[0].mathType;
-                ws_size = cfap[0].memory;
-            }
-            if (ws_size > workspaces[0].getDataSizeInByte())
+            //for (int i = 0; i < 8; i++)
+            //{
+            //    //该算法小组数可能需要更大缓冲区，此处是测试代码
+            //    if (cfap[i].algo == CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_PRECOMP_GEMM)
+            //    {
+            //        std::swap(cfap[0], cfap[i]);
+            //    }
+            //}
+            method->algo = cfap[0].algo;
+            method->math_type = cfap[0].mathType;
+            ws_size = cfap[0].memory;
+
+            if (ws_size > workspace->getDataSizeInByte())
             {
-                workspaces[0].resize(1, 1, 1, ws_size / workspaces[0].getDataTypeSize() + 2);
+                workspace->resize(1, 1, 1, ws_size / workspace->getDataTypeSize() + 2);
             }
 #ifdef _DEBUG
-            LOG("conv forward choose {}({}), workspace {}\n", methods[0], methods[1], ws_size);
+            LOG("conv forward choose {}({}), workspace {}\n", method->algo, method->math_type, ws_size);
 #endif
         }
-        else if (methods[2] != X.number_)    //有可能存在组数小反而需要缓冲区更大的情况
+        else if (method->group_number != X.number_)    //有可能存在组数小反而需要缓冲区更大的情况
         {
             size_t ws_size;
-            cudnnGetConvolutionForwardWorkspaceSize(gpu->cudnn_handle_, X.cudnn_desc(),
-                filter_desc(), conv_desc(), Y.cudnn_desc(), cudnnConvolutionFwdAlgo_t(methods[0]), &ws_size);
-            if (ws_size > workspaces[0].getDataSizeInByte())
+            auto s = cudnnGetConvolutionForwardWorkspaceSize(gpu->cudnn_handle_, X.cudnn_desc(),
+                filter_desc(), conv_desc(), Y.cudnn_desc(), cudnnConvolutionFwdAlgo_t(method->algo), &ws_size);
+            if (s == CUDNN_STATUS_SUCCESS && ws_size > workspace->getDataSizeInByte())
             {
-                workspaces[0].resize(1, 1, 1, ws_size / workspaces[0].getDataTypeSize() + 2);
+                workspace->resize(1, 1, 1, ws_size / workspace->getDataTypeSize() + 2);
 #ifdef _DEBUG
                 LOG("resize conv workspace {}\n", ws_size);
 #endif
             }
         }
-        methods[2] = X.number_;
-        auto cfa = cudnnConvolutionFwdAlgo_t(methods[0]);
-        auto tensor = cudnnSetConvolutionMathType(conv_desc(), cudnnMathType_t(methods[1]));
+        method->group_number = X.number_;
+        auto cfa = cudnnConvolutionFwdAlgo_t(method->algo);
+        auto tensor = cudnnSetConvolutionMathType(conv_desc(), cudnnMathType_t(method->math_type));
         auto scf = cudnnConvolutionForward(gpu->cudnn_handle_, &a, X.cudnn_desc(), X.data(), filter_desc(), W.data(),
-            conv_desc(), cfa, workspaces[0].data(), workspaces[0].getDataSizeInByte(), &r, Y.cudnn_desc(), Y.data());
+            conv_desc(), cfa, workspace->data(), workspace->getDataSizeInByte(), &r, Y.cudnn_desc(), Y.data());
         if (scf)
         {
             LOG_ERR("CONV forward error: status {}, algo {}, {}\n", cudnnGetErrorString(scf), int(cfa), X.gpu()->lastCudnnErrorString());
@@ -1016,10 +1005,6 @@ void MatrixEx::convolutionForward(const Matrix& X, const Matrix& W, Matrix& Y, s
     }
     else if (Y.isHip())
     {
-        if (workspaces.size() < 2)
-        {
-            workspaces.resize(2);
-        }
         miopenStatus_t scd, sfd;
         auto op_desc = gpu->getDesc<miopenConvolutionDescriptor_t>();
         if (stride.size() == 2)
@@ -1039,7 +1024,7 @@ void MatrixEx::convolutionForward(const Matrix& X, const Matrix& W, Matrix& Y, s
             std::reverse(w_dim.begin(), w_dim.end());
         }
         //暂无类型设定
-        if (methods[2] <= 0)
+        if (method->algo < 0)
         {
             int n;
             size_t ws_size;
@@ -1052,30 +1037,30 @@ void MatrixEx::convolutionForward(const Matrix& X, const Matrix& W, Matrix& Y, s
                 miopenSet4dTensorDescriptor(d1, miopenFloat, i, X.channel_, X.height_, X.width_);
                 miopenSet4dTensorDescriptor(d2, miopenFloat, i, Y.channel_, Y.height_, Y.width_);
                 miopenFindConvolutionForwardAlgorithm(gpu->miopen_handle_, d1, X.data(), W.miopen_desc(), W.data(),
-                    op_desc, d2, Y.data(), conv_method_count, &n, cfap, workspaces[0].data(), workspaces[0].getDataSizeInByte(), true);
+                    op_desc, d2, Y.data(), conv_method_count, &n, cfap, workspace->data(), workspace->getDataSizeInByte(), true);
             }
             ws_size = cfap[0].memory;
-            if (ws_size > workspaces[0].getDataSizeInByte())
+            if (ws_size > workspace->getDataSizeInByte())
             {
-                workspaces[0].resize(1, 1, cfap[0].memory / workspaces[0].getDataTypeSize() + 2, 1);
+                workspace->resize(1, 1, cfap[0].memory / workspace->getDataTypeSize() + 2, 1);
             }
-            methods[0] = cfap[0].fwd_algo;
+            method->algo = cfap[0].fwd_algo;
         }
-        else if (methods[2] != X.number_)
+        else if (method->group_number != X.number_)
         {
             size_t ws_size;
-            miopenConvolutionForwardGetWorkSpaceSize(gpu->miopen_handle_, W.miopen_desc(), X.miopen_desc(), op_desc, Y.miopen_desc(), &ws_size);
-            if (ws_size > workspaces[0].getDataSizeInByte())
+            auto s = miopenConvolutionForwardGetWorkSpaceSize(gpu->miopen_handle_, W.miopen_desc(), X.miopen_desc(), op_desc, Y.miopen_desc(), &ws_size);
+            if (s == 0 & ws_size > workspace->getDataSizeInByte())
             {
-                workspaces[0].resize(1, 1, ws_size / workspaces[0].getDataTypeSize() + 2, 1);
+                workspace->resize(1, 1, ws_size / workspace->getDataTypeSize() + 2, 1);
             }
         }
-        methods[2] = X.number_;
+        method->group_number = X.number_;
         auto scf = miopenConvolutionForward(gpu->miopen_handle_, &a, X.miopen_desc(), X.data(), W.miopen_desc(), W.data(),
-            op_desc, miopenConvFwdAlgorithm_t(methods[0]), &r, Y.miopen_desc(), Y.data(), workspaces[0].data(), workspaces[0].getDataSizeInByte());
+            op_desc, miopenConvFwdAlgorithm_t(method->algo), &r, Y.miopen_desc(), Y.data(), workspace->data(), workspace->getDataSizeInByte());
         if (scf)
         {
-            LOG_ERR("CONV forward error: status {}, methods {}\n", miopenGetErrorString(scf), methods);
+            LOG_ERR("CONV forward error: status {}, methods {}\n", miopenGetErrorString(scf), method->algo);
         }
     }
     else
@@ -1085,11 +1070,11 @@ void MatrixEx::convolutionForward(const Matrix& X, const Matrix& W, Matrix& Y, s
         int row = Y.width_ * Y.height_;
         int col = X.channel_ * W.width_ * W.height_;
         Matrix X_ex({ row, col }, X.getDataType(), UnitType::CPU);
-        if (methods[0] < 1)
+        if (method->algo < 0)
         {
-            methods[0] = 1;
-            workspaces[0].resize(1, 1, row * col, 1);
-            workspaces[0].fillData(-1);
+            method->algo = 0;
+            workspace->resize(1, 1, row * col, 1);
+            workspace->fillData(-1);
             //ex_pos记录展开的位置，预先记录节省时间
             for (int cX = 0; cX < X.channel_; cX++)
             {
@@ -1101,7 +1086,7 @@ void MatrixEx::convolutionForward(const Matrix& X, const Matrix& W, Matrix& Y, s
                         //拍扁
                         int pX = X.whcn2i(wX, hX, cX, 0);    //X其中一组特征对应的位置
                         int pX_ex = X_ex.mn2i(pY, pW);
-                        workspaces[0].setData(pX_ex, 0, pX);    //记录展开的位置
+                        workspace->setData(pX_ex, 0, pX);    //记录展开的位置
                     });
             }
         }
@@ -1114,7 +1099,7 @@ void MatrixEx::convolutionForward(const Matrix& X, const Matrix& W, Matrix& Y, s
             X_ex.fillData(0);
             for (int j = 0; j < X_ex.getDataSize(); j++)
             {
-                int p = workspaces[0].getData(j, 0);
+                int p = workspace->getData(j, 0);
                 if (p >= 0 && p < X_sub.getDataSize())
                 {
                     X_ex.setData(j, X_sub.getData(p));
@@ -1145,20 +1130,60 @@ void MatrixEx::convolutionForward(const Matrix& X, const Matrix& W, Matrix& Y, s
 }
 
 //计算dX只需要W，dA；计算dW只需要X，dA；计算dB只需要dA
-void MatrixEx::convolutionBackward(Matrix& X, Matrix& W, const Matrix& Y, std::vector<int>& methods, std::vector<Matrix>& workspaces,
-    const std::vector<int>& stride, const std::vector<int>& padding, float a /*= 1*/, float rx /*= 0*/, float rw /*= 0*/)
+void MatrixEx::convolutionBackward(Matrix& X, Matrix& W, const Matrix& Y, const std::vector<int>& stride, const std::vector<int>& padding, float ax, float rx, float aw, float rw, ConvMethod* method_dx, ConvMethod* method_dw, Matrix* workspace_dx, Matrix* workspace_dw)
+{
+#ifdef DIRECT_COMPUTE_CONVOLUTION
+    //这是原始计算方法，速度很慢，不要打开这段代码
+    //LOG(stderr, "Please supply buffer vector and use the faster convolution method.\n");
+    if (W.needReverse())
+    {
+        W.d().scale(rw);
+    }
+    if (X.needReverse())
+    {
+        X.d().scale(rx);
+    }
+    for (int n = 0; n < Y.number_; n++)
+    {
+        for (int cX = 0; cX < X.channel_; cX++)
+        {
+            for (int cY = 0; cY < Y.channel_; cY++)
+            {
+                CONV_OPERATION1(X, W, Y, wX, hX, wW, hW, wY, hY,
+                    {
+                        if (X.needReverse())
+                        {
+                            X.d().getData(wX, hX, cX, n) += a * Y.d().getData(wY, hY, cY, n) * W.getData(wW, hW, cX, cY);
+                        }
+                        if (W.needReverse())
+                        {
+                            W.d().getData(wW, hW, cX, cY) += a * X.getData(wX, hX, cX, n) * Y.d().getData(wY, hY, cY, n);
+                        }
+                    });
+            }
+        }
+    }
+#endif
+}
+
+void MatrixEx::convolutionBackwardDX(Matrix& X, const Matrix& W, const Matrix& Y, const std::vector<int>& stride, const std::vector<int>& padding, float a, float r, ConvMethod* method_dx, Matrix* workspace_dx)
 {
     assert(checkMatrixDevice({ &X, &W, &Y }));
     assert(stride.size() >= 2 && padding.size() >= 2);
-    assert(methods.size() >= 9 && workspaces.size() >= 3);
     assert(X.getChannel() == W.getChannel() && Y.getChannel() == W.getNumber());
 
-    if (methods.size() < 9)
+    std::unique_ptr<ConvMethod> methodx_ptr;
+    std::unique_ptr<Matrix> workspace_ptr;
+    if (method_dx == nullptr)
     {
-        methods.resize(9, 0);
+        methodx_ptr.reset(new ConvMethod());
+        method_dx = methodx_ptr.get();
     }
-    auto methods_x = &methods[3];
-    auto methods_w = &methods[6];
+    if (workspace_dx == nullptr)
+    {
+        workspace_ptr.reset(new Matrix());
+        workspace_dx = workspace_ptr.get();
+    }
     auto gpu = Y.gpu();
     //这里不用dX判断是因为dX可能是空
     if (Y.isCuda())
@@ -1183,101 +1208,49 @@ void MatrixEx::convolutionBackward(Matrix& X, Matrix& W, const Matrix& Y, std::v
             cudnnSetFilterNdDescriptor(filter_desc(), toCudnnDataType(Y.getDataType()), CUDNN_TENSOR_NCHW, W.getDimSize(), w_dim.data());
         }
         cudnnSetConvolutionMathType(conv_desc(), CUDNN_TENSOR_OP_MATH);
-        if (X.needBack())
+
+        //寻找最快的算法
+        if (method_dx->algo < 0)
         {
-            //寻找最快的算法
-            if (methods_x[2] <= 0)
+            int n;
+            cudnnConvolutionBwdDataAlgoPerf_t cbdap[conv_method_count];
+            auto t = cudnnFindConvolutionBackwardDataAlgorithm(gpu->cudnn_handle_, filter_desc(),
+                Y.cudnn_desc(), conv_desc(), X.cudnn_desc(), conv_method_count, &n, cbdap);
+            method_dx->algo = cbdap[0].algo;
+            method_dx->math_type = cbdap[0].mathType;
+            size_t ws_size = cbdap[0].memory;
+            if (ws_size > workspace_dx->getDataSizeInByte())
             {
-                int n;
-                cudnnConvolutionBwdDataAlgoPerf_t cbdap[conv_method_count];
-                auto t = cudnnFindConvolutionBackwardDataAlgorithm(gpu->cudnn_handle_, filter_desc(),
-                    Y.cudnn_desc(), conv_desc(), X.cudnn_desc(), conv_method_count, &n, cbdap);
-                methods_x[0] = cbdap[0].algo;
-                methods_x[1] = cbdap[0].mathType;
-                size_t ws_size = cbdap[0].memory;
-                if (ws_size > workspaces[0].getDataSizeInByte())
-                {
-                    workspaces[0].resize(1, 1, 1, ws_size / workspaces[0].getDataTypeSize() + 2);
-                    //LOG("resize work space {}\n", memory);
-                }
-#ifdef _DEBUG
-                LOG("conv backward X choose {}({}), workspace {}\n", methods_x[0], methods_x[1], cbdap[0].memory);
-#endif
-                //workspace->message();
+                workspace_dx->resize(1, 1, 1, ws_size / workspace_dx->getDataTypeSize() + 2);
+                //LOG("resize work space {}\n", memory);
             }
-            else if (methods_x[2] != X.number_)
-            {
-                size_t ws_size;
-                cudnnGetConvolutionBackwardDataWorkspaceSize(gpu->cudnn_handle_, filter_desc(),
-                    Y.cudnn_desc(), conv_desc(), X.cudnn_desc(), cudnnConvolutionBwdDataAlgo_t(methods_x[0]), &ws_size);
-                if (ws_size > workspaces[0].getDataSizeInByte())
-                {
-                    workspaces[0].resize(1, 1, 1, ws_size / workspaces[0].getDataTypeSize() + 2);
 #ifdef _DEBUG
-                    LOG("resize conv workspace {}\n", ws_size);
+            LOG("conv backward X choose {}({}), workspace {}\n", method_dx->algo, method_dx->math_type, cbdap[0].memory);
 #endif
-                }
-            }
-            methods_x[2] = X.number_;
-            auto cbda = cudnnConvolutionBwdDataAlgo_t(methods_x[0]);
-            auto tensor = cudnnSetConvolutionMathType(conv_desc(), cudnnMathType_t(methods_x[1]));
-            auto scbx = cudnnConvolutionBackwardData(gpu->cudnn_handle_, &a, filter_desc(), W.data(), Y.cudnn_desc(), Y.d().data(),
-                conv_desc(), cbda, workspaces[0].data(), workspaces[0].getDataSizeInByte(), &rx, X.cudnn_desc(), X.d().data());
-            if (scbx)
+            //workspace->message();
+        }
+        else if (method_dx->group_number != X.number_)
+        {
+            size_t ws_size;
+            auto s = cudnnGetConvolutionBackwardDataWorkspaceSize(gpu->cudnn_handle_, filter_desc(),
+                Y.cudnn_desc(), conv_desc(), X.cudnn_desc(), cudnnConvolutionBwdDataAlgo_t(method_dx->algo), &ws_size);
+            if (s == CUDNN_STATUS_SUCCESS && ws_size > workspace_dx->getDataSizeInByte())
             {
-                LOG_ERR("CONV backward data error: status {}, {}\n", cudnnGetErrorString(scbx), X.gpu()->lastCudnnErrorString());
+                workspace_dx->resize(1, 1, 1, ws_size / workspace_dx->getDataTypeSize() + 2);
+#ifdef _DEBUG
+                LOG("resize conv workspace for back X{}\n", ws_size);
+#endif
             }
         }
-        if (W.needBack())
+        method_dx->group_number = X.number_;
+        auto cbda = cudnnConvolutionBwdDataAlgo_t(method_dx->algo);
+        auto tensor = cudnnSetConvolutionMathType(conv_desc(), cudnnMathType_t(method_dx->math_type));
+        auto scbx = cudnnConvolutionBackwardData(gpu->cudnn_handle_, &a, filter_desc(), W.data(), Y.cudnn_desc(), Y.d().data(),
+            conv_desc(), cbda, workspace_dx->data(), workspace_dx->getDataSizeInByte(), &r, X.cudnn_desc(), X.d().data());
+        if (scbx)
         {
-            //寻找最快的算法
-            if (methods_w[2] <= 0)
-            {
-                int n;
-                cudnnConvolutionBwdFilterAlgoPerf_t cbfap[conv_method_count];
-                cudnnFindConvolutionBackwardFilterAlgorithm(gpu->cudnn_handle_, X.cudnn_desc(), Y.cudnn_desc(),
-                    conv_desc(), filter_desc(), conv_method_count, &n, cbfap);
-                methods_w[0] = cbfap[0].algo;
-                methods_w[1] = cbfap[0].mathType;
-                size_t memory = cbfap[0].memory;
-                if (memory > workspaces[0].getDataSizeInByte())
-                {
-                    workspaces[0].resize(1, 1, 1, memory / workspaces[0].getDataTypeSize() + 2);
-                    //LOG("resize work space {}\n", memory);
-                }
-#ifdef _DEBUG
-                LOG("conv backward W choose {}({}), workspace {}\n", methods_w[0], methods_w[1], cbfap[0].memory);
-#endif
-                //workspace->message();
-            }
-            else if (methods_w[2] != X.number_)
-            {
-                size_t memory;
-                cudnnGetConvolutionBackwardFilterWorkspaceSize(gpu->cudnn_handle_, X.cudnn_desc(), Y.cudnn_desc(),
-                    conv_desc(), filter_desc(), cudnnConvolutionBwdFilterAlgo_t(methods_w[0]), &memory);
-                if (memory > workspaces[0].getDataSizeInByte())
-                {
-                    workspaces[0].resize(1, 1, 1, memory / workspaces[0].getDataTypeSize() + 2);
-#ifdef _DEBUG
-                    LOG("resize conv workspace {}\n", memory);
-#endif
-                }
-            }
-            methods_w[2] = X.number_;
-            auto cbfa = cudnnConvolutionBwdFilterAlgo_t(methods_w[0]);
-            auto tensor = cudnnSetConvolutionMathType(conv_desc(), cudnnMathType_t(methods_w[1]));
-            auto scbw = cudnnConvolutionBackwardFilter(gpu->cudnn_handle_, &a, X.cudnn_desc(), X.data(), Y.cudnn_desc(), Y.d().data(),
-                conv_desc(), cbfa, workspaces[0].data(), workspaces[0].getDataSizeInByte(), &rw, filter_desc(), W.d().data());
-            if (scbw)
-            {
-                LOG_ERR("CONV backward weight error: status {}, {}\n", cudnnGetErrorString(scbw), X.gpu()->lastCudnnErrorString());
-            }
+            LOG_ERR("CONV backward X error: status {}, {}\n", cudnnGetErrorString(scbx), X.gpu()->lastCudnnErrorString());
         }
-        //if (B.needUpdate())
-        //{
-        //    //这个似乎也可以用于一般情况下bias的反向，待查，unfinished
-        //    auto scbb = cudnnConvolutionBackwardBias(cuda->cudnn_handle_, &a, R.getCudnnTensorDesc(), R.DMatrix().data(), &r, B.getCudnnTensorDesc(), B.DMatrix().data());
-        //}
     }
     else if (Y.isHip())
     {
@@ -1297,204 +1270,257 @@ void MatrixEx::convolutionBackward(Matrix& X, Matrix& W, const Matrix& Y, std::v
             auto w_dim = W.getDim();
             std::reverse(w_dim.begin(), w_dim.end());
         }
-        if (X.needBack())
+
+        if (method_dx->algo < 0)
         {
-            if (methods_x[2] <= 0)
+            int n;
+            size_t ws_size;
+            miopenConvAlgoPerf_t cfap[conv_method_count];
+            miopenFindConvolutionBackwardDataAlgorithm(gpu->miopen_handle_, Y.miopen_desc(), Y.d().data(), W.miopen_desc(), W.data(),
+                op_desc, X.miopen_desc(), X.d().data(), conv_method_count, &n, cfap, workspace_dx->data(), workspace_dx->getDataSizeInByte(), true);
+            ws_size = cfap[0].memory;
+            if (ws_size > workspace_dx->getDataSizeInByte())
             {
-                int n;
-                size_t ws_size;
-                miopenConvAlgoPerf_t cfap[conv_method_count];
-                miopenFindConvolutionBackwardDataAlgorithm(gpu->miopen_handle_, Y.miopen_desc(), Y.d().data(), W.miopen_desc(), W.data(),
-                    op_desc, X.miopen_desc(), X.d().data(), conv_method_count, &n, cfap, workspaces[0].data(), workspaces[0].getDataSizeInByte(), true);
-                ws_size = cfap[0].memory;
-                if (ws_size > workspaces[0].getDataSizeInByte())
-                {
-                    workspaces[0].resize(1, 1, cfap[0].memory / workspaces[0].getDataTypeSize() + 2, 1);
-                }
-                methods_x[0] = cfap[0].bwd_data_algo;
+                workspace_dx->resize(1, 1, cfap[0].memory / workspace_dx->getDataTypeSize() + 2, 1);
             }
-            else if (methods_x[2] != X.number_)
-            {
-                size_t ws_size;
-                miopenConvolutionBackwardDataGetWorkSpaceSize(gpu->miopen_handle_, Y.miopen_desc(), W.miopen_desc(), op_desc, X.miopen_desc(), &ws_size);
-                if (ws_size > workspaces[0].getDataSizeInByte())
-                {
-                    workspaces[0].resize(1, 1, ws_size / workspaces[0].getDataTypeSize() + 2, 1);
-                }
-            }
-            methods_x[2] = X.number_;
-            auto scf = miopenConvolutionBackwardData(gpu->miopen_handle_, &a, Y.miopen_desc(), Y.d().data(), W.miopen_desc(), W.data(),
-                op_desc, miopenConvBwdDataAlgorithm_t(methods_x[0]), &rx, X.miopen_desc(), X.d().data(), workspaces[0].data(), workspaces[0].getDataSizeInByte());
+            method_dx->algo = cfap[0].bwd_data_algo;
         }
-        if (W.needBack())
+        else if (method_dx->group_number != X.number_)
         {
-            if (methods_w[2] <= 0)
+            size_t ws_size;
+            auto s = miopenConvolutionBackwardDataGetWorkSpaceSize(gpu->miopen_handle_, Y.miopen_desc(), W.miopen_desc(), op_desc, X.miopen_desc(), &ws_size);
+            if (s == 0 && ws_size > workspace_dx->getDataSizeInByte())
             {
-                int n;
-                size_t ws_size;
-                miopenConvAlgoPerf_t cfap[conv_method_count];
-                miopenFindConvolutionBackwardWeightsAlgorithm(gpu->miopen_handle_, Y.miopen_desc(), Y.d().data(), X.miopen_desc(), X.data(),
-                    op_desc, W.miopen_desc(), W.d().data(), conv_method_count, &n, cfap, workspaces[0].data(), workspaces[0].getDataSizeInByte(), true);
-                ws_size = cfap[0].memory;
-                if (ws_size > workspaces[0].getDataSizeInByte())
-                {
-                    workspaces[0].resize(1, 1, cfap[0].memory / workspaces[0].getDataTypeSize() + 2, 1);
-                }
-                methods_w[0] = cfap[0].bwd_weights_algo;
+                workspace_dx->resize(1, 1, ws_size / workspace_dx->getDataTypeSize() + 2, 1);
             }
-            else if (methods_w[2] != X.number_)
-            {
-                size_t ws_size;
-                miopenConvolutionBackwardWeightsGetWorkSpaceSize(gpu->miopen_handle_, Y.miopen_desc(), X.miopen_desc(), op_desc, W.miopen_desc(), &ws_size);
-                if (ws_size > workspaces[0].getDataSizeInByte())
-                {
-                    workspaces[0].resize(1, 1, ws_size / workspaces[0].getDataTypeSize() + 2, 1);
-                }
-            }
-            methods_w[2] = X.number_;
-            auto scf = miopenConvolutionBackwardWeights(gpu->miopen_handle_, &a, Y.miopen_desc(), Y.d().data(), X.miopen_desc(), X.data(),
-                op_desc, miopenConvBwdWeightsAlgorithm_t(methods_w[0]), &rw, W.miopen_desc(), W.d().data(), workspaces[0].data(), workspaces[0].getDataSizeInByte());
         }
+        method_dx->group_number = X.number_;
+        auto scf = miopenConvolutionBackwardData(gpu->miopen_handle_, &a, Y.miopen_desc(), Y.d().data(), W.miopen_desc(), W.data(),
+            op_desc, miopenConvBwdDataAlgorithm_t(method_dx->algo), &r, X.miopen_desc(), X.d().data(), workspace_dx->data(), workspace_dx->getDataSizeInByte());
     }
     else
     {
-        if (X.needBack())
+        //计算dX从数学上来看可以反向来求展开后的dX，再压缩，但是看起来加法次数较多
+        //转置W的输入和输出
+        Matrix W2({ W.width_, W.height_, W.number_, W.channel_ }, W.getDataType(), UnitType::CPU);
+        for (int i = 0; i < W.channel_; i++)
         {
-            //计算dX从数学上来看可以反向来求展开后的dX，再压缩，但是看起来加法次数较多
-            //转置W的输入和输出
-            Matrix W2({ W.width_, W.height_, W.number_, W.channel_ }, W.getDataType(), UnitType::CPU);
-            for (int i = 0; i < W.channel_; i++)
+            for (int j = 0; j < W.number_; j++)
             {
-                for (int j = 0; j < W.number_; j++)
-                {
-                    copyDataPtr(W, W.getDataPtr(0, 0, i, j), W2, W2.getDataPtr(0, 0, j, i), W.width_ * W.height_);
-                }
+                copyDataPtr(W, W.getDataPtr(0, 0, i, j), W2, W2.getDataPtr(0, 0, j, i), W.width_ * W.height_);
             }
-            //辅助矩阵的尺寸
-            int row = X.width_ * X.height_;
-            int col = Y.channel_ * W.width_ * W.height_;
-            Matrix dY_ex({ row, col }, DataType::CURRENT, UnitType::CPU);
-            dY_ex.fillData(0);
-            if (methods_x[0] < 1)
+        }
+        //辅助矩阵的尺寸
+        int row = X.width_ * X.height_;
+        int col = Y.channel_ * W.width_ * W.height_;
+        Matrix dY_ex({ row, col }, DataType::CURRENT, UnitType::CPU);
+        dY_ex.fillData(0);
+        if (method_dx->algo < 0)
+        {
+            method_dx->algo = 0;
+            workspace_dx->resize(1, 1, row * col, 1);
+            workspace_dx->fillData(-1);
+            for (int cY = 0; cY < Y.channel_; cY++)
             {
-                methods_x[0] = 1;
-                workspaces[1].resize(1, 1, row * col, 1);
-                workspaces[1].fillData(-1);
-                for (int cY = 0; cY < Y.channel_; cY++)
-                {
-                    CONV_OPERATION1(X, W, Y, padding[0], padding[1], stride[0], stride[1],
-                        {
-                            int pX = X.whcn2i(wX, hX, 0, 0);
-                            int pW = W2.whcn2i(wW, hW, cY, 0);    //这里用W或者W2没有区别
-                            int pY = Y.whcn2i(wY, hY, cY, 0);     //拍扁
-                            int p_ex = dY_ex.mn2i(pX, pW);
-                            workspaces[1].setData(p_ex, 0, pY);
-                        });
-                }
-            }
-            Matrix dY_sub({ Y.row_, 1 }, Y.getDataType(), UnitType::CPU);
-            Matrix dX_sub({ X.width_ * X.height_, X.channel_ }, X.getDataType(), UnitType::CPU);
-            for (int i = 0; i < Y.number_; i++)
-            {
-                dY_sub.shareData(Y.d(), 0, i);
-                dX_sub.shareData(X.d(), 0, i);
-                for (int j = 0; j < dY_ex.getDataSize(); j++)
-                {
-                    if (workspaces[1].getData(j, 0) >= 0)
+                CONV_OPERATION1(X, W, Y, padding[0], padding[1], stride[0], stride[1],
                     {
-                        dY_ex.setData(j, dY_sub.getData(workspaces[1].getData(j, 0)));
-                    }
-                }
-                MatrixEx::mul(dY_ex, W2, dX_sub, a, rx);
+                        int pX = X.whcn2i(wX, hX, 0, 0);
+                        int pW = W2.whcn2i(wW, hW, cY, 0);    //这里用W或者W2没有区别
+                        int pY = Y.whcn2i(wY, hY, cY, 0);     //拍扁
+                        int p_ex = dY_ex.mn2i(pX, pW);
+                        workspace_dx->setData(p_ex, 0, pY);
+                    });
             }
         }
-        //暂时如此写，看情况能否跟上面合并
-        if (W.needBack())
+        Matrix dY_sub({ Y.row_, 1 }, Y.getDataType(), UnitType::CPU);
+        Matrix dX_sub({ X.width_ * X.height_, X.channel_ }, X.getDataType(), UnitType::CPU);
+        for (int i = 0; i < Y.number_; i++)
         {
-            //W.d().scale(rw);
-            //辅助矩阵的尺寸
-            int row = W.width_ * W.height_ * W.channel_;
-            int col = Y.width_ * Y.height_;
-            Matrix X_ex({ row, col }, X.getDataType(), UnitType::CPU);
-            X_ex.fillData(0);
-            if (methods_w[0] < 1)
+            dY_sub.shareData(Y.d(), 0, i);
+            dX_sub.shareData(X.d(), 0, i);
+            for (int j = 0; j < dY_ex.getDataSize(); j++)
             {
-                methods_w[0] = 1;
-                workspaces[2].resize(1, 1, row * col, 1);
-                workspaces[2].fillData(-1);
-                //cW==cX, nW=cA
-                for (int cW = 0; cW < W.channel_; cW++)
+                if (workspace_dx->getData(j, 0) >= 0)
                 {
-                    CONV_OPERATION1(X, W, Y, padding[0], padding[1], stride[0], stride[1],
-                        {
-                            int pW = W.whcn2i(wW, hW, cW, 0);
-                            int pY = Y.whcn2i(wY, hY, 0, 0);
-                            //拍扁
-                            int pX = X.whcn2i(wX, hX, cW, 0);
-                            int p_ex = X_ex.mn2i(pW, pY);
-                            workspaces[2].setData(p_ex, 0, pX);
-                        });
+                    dY_ex.setData(j, dY_sub.getData(workspace_dx->getData(j, 0)));
                 }
             }
-            Matrix dY_sub({ Y.width_ * Y.height_, Y.channel_ }, Y.getDataType(), UnitType::CPU);
-            Matrix X_sub({ X.row_, 1 }, X.getDataType(), UnitType::CPU);
-            for (int i = 0; i < Y.number_; i++)
-            {
-                dY_sub.shareData(Y.d(), 0, i);
-                X_sub.shareData(X, 0, i);
-                for (int j = 0; j < X_ex.getDataSize(); j++)
-                {
-                    //if ((*ex2)[j] >= 0) //因为是满的不需要
-                    X_ex.setData(j, X_sub.getData(workspaces[2].getData(j, 0)));
-                }
-                MatrixEx::mul(X_ex, dY_sub, W.d(), a, rw);    //有点麻烦，暂时不管
-            }
+            MatrixEx::mul(dY_ex, W2, dX_sub, a, r);
         }
-        //if (B.needUpdate())
-        //{
-        //    B.DMatrix().scale(r);
-        //    //这个就是对对应的dR求和
-        //    for (int n = 0; n < R.number_; n++)
-        //    {
-        //        for (int c = 0; c < R.channel_; c++)
-        //        {
-        //            B.DMatrix().getData(0, 0, c, 0) += a * VectorMath::sum(R.DMatrix().getDataPtr(0, 0, c, n), R.width_ * R.height_);
-        //        }
-        //    }
-        //}
+    }
+}
 
-#ifdef DIRECT_COMPUTE_CONVOLUTION
-        //这是原始计算方法，速度很慢，不要打开这段代码
-        //LOG(stderr, "Please supply buffer vector and use the faster convolution method.\n");
-        if (W.needReverse())
+void MatrixEx::convolutionBackwardDW(const Matrix& X, Matrix& W, const Matrix& Y, const std::vector<int>& stride, const std::vector<int>& padding, float a, float r, ConvMethod* method_dw, Matrix* workspace_dw)
+{
+    assert(checkMatrixDevice({ &X, &W, &Y }));
+    assert(stride.size() >= 2 && padding.size() >= 2);
+    assert(X.getChannel() == W.getChannel() && Y.getChannel() == W.getNumber());
+
+    std::unique_ptr<ConvMethod> methodw_ptr;
+    std::unique_ptr<Matrix> workspace2_ptr;
+    if (method_dw == nullptr)
+    {
+        methodw_ptr.reset(new ConvMethod());
+        method_dw = methodw_ptr.get();
+    }
+    if (workspace_dw == nullptr)
+    {
+        workspace2_ptr.reset(new Matrix());
+        workspace_dw = workspace2_ptr.get();
+    }
+    auto gpu = Y.gpu();
+    if (Y.isCuda())
+    {
+        cudnnConvolutionDesc conv_desc;
+        cudnnFilterDesc filter_desc;
+        if (stride.size() == 2)
         {
-            W.d().scale(rw);
+            cudnnSetConvolution2dDescriptor(conv_desc(), padding[1], padding[0], stride[1], stride[0], 1, 1, CUDNN_CROSS_CORRELATION, toCudnnDataType(Y.getDataType()));
+            cudnnSetFilter4dDescriptor(filter_desc(), toCudnnDataType(Y.getDataType()), CUDNN_TENSOR_NCHW, W.number_, W.channel_, W.height_, W.width_);
         }
-        if (X.needReverse())
+        else
         {
-            X.d().scale(rx);
+            std::vector<int> dilation(padding.size(), 1);
+            auto pr = padding;
+            auto sr = stride;
+            std::reverse(pr.begin(), pr.end());
+            std::reverse(sr.begin(), sr.end());
+            cudnnSetConvolutionNdDescriptor(conv_desc(), padding.size(), pr.data(), sr.data(), dilation.data(), CUDNN_CROSS_CORRELATION, toCudnnDataType(Y.getDataType()));
+            auto w_dim = W.getDim();
+            std::reverse(w_dim.begin(), w_dim.end());
+            cudnnSetFilterNdDescriptor(filter_desc(), toCudnnDataType(Y.getDataType()), CUDNN_TENSOR_NCHW, W.getDimSize(), w_dim.data());
         }
-        for (int n = 0; n < Y.number_; n++)
+        cudnnSetConvolutionMathType(conv_desc(), CUDNN_TENSOR_OP_MATH);
+
+        //寻找最快的算法
+        if (method_dw->algo < 0)
         {
-            for (int cX = 0; cX < X.channel_; cX++)
+            int n;
+            cudnnConvolutionBwdFilterAlgoPerf_t cbfap[conv_method_count];
+            cudnnFindConvolutionBackwardFilterAlgorithm(gpu->cudnn_handle_, X.cudnn_desc(), Y.cudnn_desc(),
+                conv_desc(), filter_desc(), conv_method_count, &n, cbfap);
+            method_dw->algo = cbfap[0].algo;
+            method_dw->math_type = cbfap[0].mathType;
+            size_t memory = cbfap[0].memory;
+            if (memory > workspace_dw->getDataSizeInByte())
             {
-                for (int cY = 0; cY < Y.channel_; cY++)
-                {
-                    CONV_OPERATION1(X, W, Y, wX, hX, wW, hW, wY, hY,
-                        {
-                            if (X.needReverse())
-                            {
-                                X.d().getData(wX, hX, cX, n) += a * Y.d().getData(wY, hY, cY, n) * W.getData(wW, hW, cX, cY);
-                            }
-                            if (W.needReverse())
-                            {
-                                W.d().getData(wW, hW, cX, cY) += a * X.getData(wX, hX, cX, n) * Y.d().getData(wY, hY, cY, n);
-                            }
-                        });
-                }
+                workspace_dw->resize(1, 1, 1, memory / workspace_dw->getDataTypeSize() + 2);
+                //LOG("resize work space {}\n", memory);
+            }
+#ifdef _DEBUG
+            LOG("conv backward W choose {}({}), workspace {}\n", method_dw->algo, method_dw->math_type, cbfap[0].memory);
+#endif
+            //workspace2->message();
+        }
+        else if (method_dw->group_number != X.number_)
+        {
+            size_t memory;
+            auto s = cudnnGetConvolutionBackwardFilterWorkspaceSize(gpu->cudnn_handle_, X.cudnn_desc(), Y.cudnn_desc(),
+                conv_desc(), filter_desc(), cudnnConvolutionBwdFilterAlgo_t(method_dw->algo), &memory);
+            if (s == CUDNN_STATUS_SUCCESS && memory > workspace_dw->getDataSizeInByte())
+            {
+                workspace_dw->resize(1, 1, 1, memory / workspace_dw->getDataTypeSize() + 2);
+#ifdef _DEBUG
+                LOG("resize conv workspace for back W {}\n", memory);
+#endif
             }
         }
-#endif
+        method_dw->group_number = X.number_;
+        auto cbfa = cudnnConvolutionBwdFilterAlgo_t(method_dw->algo);
+        auto tensor = cudnnSetConvolutionMathType(conv_desc(), cudnnMathType_t(method_dw->math_type));
+        auto scbw = cudnnConvolutionBackwardFilter(gpu->cudnn_handle_, &a, X.cudnn_desc(), X.data(), Y.cudnn_desc(), Y.d().data(),
+            conv_desc(), cbfa, workspace_dw->data(), workspace_dw->getDataSizeInByte(), &r, filter_desc(), W.d().data());
+        if (scbw)
+        {
+            LOG_ERR("CONV backward W error: status {}, {}\n", cudnnGetErrorString(scbw), X.gpu()->lastCudnnErrorString());
+        }
+    }
+    else if (Y.isHip())
+    {
+        auto op_desc = gpu->getDesc<miopenConvolutionDescriptor_t>();
+        if (stride.size() == 2)
+        {
+            miopenInitConvolutionDescriptor(op_desc, miopenConvolution, padding[1], padding[0], stride[1], stride[0], 1, 1);
+        }
+        else
+        {
+            std::vector<int> dilation(padding.size(), 1);
+            auto pr = padding;
+            auto sr = stride;
+            std::reverse(pr.begin(), pr.end());
+            std::reverse(sr.begin(), sr.end());
+            miopenInitConvolutionNdDescriptor(op_desc, padding.size(), pr.data(), sr.data(), dilation.data(), miopenConvolution);
+            auto w_dim = W.getDim();
+            std::reverse(w_dim.begin(), w_dim.end());
+        }
+
+        if (method_dw->algo < 0)
+        {
+            int n;
+            size_t ws_size;
+            miopenConvAlgoPerf_t cfap[conv_method_count];
+            miopenFindConvolutionBackwardWeightsAlgorithm(gpu->miopen_handle_, Y.miopen_desc(), Y.d().data(), X.miopen_desc(), X.data(),
+                op_desc, W.miopen_desc(), W.d().data(), conv_method_count, &n, cfap, workspace_dw->data(), workspace_dw->getDataSizeInByte(), true);
+            ws_size = cfap[0].memory;
+            if (ws_size > workspace_dw->getDataSizeInByte())
+            {
+                workspace_dw->resize(1, 1, cfap[0].memory / workspace_dw->getDataTypeSize() + 2, 1);
+            }
+            method_dw->algo = cfap[0].bwd_weights_algo;
+        }
+        else if (method_dw->group_number != X.number_)
+        {
+            size_t ws_size;
+            auto s = miopenConvolutionBackwardWeightsGetWorkSpaceSize(gpu->miopen_handle_, Y.miopen_desc(), X.miopen_desc(), op_desc, W.miopen_desc(), &ws_size);
+            if (s == 0 && ws_size > workspace_dw->getDataSizeInByte())
+            {
+                workspace_dw->resize(1, 1, ws_size / workspace_dw->getDataTypeSize() + 2, 1);
+            }
+        }
+        method_dw->group_number = X.number_;
+        auto scf = miopenConvolutionBackwardWeights(gpu->miopen_handle_, &a, Y.miopen_desc(), Y.d().data(), X.miopen_desc(), X.data(),
+            op_desc, miopenConvBwdWeightsAlgorithm_t(method_dw->algo), &r, W.miopen_desc(), W.d().data(), workspace_dw->data(), workspace_dw->getDataSizeInByte());
+    }
+    else
+    {
+        //W.d().scale(rw);
+        //辅助矩阵的尺寸
+        int row = W.width_ * W.height_ * W.channel_;
+        int col = Y.width_ * Y.height_;
+        Matrix X_ex({ row, col }, X.getDataType(), UnitType::CPU);
+        X_ex.fillData(0);
+        if (method_dw->algo < 0)
+        {
+            method_dw->algo = 0;
+            workspace_dw->resize(1, 1, row * col, 1);
+            workspace_dw->fillData(-1);
+            //cW==cX, nW=cA
+            for (int cW = 0; cW < W.channel_; cW++)
+            {
+                CONV_OPERATION1(X, W, Y, padding[0], padding[1], stride[0], stride[1],
+                    {
+                        int pW = W.whcn2i(wW, hW, cW, 0);
+                        int pY = Y.whcn2i(wY, hY, 0, 0);
+                        //拍扁
+                        int pX = X.whcn2i(wX, hX, cW, 0);
+                        int p_ex = X_ex.mn2i(pW, pY);
+                        workspace_dw->setData(p_ex, 0, pX);
+                    });
+            }
+        }
+        Matrix dY_sub({ Y.width_ * Y.height_, Y.channel_ }, Y.getDataType(), UnitType::CPU);
+        Matrix X_sub({ X.row_, 1 }, X.getDataType(), UnitType::CPU);
+        for (int i = 0; i < Y.number_; i++)
+        {
+            dY_sub.shareData(Y.d(), 0, i);
+            X_sub.shareData(X, 0, i);
+            for (int j = 0; j < X_ex.getDataSize(); j++)
+            {
+                //if ((*ex2)[j] >= 0) //因为是满的不需要
+                X_ex.setData(j, X_sub.getData(workspace_dw->getData(j, 0)));
+            }
+            MatrixEx::mul(X_ex, dY_sub, W.d(), a, r);    //有点麻烦，暂时不管
+        }
     }
 }
 
@@ -1618,7 +1644,7 @@ void MatrixEx::adaDeltaUpdate(Matrix& mean_d2, Matrix& mean_ada_d2, Matrix& d, M
     }
     else if (d.isHip())
     {
-        hip_ada_delta_update(mean_d2.data(), mean_ada_d2.data(), d.data(), ada_d.data(), d.data_size_, rou, epsilon);
+        hip_ada_delta_update(mean_d2.getDataTypeByInt(), mean_d2.data(), mean_ada_d2.data(), d.data(), ada_d.data(), d.data_size_, rou, epsilon);
     }
     else
     {
@@ -1644,7 +1670,7 @@ void MatrixEx::adamUpdate(Matrix& mean_d, Matrix& mean_d2, Matrix& d, Matrix& ad
     }
     else if (d.isHip())
     {
-        hip_adam_update(mean_d.data(), mean_d2.data(), d.data(), ada_d.data(), d.data_size_, beta1, beta2, epsilon, t);
+        hip_adam_update(mean_d.getDataTypeByInt(), mean_d.data(), mean_d2.data(), d.data(), ada_d.data(), d.data_size_, beta1, beta2, epsilon, t);
     }
     else
     {
@@ -1880,6 +1906,7 @@ void MatrixEx::leaky_relub(Matrix& X, const Matrix& Y, float l, float a /*= 1*/,
     }
 }
 
+//此功能过于复杂且不实用，暂时废弃
 void MatrixEx::correlationForward(const Matrix& X, const Matrix& W, Matrix& Y, std::vector<int>& methods, std::vector<Matrix>& workspaces, const std::vector<int>& stride, const std::vector<int>& padding, float a /*= 1*/, float r /*= 0*/)
 {
     float epsilon = 1e-4;
@@ -1949,19 +1976,19 @@ void MatrixEx::correlationForward(const Matrix& X, const Matrix& W, Matrix& Y, s
     Matrix::elementDiv(W, W_den, W_norm);            //计算归一化之后的核
 
     //计算X相关
-    Matrix::elementMul(X, X, X_square);                                                                      //X_square平方
-    MatrixEx::convolutionForward(X_square, W_1, Y_den_square, methods, workspaces, stride, padding, 1);      //Y_den_square临时保存平方和
-    MatrixEx::convolutionForward(X, W_1, Y_aver, methods, workspaces, stride, padding, 1.0 / W.getRow());    //Y_aver保存平均值
-    Matrix::elementMul(Y_aver, Y_aver, Y_den);                                                               //Y_den临时保存平均值平方
+    Matrix::elementMul(X, X, X_square);    //X_square平方
+    //MatrixEx::convolutionForward(X_square, W_1, Y_den_square, methods, workspaces, stride, padding, 1);      //Y_den_square临时保存平方和
+    //MatrixEx::convolutionForward(X, W_1, Y_aver, methods, workspaces, stride, padding, 1.0 / W.getRow());    //Y_aver保存平均值
+    Matrix::elementMul(Y_aver, Y_aver, Y_den);    //Y_den临时保存平均值平方
     Matrix::add(Y_den_square, Y_den, Y_den_square, 1, -W.getRow());
     Y_den_square.addNumber(epsilon);
     Matrix::elementPow(Y_den_square, Y_den, 0.5);    //Y_den_square，Y_den计算完毕
 
     //计算原图与归一化核的卷积，并除以分母
-    MatrixEx::convolutionForward(X, W_norm, Y, methods, workspaces, stride, padding);               //X与归一化后W的卷积
-    MatrixEx::convolutionForward(X1, W_norm, Y_conv_aver, methods, workspaces, stride, padding);    //X的元素全为1时与W的卷积
-    Matrix::elementMul(Y_conv_aver, Y_aver, Y_conv_aver);                                           //元素乘平均值
-    Matrix::add(Y, Y_conv_aver, Y, 1, -1);                                                          //相减计算出分子的前半部分
+    //MatrixEx::convolutionForward(X, W_norm, Y, methods, workspaces, stride, padding);               //X与归一化后W的卷积
+    //MatrixEx::convolutionForward(X1, W_norm, Y_conv_aver, methods, workspaces, stride, padding);    //X的元素全为1时与W的卷积
+    Matrix::elementMul(Y_conv_aver, Y_aver, Y_conv_aver);    //元素乘平均值
+    Matrix::add(Y, Y_conv_aver, Y, 1, -1);                   //相减计算出分子的前半部分
 
     Matrix::elementDiv(Y, Y_den, Y);
 }
@@ -1990,15 +2017,15 @@ void MatrixEx::correlationBackward(Matrix& X, Matrix& W, const Matrix& Y, std::v
     {
         Matrix::elementDiv(Y.d(), Y_den, Y_den.d());
         X.setNeedBack(false);
-        MatrixEx::convolutionBackward(X, W, Y_den, methods, workspaces, stride, padding, 1 - 1.0 / W.getRow(), 0, 0);
+        //MatrixEx::convolutionBackward(X, W, Y_den, methods, workspaces, stride, padding, 1 - 1.0 / W.getRow(), 0, 0);
         Matrix::elementMul(Y_den.d(), Y_aver, Y_aver.d());
         X1.setNeedBack(false);
-        MatrixEx::convolutionBackward(X1, W, Y_aver, methods, workspaces, stride, padding, -(1 - 1.0 / W.getRow()), 0, 1);
+        //MatrixEx::convolutionBackward(X1, W, Y_aver, methods, workspaces, stride, padding, -(1 - 1.0 / W.getRow()), 0, 1);
         Matrix::elementDiv(W.d(), W_den, W.d());
 
         Matrix::elementMul(Y.d(), Y, Y_den.d());
         //应是反向卷积再元素乘
-        MatrixEx::convolutionBackward(X1, W_norm, Y_den, methods, workspaces, stride, padding);
+        //MatrixEx::convolutionBackward(X1, W_norm, Y_den, methods, workspaces, stride, padding);
         Matrix::elementMul(W_norm.d(), W_minus_aver, W_norm.d());
         Matrix::elementDiv(W_norm.d(), W_den_square, W_norm.d());
         Matrix::add(W.d(), W_norm.d(), W.d(), a, -a);

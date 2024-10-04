@@ -89,6 +89,13 @@ enum PoolingType
     POOLING_MA,    //实验功能，正向max，反向average
 };
 
+//是否反卷积
+enum PoolingReverseType
+{
+    POOLING_NOT_REVERSE = 0,
+    POOLING_REVERSE = 1,
+};
+
 //合并种类
 enum CombineType
 {

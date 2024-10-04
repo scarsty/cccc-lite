@@ -61,7 +61,7 @@ private:
     static int device_count_;
     static int device_count_c_;
     static int device_count_h_;
-    static std::vector<int> cuda_devices_turn_;
+    static std::vector<int> gpu_devices_turn_;
     static std::atomic<int> auto_choose_turn_;
 
 public:
@@ -73,7 +73,7 @@ public:
 
     static UnitType getGlobalCudaType();
     static void evaluateDevices();
-    static std::vector<int> cudaDevicesTurn();
+    static std::vector<int> gpuDevicesTurn();
 
     void setAsCurrent();
     int getDeviceID() const { return gpu_id_; }

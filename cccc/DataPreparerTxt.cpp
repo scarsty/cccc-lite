@@ -18,7 +18,7 @@ void DataPreparerTxt::init2()
     input_ = VectorMath::multiply(dim0_, dim0_.size() - 1);
     output_ = VectorMath::multiply(dim1_, dim1_.size() - 1);
     std::string filename = option_->getString(section_, "file", "file.txt");
-    content_ = strfunc::readStringFromFile(filename);
+    content_ = filefunc::readFileToString(filename);
 }
 
 void DataPreparerTxt::fillData0()

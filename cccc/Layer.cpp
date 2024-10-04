@@ -181,9 +181,13 @@ void Layer::makeMatrixOp(std::vector<MatrixOp>& op_queue)
             }
         }
         VectorMath::force_resize(padding, window_dim_size, 0);
-        int reverse = option_->getInt(layer_name_, "reverse", 0);
+        auto reverse_type = POOLING_NOT_REVERSE;
+        if (option_->getInt(layer_name_, "reverse", 0))
+        {
+            reverse_type = POOLING_REVERSE;
+        }
         auto pool_type = option_->getEnum<PoolingType>(layer_name_, "pool_type", POOLING_MAX);
-        op.as_pool(prev_layer_->A_, A_, pool_type, reverse, window, stride, padding);
+        op.as_pool(prev_layer_->A_, A_, pool_type, reverse_type, window, stride, padding);
         op_queue.push_back(op);
         break;
     }
