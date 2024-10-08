@@ -1,7 +1,7 @@
 # CCCC
 <img src='https://raw.githubusercontent.com/scarsty/neural-demo/master/logo.png'>
 
-cccc为will的核心部分，负责神经网络的训练与推理。
+cccc为libwill的核心部分，负责神经网络的训练与推理。
 
 英文代号“will”意为“心愿”。
 
