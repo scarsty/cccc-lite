@@ -257,7 +257,4 @@
       <Filter>gpu</Filter>
     </None>
   </ItemGroup>
-  <ItemGroup>
-    <ResourceCompile Include="cccc.rc" />
-  </ItemGroup>
 </Project>

@@ -5,7 +5,7 @@
 #endif
 #ifndef ENABLE_HIP
 #ifdef _WIN32
-#define ENABLE_HIP 0
+#define ENABLE_HIP 1
 #else
 #define ENABLE_HIP 0
 #endif
