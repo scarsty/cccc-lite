@@ -113,7 +113,7 @@ private:
         "cudnn_ops_infer64_8",
         "cudnn_ops_train64_8",
         "cudnn64_7",
-        "amdhip64",
+        "amdhip64_6",  //rocm 6.x: amdhip64_6.dll, before rocm 5.x: amdhip64.dll
         "rocblas",
         "miopen",
         "cccc-hip",
