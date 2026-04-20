@@ -5,7 +5,7 @@ namespace cccc
 {
 
 //该类中均不是矩阵基本计算，全部为静态函数
-class DLL_EXPORT MatrixEx : public Matrix
+class CCCC_EXPORT MatrixEx : public Matrix
 {
 private:
     MatrixEx() = delete;
@@ -52,7 +52,7 @@ public:
         float a = 1, float r = 0);
 
     static void poolingChannelForward(Matrix& X, Matrix& Y, PoolingType pooling_type, PoolingReverseType reverse_type, float a = 1, float r = 0);
-    static void poolingChannelBackward(Matrix& X, Matrix& Y, PoolingType pooling_type, PoolingReverseType reverse_typ, float a = 1, float r = 0);
+    static void poolingChannelBackward(Matrix& X, Matrix& Y, PoolingType pooling_type, PoolingReverseType reverse_type, float a = 1, float r = 0);
 
     static void convolutionForward(const Matrix& X, const Matrix& W, Matrix& Y,
         const std::vector<int>& stride, const std::vector<int>& padding,
@@ -73,11 +73,10 @@ public:
     //GPU only ----------------------------------------------------------------------------------------------------
 
     //以下带有可以训练调节的参数
-    static void batchNormalizationForward(const Matrix& X, Matrix& Y, ActivePhaseType work_phase, BatchNormalizationType bn_type,
-        float& exp_aver_factor, float epsilon, Matrix& scale, Matrix& bias, Matrix& result_running_mean, Matrix& result_running_variance,
-        Matrix& result_save_mean, Matrix& result_save_inv_variance);
-    static void batchNormalizationBackward(Matrix& X, const Matrix& Y, ActivePhaseType work_phase, BatchNormalizationType bn_type,
-        float epsilon, float rate, Matrix& scale, Matrix& bias, Matrix& saved_mean, Matrix& saved_inv_variance, Matrix& result_dscale, Matrix& result_dbias);
+    static void batchNormalizationForward(const Matrix& X, Matrix& Y, BatchNormalizationType bn_type,
+        float& exp_aver_factor, float epsilon, Matrix& scale, Matrix& bias);
+    static void batchNormalizationBackward(Matrix& X, const Matrix& Y, BatchNormalizationType bn_type,
+        float epsilon, Matrix& scale, Matrix& bias);
 
     //GPU only ----------------------------------------------------------------------------------------------------
 

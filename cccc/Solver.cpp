@@ -12,7 +12,6 @@ Solver::Solver()
 
 Solver::~Solver()
 {
-    destory();
 }
 
 float Solver::getMomentum() const
@@ -51,7 +50,6 @@ void Solver::init(Option* option, std::string section, Matrix& W)
     OPTION_GET_REAL(switch_sgd_epoch_);
     OPTION_GET_REAL(switch_sgd_random_);
 
-    destory();
     switch (solver_type_)
     {
     case SOLVER_SGD:
@@ -313,10 +311,6 @@ void Solver::outputState() const
     {
         LOG("Restrict gradient count is {}\n", restrict_dweight_count_);
     }
-}
-
-void Solver::destory()
-{
 }
 
 //在数组中查找x所在的区间，返回区间的左边界索引

@@ -22,7 +22,7 @@ namespace cccc
 //如有特殊需求，请考虑clone
 //NCHW
 
-class DLL_EXPORT Matrix
+class CCCC_EXPORT Matrix
 {
 public:
     friend class MatrixEx;
@@ -222,9 +222,12 @@ public:
     int64_t save(void* buffer, int64_t size) const;
     int64_t load(const void* buffer, int64_t size);
 
+    //目前仅 batchNorm 使用，用于访问辅助矩阵
+    Matrix& getWorkspace(int i) const { return workspace_[i]; }
+
 private:
-    void copyDataInFromHost(float* src, int64_t size);
-    void copyDataOutToHost(float* dst, int64_t size);
+    void copyDataInFromHost(void* src, int64_t size);
+    void copyDataOutToHost(void* dst, int64_t size);
 
 public:
     static int64_t copyDataPtr(const Matrix& A, const void* A_ptr, Matrix& R, void* R_ptr, int64_t size = -1);

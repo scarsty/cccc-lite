@@ -109,13 +109,16 @@ Matrix Matrix::transDataType(DataType data_type) const
         return *this;
     }
     Matrix M(dim_, data_type, getDeviceType());
-    if (isCuda())
+    if (isCuda() || isHip())
     {
-        //unfinished
-    }
-    else if (isHip())
-    {
-        //unfinished
+        //GPU路径：先在CPU做转换，再复制回显存
+        auto src_cpu = autoShareClone(UnitType::CPU);
+        Matrix dst_cpu(dim_, data_type, UnitType::CPU);
+        for (int i = 0; i < data_size_; i++)
+        {
+            dst_cpu.setData(i, src_cpu.getData(i));
+        }
+        Matrix::copyData(dst_cpu, M);
     }
     else
     {
@@ -302,28 +305,28 @@ int64_t Matrix::load(const void* buffer, int64_t size)
 }
 
 //将外界的值复制到矩阵，参数指针必须指向Host内存！
-void Matrix::copyDataInFromHost(float* src, int64_t size)
+void Matrix::copyDataInFromHost(void* src, int64_t size)
 {
     if (isCuda())
     {
-        cudaMemcpy(data(), src, int(sizeof(float) * std::min(size, data_size_)), cudaMemcpyHostToDevice);
+        cudaMemcpy(data(), src, int(getDataTypeSize() * std::min(size, data_size_)), cudaMemcpyHostToDevice);
     }
     else
     {
-        memcpy(data(), src, int(sizeof(float) * std::min(size, data_size_)));
+        memcpy(data(), src, int(getDataTypeSize() * std::min(size, data_size_)));
     }
 }
 
 //将矩阵的值复制到外界，参数指针必须指向Host内存！
-void Matrix::copyDataOutToHost(float* dst, int64_t size)
+void Matrix::copyDataOutToHost(void* dst, int64_t size)
 {
     if (isCuda())
     {
-        cudaMemcpy(dst, data(), int(sizeof(float) * std::min(size, data_size_)), cudaMemcpyDeviceToHost);
+        cudaMemcpy(dst, data(), int(getDataTypeSize() * std::min(size, data_size_)), cudaMemcpyDeviceToHost);
     }
     else
     {
-        memcpy(dst, data(), int(sizeof(float) * std::min(size, data_size_)));
+        memcpy(dst, data(), int(getDataTypeSize() * std::min(size, data_size_)));
     }
 }
 
@@ -362,7 +365,7 @@ void Matrix::copyDataAcrossDevice(const Matrix& A, Matrix& R, int64_t size)
     {
         size = std::min(A.getDataSize(), R.getDataSize());
     }
-    int64_t size_in_byte = size * sizeof(float);
+    int64_t size_in_byte = size * A.getDataTypeSize();
     if (R.isCuda() && A.isCuda())
     {
         cudaError state = cudaMemcpyPeer(R.data(), R.gpu()->getDeviceID(), A.data(), A.gpu()->getDeviceID(), size_in_byte);
@@ -435,11 +438,16 @@ Matrix& Matrix::fillData(float v, float inc /*=0*/)
             cudnnSetTensor(gpu()->cudnn_handle_, cudnn_desc(), data(), &v);
         }
     }
-    else if (isHip() && inc == 0 && v == 0)
+    else if (isHip() && inc == 0)
     {
         if (v == 0)
         {
             hipMemset(data(), 0, getDataSizeInByte());
+        }
+        else
+        {
+            //利用hip_addnumber实现非零值填充：R = A * 0 + v，即所有元素置为v
+            hip_addnumber(getDataTypeByInt(), data(), data(), data_size_, v, 0);
         }
     }
     else
@@ -522,7 +530,7 @@ void Matrix::toCPU(bool reserve_data)
 {
     if (inGpu())
     {
-        void* temp = new char[getDataSizeInByte()];
+        void* temp = malloc(getDataSizeInByte());
         MatrixData::copy(getApiType(), shared_data_->data_, API_UNKNOWN, temp, data_size_, getDataType());
         //shared_data_->free();
         shared_data_ = std::make_shared<MatrixData>();
@@ -655,18 +663,22 @@ void Matrix::repeat(int c)
     {
         for (int i = c; i < number_; i *= 2)
         {
-            cudaMemcpy(getDataPtr(0, i), getDataPtr(0, 0), sizeof(float) * row_ * std::min(i, number_ - i), cudaMemcpyDeviceToDevice);
+            cudaMemcpy(getDataPtr(0, i), getDataPtr(0, 0), getDataTypeSize() * row_ * std::min(i, number_ - i), cudaMemcpyDeviceToDevice);
         }
     }
     else if (isHip())
     {
+        for (int i = c; i < number_; i *= 2)
+        {
+            hipMemcpy(getDataPtr(0, i), getDataPtr(0, 0), getDataTypeSize() * row_ * std::min(i, number_ - i), hipMemcpyDeviceToDevice);
+        }
     }
     else
     {
         //#pragma loop(hint_parallel(8))
         for (int i = c; i < number_; i *= 2)
         {
-            memcpy(getDataPtr(0, i), getDataPtr(0, 0), sizeof(float) * row_ * std::min(i, number_ - i));
+            memcpy(getDataPtr(0, i), getDataPtr(0, 0), getDataTypeSize() * row_ * std::min(i, number_ - i));
         }
     }
 }
@@ -691,7 +703,18 @@ int Matrix::indexColMaxAbs(int c) const
     }
     else if (isHip())
     {
-        return gpu()->rocblas_->iamax(row_, (float*)getDataPtr(0, c), 1);
+        switch (getDataType())
+        {
+        case DataType::FLOAT:
+            return gpu()->rocblas_->iamax(row_, (float*)getDataPtr(0, c), 1);
+            break;
+        case DataType::DOUBLE:
+            return gpu()->rocblas_->iamax(row_, (double*)getDataPtr(0, c), 1);
+            break;
+        case DataType::HALF:
+            return gpu()->rocblas_->iamax(row_, (half*)getDataPtr(0, c), 1);
+            break;
+        }
     }
     else
     {

@@ -443,6 +443,10 @@ void GpuControl::destroy()
 #endif
 #ifndef NO_HIP
     delete rocblas_;
+    if (miopen_handle_)
+    {
+        miopenDestroy(miopen_handle_);
+    }
 #endif
     inited_ = false;
 }

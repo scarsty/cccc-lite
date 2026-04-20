@@ -270,7 +270,15 @@ HIP_FUNCTION22(reciprocal,
 
 HIP_FUNCTION22(addnumber, { p2[i] = a1 + p1[i] * a2; });
 
-HIP_FUNCTION22(pow, { p2[i] = pow(p1[i] + a2, a1); });
+HIP_FUNCTION22(pow,
+    {
+        // 对负数取绝对值后求幂，再恢复符号
+        p2[i] = pow(abs(p1[i] + a2), a1);
+        if (p1[i] < -a2)
+        {
+            p2[i] *= -1;
+        }
+    });
 
 HIP_FUNCTION22(sparse,
     {
@@ -294,7 +302,7 @@ HIP_FUNCTION22(sign,
 
 HIP_FUNCTION32(cross_entropy, { p3[i] = -a2 * p2[i] * log(p1[i] + a1); });
 
-HIP_FUNCTION32(cross_entropy2, { p3[i] = -a2 * (p2[i] * log(p1[i] + a1) + (fp(1) - p2[i]) * log(fp(1) - p1[1] + a1)); });
+HIP_FUNCTION32(cross_entropy2, { p3[i] = -a2 * (p2[i] * log(p1[i] + a1) + (fp(1) - p2[i]) * log(fp(1) - p1[i] + a1)); });
 
 HIP_FUNCTION32(add, { p3[i] = p1[i] * a1 + p2[i] * a2; });
 
@@ -427,6 +435,18 @@ HIP_FUNCTION63(maxb,
         }
     });
 
+HIP_FUNCTION32(zero_limit,
+    {
+        if (p2[i] > a1)
+        {
+            p3[i] = 0;
+        }
+        else
+        {
+            p3[i] = p1[i] - p2[i];
+        }
+    });
+
 static __global__ void addbiaskernel(float* m, float* b, float* r, unsigned int size_m, unsigned int size_mchannel, unsigned int size_b, float a1, float a2)
 {
     int i = cal_i();
@@ -470,23 +490,22 @@ static __global__ void softmaxkernel(float* x, float* y, unsigned int size, unsi
     int i = cal_i();
     if (i < size / channel)
     {
-        float min = 0;
-        for (int i1 = 0; i1 < channel; i1++)
+        float max_val = x[i * channel];
+        for (int i1 = 1; i1 < channel; i1++)
         {
-            //y[i1 + i * channel] = x[i1 + i * channel];
-            if (x[i1 + i * channel] < min)
+            if (x[i1 + i * channel] > max_val)
             {
-                min = x[i1 + i * channel];
+                max_val = x[i1 + i * channel];
             }
         }
         float sum = 0;
         for (int i1 = 0; i1 < channel; i1++)
         {
-            sum += exp(x[i1 + i * channel] - min);
+            sum += exp(x[i1 + i * channel] - max_val);
         }
         for (int i1 = 0; i1 < channel; i1++)
         {
-            y[i1 + i * channel] = a1 * exp(x[i1 + i * channel] - min) / sum + a2 * y[i1 + i * channel];
+            y[i1 + i * channel] = a1 * exp(x[i1 + i * channel] - max_val) / sum + a2 * y[i1 + i * channel];
         }
     }
 }
@@ -689,5 +708,5 @@ static __global__ void conv2db_wkernel(float* x, float* dw, float* dy, int w0, i
 int hip_conv2db_w(float* x, float* dw, float* dy, int w0, int h0, int c0, int n, int w1, int h1, int c1, int winw, int winh, int stride, int padding, float a1, float a2)
 {
     conv2db_wkernel<<<blockNum(winw * winh * c0 * c1), blockMax>>>(x, dw, dy, w0, h0, c0, n, w1, h1, c1, winw, winh, stride, padding, a1, a2);
-    return getError("conv2db_d");
+    return getError("conv2db_w");
 }

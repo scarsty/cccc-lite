@@ -1,6 +1,7 @@
 ﻿#include "MatrixData.h"
 #include "Log.h"
 #include "gpu_lib.h"
+#include <vector>
 
 namespace cccc
 {
@@ -124,17 +125,15 @@ int64_t MatrixData::copyByByte(ApiType dt_src, const void* src, ApiType dt_dst, 
     //cuda&hip
     else if (dt_dst == API_CUDA && dt_src == API_HIP)
     {
-        auto temp = new char[size_in_byte];
-        state += hipMemcpy(temp, src, size_in_byte, hipMemcpyDeviceToHost);
-        state += cudaMemcpy(dst, temp, size_in_byte, cudaMemcpyHostToDevice);
-        delete[] temp;
+        std::vector<char> temp(size_in_byte);
+        state += hipMemcpy(temp.data(), src, size_in_byte, hipMemcpyDeviceToHost);
+        state += cudaMemcpy(dst, temp.data(), size_in_byte, cudaMemcpyHostToDevice);
     }
     else if (dt_dst == API_HIP && dt_src == API_CUDA)
     {
-        auto temp = new char[size_in_byte];
-        state += cudaMemcpy(temp, src, size_in_byte, cudaMemcpyDeviceToHost);
-        state += hipMemcpy(dst, temp, size_in_byte, hipMemcpyHostToDevice);
-        delete[] temp;
+        std::vector<char> temp(size_in_byte);
+        state += cudaMemcpy(temp.data(), src, size_in_byte, cudaMemcpyDeviceToHost);
+        state += hipMemcpy(dst, temp.data(), size_in_byte, hipMemcpyHostToDevice);
     }
     //other
     else

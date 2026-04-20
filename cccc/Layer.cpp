@@ -23,10 +23,10 @@ void Layer::setName(const std::string& name)
 //这个会检查前一层
 LayerConnectionType Layer::getConnection2()
 {
-    auto ct = connetion_type_;
-    if (connetion_type_ == LAYER_CONNECTION_DIRECT)
+    auto ct = connection_type_;
+    if (connection_type_ == LAYER_CONNECTION_DIRECT)
     {
-        ct = prev_layer_->connetion_type_;
+        ct = prev_layer_->connection_type_;
     }
     return ct;
 }
@@ -51,7 +51,7 @@ void Layer::message()
 
     //输出本层信息
     LOG("  name: {}\n", layer_name_);
-    LOG("  type: {}\n", option_->getStringFromEnum(connetion_type_));
+    LOG("  type: {}\n", option_->getStringFromEnum(connection_type_));
     LOG("  active: {}\n", option_->getStringFromEnum(option_->getEnum(layer_name_, "active", ACTIVE_FUNCTION_NONE)));
     //LOG("  solver: {}\n", option_->getStringFromEnum(solver_->getSolverType()));
     auto dim = A_->getDim();
@@ -85,7 +85,7 @@ void Layer::message()
     if (!prev_layers_.empty())
     {
         LOG("  prev layer(s): {}\n", string_layer_names(prev_layers_));
-        if (connetion_type_ != LAYER_CONNECTION_COMBINE && prev_layers_.size() > 1)
+        if (connection_type_ != LAYER_CONNECTION_COMBINE && prev_layers_.size() > 1)
         {
             LOG("Warning: only {} is effective!", prev_layer_->getName().c_str());
         }
@@ -99,7 +99,7 @@ void Layer::message()
 void Layer::makeMatrixOp(std::vector<MatrixOp>& op_queue)
 {
     int batch = option_->getInt("train", "batch", 100);
-    switch (connetion_type_)
+    switch (connection_type_)
     {
     case LAYER_CONNECTION_FULLCONNECT:
     {
@@ -143,11 +143,11 @@ void Layer::makeMatrixOp(std::vector<MatrixOp>& op_queue)
         weight_dim.push_back(out_channel);
         W_->resize(weight_dim);
         int t = 0;
-        if (connetion_type_ == LAYER_CONNECTION_CONVOLUTION)
+        if (connection_type_ == LAYER_CONNECTION_CONVOLUTION)
         {
             t = 0;
         }
-        else if (connetion_type_ == LAYER_CONNECTION_CORRELATION)
+        else if (connection_type_ == LAYER_CONNECTION_CORRELATION)
         {
             t = 1;
         }

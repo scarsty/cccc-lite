@@ -1650,46 +1650,90 @@ void MatrixEx::dropoutBackward(Matrix& X, const Matrix& Y, float v, int seed)
 }
 
 //批归一化
-void MatrixEx::batchNormalizationForward(const Matrix& X, Matrix& Y,
-    ActivePhaseType work_phase, BatchNormalizationType bn_type, float& exp_aver_factor, float epsilon, Matrix& scale, Matrix& bias,
-    Matrix& result_running_mean, Matrix& result_running_variance, Matrix& result_save_mean, Matrix& result_save_inv_variance)
+void MatrixEx::batchNormalizationForward(const Matrix& X, Matrix& Y, BatchNormalizationType bn_type,
+    float& exp_aver_factor, float epsilon, Matrix& scale, Matrix& bias)
 {
     assert(checkMatrixDevice({ &X, &Y }));
     auto gpu = X.gpu();
+    auto work_phase = gpu ? gpu->active_phase_ : ACTIVE_PHASE_TRAIN;
+    if (Y.workspace_.empty())
+    {
+        auto dim = scale.getDim();
+        auto dt = X.getDataType();
+        auto dev = X.getDeviceType();
+        Y.workspace_.resize(6);
+        Y.workspace_[0] = Matrix(dim, dt, dev);    //running_mean
+        Y.workspace_[0].fillData(0);
+        Y.workspace_[1] = Matrix(dim, dt, dev);    //running_variance
+        Y.workspace_[1].fillData(1);
+        Y.workspace_[2] = Matrix(dim, dt, dev);    //save_mean
+        Y.workspace_[2].fillData(0);
+        Y.workspace_[3] = Matrix(dim, dt, dev);    //save_inv_variance
+        Y.workspace_[3].fillData(0);
+        Y.workspace_[4] = Matrix(dim, dt, dev);    //dscale
+        Y.workspace_[4].fillData(0);
+        Y.workspace_[5] = Matrix(dim, dt, dev);    //dbias
+        Y.workspace_[5].fillData(0);
+    }
+    auto& ws = Y.workspace_;
     if (Y.isCuda())
     {
         if (work_phase == ACTIVE_PHASE_TRAIN)
         {
             cudnnBatchNormalizationForwardTraining(gpu->cudnn_handle_, cudnnBatchNormMode_t(bn_type),
                 &const_real_1, &const_real_0, X.cudnn_desc(), X.data(), Y.cudnn_desc(), Y.data(),
-                scale.cudnn_desc(), scale.data(), bias.data(), exp_aver_factor, result_running_mean.data(), result_running_variance.data(),
-                std::max(epsilon * 1.0, CUDNN_BN_MIN_EPSILON), result_save_mean.data(), result_save_inv_variance.data());
+                scale.cudnn_desc(), scale.data(), bias.data(), exp_aver_factor, ws[0].data(), ws[1].data(),
+                std::max(epsilon * 1.0, CUDNN_BN_MIN_EPSILON), ws[2].data(), ws[3].data());
             exp_aver_factor = 1 / (1 / exp_aver_factor + 1);
         }
         if (work_phase == ACTIVE_PHASE_TEST)
         {
             cudnnBatchNormalizationForwardInference(gpu->cudnn_handle_, cudnnBatchNormMode_t(bn_type),
                 &const_real_1, &const_real_0, X.cudnn_desc(), X.data(), Y.cudnn_desc(), Y.data(),
-                scale.cudnn_desc(), scale.data(), bias.data(), result_running_mean.data(), result_running_variance.data(),
+                scale.cudnn_desc(), scale.data(), bias.data(), ws[0].data(), ws[1].data(),
+                std::max(epsilon * 1.0, CUDNN_BN_MIN_EPSILON));
+        }
+    }
+    else if (Y.isHip())
+    {
+        if (work_phase == ACTIVE_PHASE_TRAIN)
+        {
+            miopenBatchNormalizationForwardTraining(gpu->miopen_handle_, miopenBatchNormMode_t(bn_type),
+                (void*)&const_real_1, (void*)&const_real_0, X.miopen_desc(), X.data(), Y.miopen_desc(), Y.data(),
+                scale.miopen_desc(), scale.data(), bias.data(), exp_aver_factor, ws[0].data(), ws[1].data(),
+                std::max(epsilon * 1.0, CUDNN_BN_MIN_EPSILON), ws[2].data(), ws[3].data());
+            exp_aver_factor = 1 / (1 / exp_aver_factor + 1);
+        }
+        if (work_phase == ACTIVE_PHASE_TEST)
+        {
+            miopenBatchNormalizationForwardInference(gpu->miopen_handle_, miopenBatchNormMode_t(bn_type),
+                (void*)&const_real_1, (void*)&const_real_0, X.miopen_desc(), X.data(), Y.miopen_desc(), Y.data(),
+                scale.miopen_desc(), scale.data(), bias.data(), ws[0].data(), ws[1].data(),
                 std::max(epsilon * 1.0, CUDNN_BN_MIN_EPSILON));
         }
     }
 }
 
-void MatrixEx::batchNormalizationBackward(Matrix& X, const Matrix& Y,
-    ActivePhaseType work_phase, BatchNormalizationType bn_type, float epsilon, float rate, Matrix& scale, Matrix& bias,
-    Matrix& saved_mean, Matrix& saved_inv_variance, Matrix& result_dscale, Matrix& result_dbias)
+void MatrixEx::batchNormalizationBackward(Matrix& X, const Matrix& Y, BatchNormalizationType bn_type,
+    float epsilon, Matrix& scale, Matrix& bias)
 {
     assert(checkMatrixDevice({ &X, &Y }));
     auto gpu = Y.gpu();
+    auto work_phase = gpu ? gpu->active_phase_ : ACTIVE_PHASE_TRAIN;
+    auto& ws = Y.workspace_;
     if (X.isCuda())
     {
         cudnnBatchNormalizationBackward(gpu->cudnn_handle_, cudnnBatchNormMode_t(bn_type),
             &const_real_1, &const_real_0, &const_real_1, &const_real_0, X.cudnn_desc(), X.data(), Y.cudnn_desc(), Y.d().data(), X.cudnn_desc(), X.d().data(),
-            scale.cudnn_desc(), scale.data(), result_dscale.data(), result_dbias.data(),
-            std::max(epsilon * 1.0, CUDNN_BN_MIN_EPSILON), saved_mean.data(), saved_inv_variance.data());
-        MatrixEx::add(scale, result_dscale, scale, 1, -rate);
-        MatrixEx::add(bias, result_dbias, bias, 1, -rate);
+            scale.cudnn_desc(), scale.data(), ws[4].data(), ws[5].data(),
+            std::max(epsilon * 1.0, CUDNN_BN_MIN_EPSILON), ws[2].data(), ws[3].data());
+    }
+    else if (X.isHip())
+    {
+        miopenBatchNormalizationBackward(gpu->miopen_handle_, miopenBatchNormMode_t(bn_type),
+            (void*)&const_real_1, (void*)&const_real_0, (void*)&const_real_1, (void*)&const_real_0, X.miopen_desc(), X.data(), Y.miopen_desc(), Y.d().data(), X.miopen_desc(), X.d().data(),
+            scale.miopen_desc(), scale.data(), ws[4].data(), ws[5].data(),
+            std::max(epsilon * 1.0, CUDNN_BN_MIN_EPSILON), ws[2].data(), ws[3].data());
     }
 }
 

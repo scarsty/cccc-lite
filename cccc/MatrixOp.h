@@ -56,7 +56,7 @@ enum class MatrixOpType
     L2,
 };
 
-class DLL_EXPORT MatrixOp
+class CCCC_EXPORT MatrixOp
 {
 public:
     static std::string getOpName(MatrixOpType type)
@@ -100,7 +100,7 @@ private:
     bool connect_a_ = false;       //是否与a有关联，用于简化计算图
     bool connect_loss_ = false;    //是否与loss有关联，用于简化计算图
 
-    double forward_time_ = 0, backwark_time_;    //秒，主要用于调试和性能分析
+    double forward_time_ = 0, backward_time_;    //秒，主要用于调试和性能分析
     int forward_count_ = 0, backward_count_ = 0;
 
 public:
@@ -169,11 +169,11 @@ public:
 
     void clearTime()
     {
-        forward_time_ = backwark_time_ = 0;
+        forward_time_ = backward_time_ = 0;
         forward_count_ = backward_count_ = 0;
     }
     double getForwardTime() const { return forward_time_; }
-    double getBackwardTime() const { return backwark_time_; }
+    double getBackwardTime() const { return backward_time_; }
 
     //void setDWScale(float s) { dw_scale_ = s; }
 
@@ -193,7 +193,7 @@ public:
     void as_corr(const MatrixSP& X, const MatrixSP& W, const MatrixSP& Y, std::vector<int> stride, std::vector<int> padding, int conv_algo, float a = 1);
     void as_reshape(const MatrixSP& X, const MatrixSP& Y, std::vector<int>& dim);
     void as_max(const MatrixSP& X1, const MatrixSP& X2, const MatrixSP& Y);
-    void as_batchNorm(const MatrixSP& X1, const MatrixSP& X2, const MatrixSP& Y);
+    void as_batchNorm(const MatrixSP& X, const MatrixSP& scale, const MatrixSP& Y, BatchNormalizationType bn_type = BATCH_NORMALIZATION_SPATIAL, float epsilon = 1e-5f);
     void as_poolChannel(const MatrixSP& X, const MatrixSP& Y, PoolingType pooling_type, PoolingReverseType reverse_type, float a = 1);
 
     //以下专为处理损失函数

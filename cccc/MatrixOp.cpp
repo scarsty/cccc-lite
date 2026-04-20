@@ -54,7 +54,7 @@ void MatrixOp::backward(std::vector<MatrixOp>& op_queue, std::vector<MatrixOp>& 
     {
         Timer t;
         op.backwardLoss();
-        op.backwark_time_ += t.getElapsedTime();
+        op.backward_time_ += t.getElapsedTime();
         op.backward_count_++;
         //LOG("{}, {} loss time: {} s\n", getOpName(op.type_), op.index_, t.getElapsedTime());
     }
@@ -64,7 +64,7 @@ void MatrixOp::backward(std::vector<MatrixOp>& op_queue, std::vector<MatrixOp>& 
         {
             Timer t;
             it->backwardDataWeight();
-            it->backwark_time_ += t.getElapsedTime();
+            it->backward_time_ += t.getElapsedTime();
             it->backward_count_++;
             //LOG("{}, {} backward time: {}\n", getOpName(it->type_), it->index_, t.getElapsedTime());
             //it->out_[0]->d().message("dY" + getOpName(it->type_));
@@ -128,7 +128,14 @@ void MatrixOp::forwardData()
         MatrixEx::matrix_max(*in_[0], *in_[1], Y);
         break;
     case MatrixOpType::BATCH_NORM:
+    {
+        auto& scale = *in_[1];
+        auto& bias = *in_[2];
+        auto bn_type = anys_[0].to<BatchNormalizationType>();
+        //a_[0] = exp_aver_factor (mutable), a_[1] = epsilon
+        MatrixEx::batchNormalizationForward(X, Y, bn_type, a_[0], a_[1], scale, bias);
         break;
+    }
     case MatrixOpType::POOL_CHANNEL:
         MatrixEx::poolingChannelForward(X, Y, anys_[0].to<PoolingType>(), anys_[1].to<PoolingReverseType>(), a_[0], b_[0]);
         break;
@@ -225,6 +232,7 @@ void MatrixOp::backwardDataWeight()
         //MatrixEx::convolutionBackward(*in_[0], *wb_[0], Y, stride_, padding_, a_[0], in_[0]->keepWeight(), a[0], data_weight, &anys_[1].to<MatrixEx::ConvMethod>(), &anys_[2].to<MatrixEx::ConvMethod>(), &workspace_[1], &workspace_[2]);
         break;
     case MatrixOpType::CORR:
+        //unfinished: 反向未实现，待补充correlationBackward调用
         //MatrixEx::correlationBackward(*in_[0], *wb_[0], Y, para_int_, para_matrix_, para_int_v_[0], para_int_v_[1], para_real_[0], in_[0]->keepWeight(), data_weight);
         break;
     case MatrixOpType::RESHAPE:
@@ -234,7 +242,22 @@ void MatrixOp::backwardDataWeight()
         MatrixEx::matrix_maxb(*in_[0], *in_[1], Y, in_[0]->keepWeight(), in_[1]->keepWeight(), 1);
         break;
     case MatrixOpType::BATCH_NORM:
+    {
+        auto& scale = *in_[1];
+        auto& bias = *in_[2];
+        auto bn_type = anys_[0].to<BatchNormalizationType>();
+        MatrixEx::batchNormalizationBackward(*in_[0], Y, bn_type, a_[1], scale, bias);
+        //将梯度复制到对应的.d()矩阵，供Solver更新
+        if (in_[1]->needBack())
+        {
+            Matrix::add(Y.getWorkspace(4), in_[1]->d(), in_[1]->d(), 1, in_[1]->keepWeight());
+        }
+        if (in_[2]->needBack())
+        {
+            Matrix::add(Y.getWorkspace(5), in_[2]->d(), in_[2]->d(), 1, in_[2]->keepWeight());
+        }
         break;
+    }
     case MatrixOpType::POOL_CHANNEL:
         if (in_[0]->needBack())
         {
@@ -678,8 +701,22 @@ void MatrixOp::as_max(const MatrixSP& X1, const MatrixSP& X2, const MatrixSP& Y)
     set(MatrixOpType::MAX, { X1, X2 }, { Y });
 }
 
-//未完成
-void MatrixOp::as_batchNorm(const MatrixSP& X1, const MatrixSP& X2, const MatrixSP& Y) {}
+//批归一化
+void MatrixOp::as_batchNorm(const MatrixSP& X, const MatrixSP& scale, const MatrixSP& Y, BatchNormalizationType bn_type, float epsilon)
+{
+    Y->resize(X->getDim());
+    auto dim = scale->getDim();
+    auto dt = X->getDataType();
+    auto dev = X->getDeviceType();
+
+    //bias是可训练参数，辅助矩阵在首次forward时惰态初始化到Y->workspace_
+    auto bias = std::make_shared<Matrix>(dim, dt, dev);
+    bias->fillData(0);
+
+    float exp_aver_factor = 0.1f;
+    //a_[0] = exp_aver_factor, a_[1] = epsilon
+    set(MatrixOpType::BATCH_NORM, { X, scale, bias }, { Y }, { exp_aver_factor, epsilon }, {}, { bn_type });
+}
 
 void MatrixOp::as_poolChannel(const MatrixSP& X, const MatrixSP& Y, PoolingType pooling_type, PoolingReverseType reverse_type, float a)
 {

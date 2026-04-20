@@ -318,11 +318,14 @@ int Net::loadWeight(const std::string& str, int load_mode, int solver_state)
                 if (sum + m->getDataSize() * size1_in_save > weight_str.size())
                 {
                     sum += m->getDataSize() * size1_in_save;
+                    p += m->getDataSize() * size1_in_save;
                     continue;
                 }
                 if (data_type == m->getDataType())
                 {
-                    sum += m->load((char*)weight_str.data() + sum, (weight_str.size() - sum) / m->getDataTypeSize());
+                    auto loaded = m->load((char*)weight_str.data() + sum, (weight_str.size() - sum) / m->getDataTypeSize());
+                    sum += loaded;
+                    p += loaded;
                 }
                 else
                 {
@@ -340,6 +343,7 @@ int Net::loadWeight(const std::string& str, int load_mode, int solver_state)
             {
                 //跳过不需要加载的数据，例如卷积层不变，全连接层重新训练等
                 sum += m->getDataSize() * size1_in_save;
+                p += m->getDataSize() * size1_in_save;
                 //LOG("Skip {} bytes!\n", m->getDataSize());
             }
         }

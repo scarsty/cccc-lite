@@ -98,9 +98,5 @@ public:
     void outputState() const;
 
 private:
-    void destory();
-
-    int findInter(int x, std::vector<int>& xv);
-};
-
+    
 }    // namespace cccc

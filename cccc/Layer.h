@@ -26,7 +26,7 @@ protected:
     std::vector<Layer*> next_layers_;    //后层可以有多个，它们获取到的是同样的数据
 
     LayerVisibleType visible_type_ = LAYER_VISIBLE_HIDDEN;
-    LayerConnectionType connetion_type_ = LAYER_CONNECTION_NONE;    //这个字段仅为标记，实际连接方式是虚继承
+    LayerConnectionType connection_type_ = LAYER_CONNECTION_NONE;    //这个字段仅为标记，实际连接方式是虚继承
 
     Option* option_;
 
@@ -35,9 +35,9 @@ public:
     void setID(int id) { id_ = id; }
     int getBatchSize();
     void setVisible(LayerVisibleType vt) { visible_type_ = vt; }
-    LayerConnectionType getConnection() { return connetion_type_; }
+    LayerConnectionType getConnection() { return connection_type_; }
     LayerConnectionType getConnection2();
-    void setConnection(LayerConnectionType ct) { connetion_type_ = ct; }
+    void setConnection(LayerConnectionType ct) { connection_type_ = ct; }
     //void getOutputSize(int& width, int& height, int& channel) { width = out_width_; height = out_height_; channel = out_channel_; }
     const std::string& getName() { return layer_name_; }
     void setName(const std::string& name);

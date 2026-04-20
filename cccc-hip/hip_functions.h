@@ -22,7 +22,7 @@ C_EXPORT int hip_div(int type, void* A, void* B, void* R, unsigned int size, flo
 C_EXPORT int hip_sectionlimit(int type, void* p1, void* p2, void* p3, unsigned int size, float v0, float v1);
 C_EXPORT int hip_ada_delta_update(int type, void* mean_d2, void* mean_ada_d2, void* d, void* ada_d, unsigned int size, float rou, float epsilon);
 C_EXPORT int hip_adam_update(int type, void* mean_d, void* mean_d2, void* d, void* ada_d, unsigned int size, float beta1, float beta2, float epsilon, float t);
-C_EXPORT int hip_rms_prop_update(int type, void* mead_d2, void* d, void* ada_d, unsigned int size, float rou, float epsilon);
+C_EXPORT int hip_rms_prop_update(int type, void* mean_d2, void* d, void* ada_d, unsigned int size, float rou, float epsilon);
 
 C_EXPORT int hip_sin(int type, void* A, void* R, unsigned int size, float a, float b);
 C_EXPORT int hip_cos(int type, void* A, void* R, unsigned int size, float a, float b);
@@ -30,13 +30,15 @@ C_EXPORT int hip_cos(int type, void* A, void* R, unsigned int size, float a, flo
 C_EXPORT int hip_zigzag(int type, void* A, void* R, unsigned int size, float a1, float a2);
 C_EXPORT int hip_zigzagb(int type, void* A, void* dA, void* R, void* dR, unsigned int size, float a1, float a2);
 
-C_EXPORT int hip_step(int type, void* A, void* R, unsigned int size, float unuse1, float unuse2);
+C_EXPORT int hip_step(int type, void* A, void* R, unsigned int size, float unused1, float unused2);
 
 C_EXPORT int hip_leaky_relu(int type, void* A, void* R, unsigned int size, float leak, float a2, float a3);
 C_EXPORT int hip_leaky_relub(int type, void* A, void* dA, void* R, void* dR, unsigned int size, float leak, float a2, float a3);
 
-C_EXPORT int hip_max(int type, void* A, void* B, void* R, unsigned int size, float unuse1, float unuse2, float unuse3);
+C_EXPORT int hip_max(int type, void* A, void* B, void* R, unsigned int size, float unused1, float unused2, float unused3);
 C_EXPORT int hip_maxb(int type, void* A, void* dA, void* B, void* dB, void* R, void* dR, unsigned int size, float alpha, float beta_a, float beta_b);
+
+C_EXPORT int hip_zero_limit(int type, void* A, void* B, void* R, unsigned int size, float beta_a, float beta_b);
 
 C_EXPORT int hip_addbias(float* m, float* b, float* r, unsigned int size_m, unsigned int size_mchannel, unsigned int size_b, float a1, float a2);
 C_EXPORT int hip_addbiasb(float* bd, float* rd, unsigned int size_m, unsigned int size_mchannel, unsigned int size_b, float a1, float a2);

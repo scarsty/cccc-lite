@@ -1,10 +1,11 @@
 ﻿#pragma once
+#include <atomic>
 #include <format>
 #include <iostream>
 
 namespace cccc
 {
-static inline int errorCount;
+static inline std::atomic<int> errorCount;
 
 template <typename T>
 concept formattable = std::default_initializable<std::formatter<std::remove_cvref_t<T>>>;
