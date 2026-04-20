@@ -1,5 +1,5 @@
 #pragma once
-#include "../cccc/cccc_export.h"
+#include "cccc_export.h"
 
 #ifdef __cplusplus
 extern "C"
