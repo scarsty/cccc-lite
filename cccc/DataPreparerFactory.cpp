@@ -3,6 +3,7 @@
 #include "DataPreparerTxt.h"
 #include "DynamicLibrary.h"
 #include "filefunc.h"
+#include "strfunc.h"
 
 namespace cccc
 {
@@ -21,7 +22,7 @@ DataPreparer* DataPreparerFactory::create(Option* op, const std::string& section
     library_name = op->getString(section, "library_so", library_name);
     if (strfunc::toLowerCase(filefunc::getFileExt(library_name)) == "dll")
     {
-        library_name = filefunc::getFilenameWithoutPath(filefunc::getFileMainname(library_name)) + ".so";
+        library_name = filefunc::getFilenameWithoutPath(filefunc::getFileMainName(library_name)) + ".so";
         if (library_name.find("lib") != 0)
         {
             library_name = "lib" + library_name;

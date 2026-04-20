@@ -13,13 +13,18 @@ struct MatrixData
     int64_t occupy_data_size_ = 0;    //实际占用的数据长度，当重设置尺寸不大于此值的时候不会重新分配内存
     DataType data_type_ = DataType::FLOAT;
 
+    //记录数据所在设备类型和id，实际仅用于析构
+    //因为析构时有可能gpu_已经被析构，所以需要不依赖gpu_来记录
+    //ApiType api_type_ = API_UNKNOWN;
+    //int api_id_ = -1;
+
 public:
     MatrixData() = default;
     ~MatrixData() { release(); }
     MatrixData(const MatrixData&) = delete;
     MatrixData& operator=(const MatrixData) = delete;
-    void setCuda(GpuControl* gpu) { gpu_ = gpu; }
-    void setCudaAsCurrent() { gpu_ = GpuControl::getCurrentCuda(); }
+    void setGpu(GpuControl* gpu) { gpu_ = gpu; }
+    void setCurrentGpuToHere() { gpu_ = GpuControl::getCurrentGpu(); }
     void setDataType(DataType dt) { data_type_ = dt; }
     DataType getDataType() const { return data_type_; }
     size_t getDataTypeSize() const { return getDataTypeSize(data_type_); }
@@ -45,6 +50,20 @@ public:
             return *(double*)p;
         case DataType::HALF:
             return *(half*)p;
+        default:
+            return 0;
+        }
+    }
+    static float getData(void* data, int i, DataType dt)
+    {
+        switch (dt)
+        {
+        case DataType::FLOAT:
+            return *(float*)((char*)data + i * getDataTypeSize(dt));
+        case DataType::DOUBLE:
+            return *(double*)((char*)data + i * getDataTypeSize(dt));
+        case DataType::HALF:
+            return *(half*)((char*)data + i * getDataTypeSize(dt));
         default:
             return 0;
         }

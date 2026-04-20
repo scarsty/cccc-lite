@@ -9,13 +9,15 @@ namespace cccc
 class DLL_EXPORT DataPreparer
 {
 public:
-    Matrix X;    //数据变换后的形态，例如打散，亮度对比度，增加噪声等
+    Matrix X;    //数据变换后的形态，例如随机顺序，亮度对比度，增加噪声等
     Matrix Y;
-    Matrix LW;    //控制损失函数的权重
 
     Matrix X0;    //数据的原始状态，一般是直接从文件中读取的样子
     Matrix Y0;
-    Matrix LW0;
+
+    std::unordered_map<std::string, Matrix> extra_data_, extra_data0_;    //额外的数据，例如位置等
+
+    bool is_new_data_ = false;    //是否有新数据，供外部查询
 
 public:
     friend class DataPreparerFactory;
@@ -37,6 +39,10 @@ public:
     virtual void fillData0() {}
     virtual void transOne(Matrix& X1, Matrix& Y1) {}
     virtual void showOneData(int number) {}
+    virtual void checkData(Matrix& A) {}    //对训练集进行一些检查，统计等，由子类决定
+    virtual void summary() {}
+    void addMatrix(const std::string& name, const std::vector<int>& dim);
+    const std::unordered_map<std::string, Matrix>& getExtraData() { return extra_data_; }
 
 protected:
     std::string getSection() { return section_; }
@@ -51,10 +57,11 @@ public:
     void resetDataDim();
 
 protected:
-    int shuffle_ = 1;       //是否乱序训练集
-    int trans_ = 0;         //是否变换
-    int fill_ = 0;          //是否填充
-    int fill_group_ = 0;    //填充的组数
+    int shuffle_ = 1;        //是否乱序训练集
+    int trans_ = 0;          //是否变换
+    int fill_ = 0;           //是否填充
+    int fill_group_ = 0;     //填充的组数
+    int fill_period_ = 1;    //填充的周期
 
     std::string section_ = "data_preparer";
     Option* option_;
@@ -75,7 +82,6 @@ private:
 public:
     std::string getMessage(int i);
     int isFill() { return fill_; }
-
 };
 
 //template <typename T>
@@ -94,6 +100,5 @@ public:
 //        t.join();
 //    }
 //}
-
 
 }    // namespace cccc

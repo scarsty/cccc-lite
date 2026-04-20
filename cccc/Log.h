@@ -1,29 +1,29 @@
 ﻿#pragma once
-#include "fmt1.h"
+#include <format>
 #include <iostream>
 
 namespace cccc
 {
 static inline int errorCount;
 
-template <typename... Args>
-void LOG(Args&&... args)
+template <typename T>
+concept formattable = std::default_initializable<std::formatter<std::remove_cvref_t<T>>>;
+
+template <formattable... Args>
+void LOG(const std::format_string<Args...> fmt, Args&&... args)
 {
-    std::cout << fmt1::format(std::forward<Args>(args)...);
-    fflush(stdout);
+    fputs(std::format(fmt, std::forward<Args>(args)...).c_str(), stdout);
 }
 
-template <typename... Args>
-void LOG_ERR(Args&&... args)
+template <formattable... Args>
+void LOG_ERR(const std::format_string<Args...> fmt, Args&&... args)
 {
     if (errorCount++ >= 2000)
     {
-        std::cerr << "Too many errors, exit program.\n";
-        fflush(stderr);
+        fputs("Too many errors, exit program.\n", stderr);
         exit(0);
     }
-    std::cerr << fmt1::format(std::forward<Args>(args)...);
-    fflush(stderr);
+    fputs(std::format(fmt, std::forward<Args>(args)...).c_str(), stderr);
 }
 
 void showMessageBox(const std::string& str);

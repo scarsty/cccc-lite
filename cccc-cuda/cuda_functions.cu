@@ -61,7 +61,6 @@ PATCH_HALF2(cos)
 PATCH_HALF2(sqrt)
 inline __device__ half pow(half a, half b) { return __float2half(pow(__half2float(a), __half2float(b))); }
 
-
 #define CUDA_FUNCTION22(name, function) \
     static __global__ void name##kernel##float(float* p1, float* p2, unsigned int size, float a1, float a2) \
     { \
@@ -278,7 +277,14 @@ CUDA_FUNCTION22(reciprocal,
 
 CUDA_FUNCTION22(addnumber, { p2[i] = a1 + p1[i] * a2; });
 
-CUDA_FUNCTION22(pow, { p2[i] = pow(p1[i] + a2, a1); });
+CUDA_FUNCTION22(pow,
+    {
+        p2[i] = pow(abs(p1[i] + a2), a1);
+        if (p1[i] < -a2)
+        {
+            p2[i] *= -1;
+        }
+    });
 
 CUDA_FUNCTION22(sparse,
     {
@@ -363,8 +369,6 @@ CUDA_FUNCTION32(rms_prop_update,
         p3[i] = p2[i] / sqrt(p1[i] + epsilon);
     });
 
-
-
 CUDA_FUNCTION22(sin,
     {
         p2[i] = sin(a1 * p1[i] + a2);
@@ -434,5 +438,17 @@ CUDA_FUNCTION63(maxb,
         {
             p2[i] = a1 * p2[i];
             p4[i] = a3 * p6[i] + a2 * p4[i];
+        }
+    });
+
+CUDA_FUNCTION32(zero_limit,
+    {
+        if (p2[i] > a1)
+        {
+            p3[i] = 0;
+        }
+        else
+        {
+            p3[i] = p1[i] - p2[i];
         }
     });

@@ -26,11 +26,10 @@ public:
     {
         std::vector<std::string> strs;
 #define IMPORT(func, ...) \
-    strs = \
-        { \
-            #func, \
-            __VA_ARGS__ \
-        }; \
+    strs = { \
+        #func, \
+        __VA_ARGS__ \
+    }; \
     for (auto& lib : libs) \
     { \
         for (auto str : strs) \
@@ -39,7 +38,8 @@ public:
             if (func) \
             { \
                 if (std::string(#func) == str) \
-                { /*LOG(stderr, "Found {} in {}\n", #func, lib);*/ \
+                { \
+                    /*LOG("Found {} in {}\n", #func, lib);*/ \
                     libs_used[lib].push_back(#func); \
                 } \
                 else \
@@ -66,10 +66,10 @@ public:
 #endif
 #undef IMPORT
         int sum = 0;
-        for (auto& lu : libs_used)
+        for (auto& [lib, func_used] : libs_used)
         {
-            //LOG("Loaded dynamic library {} for {} functions\n", lu.first, lu.second.size());
-            sum += lu.second.size();
+            //LOG("Loaded dynamic library {} for {} functions\n", lib, func_used.size());
+            sum += func_used.size();
         }
         LOG("Found {} functions, {} failed\n", sum, func_c_failed.size() + func_h_failed.size());
 #if ENABLE_CUDA
@@ -96,9 +96,12 @@ public:
 
 private:
     std::vector<std::string> libs = {
+        "nvcuda",
+        "cudart64_13",
         "cudart64_12",
         "cudart64_110",
         "cudart64_100",
+        "cublas64_13",
         "cublas64_12",
         "cublas64_11",
         "cublas64_100",
@@ -113,7 +116,8 @@ private:
         "cudnn_ops_infer64_8",
         "cudnn_ops_train64_8",
         "cudnn64_7",
-        "amdhip64_6",  //rocm 6.x: amdhip64_6.dll, before rocm 5.x: amdhip64.dll
+        "cccc-cuda",
+        "amdhip64_7",
         "rocblas",
         "miopen",
         "cccc-hip",

@@ -89,7 +89,7 @@ IMPORT(cudnnSoftmaxForward)
 IMPORT(cudnnGetLastErrorString)
 
 IMPORT(cudaMemset)
-IMPORT(cudaGetDeviceProperties_v2, "cudaGetDeviceProperties")
+IMPORT(cudaGetDeviceProperties)
 IMPORT(cudaGetErrorString)
 IMPORT(cudaMalloc)
 IMPORT(cudaSetDevice)

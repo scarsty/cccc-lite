@@ -12,6 +12,7 @@
 #endif
 
 #if ENABLE_CUDA
+#include "cuda.h"
 #include "cuda_runtime_api.h"
 #define __CUDA_RUNTIME_H__
 #include "cublas_v2.h"
@@ -125,28 +126,29 @@ inline miopenDataType_t toMiopenDataType(DataType dt)
         cudnn##T##Descriptor_t operator()() { return (cudnn##T##Descriptor_t)desc_; } \
     };
 
-class cudnnConvolutionDesc
-{
-private:
-    int desc_[64]{};
-
-public:
-    cudnnConvolutionDesc()
-    {
-        desc_[23] = 1;    //此值从cudnn的create结果推断得到，原理不负责
-    }
-
-    cudnnConvolutionDescriptor_t operator()() { return (cudnnConvolutionDescriptor_t)desc_; }
-};
-CUDNN_DESC2(Tensor)
-CUDNN_DESC2(Filter)
-CUDNN_DESC2(Pooling)
-CUDNN_DESC2(Activation)
-CUDNN_DESC2(Dropout)
-CUDNN_DESC2(OpTensor)
-CUDNN_DESC2(LRN)
-CUDNN_DESC2(SpatialTransformer)
-CUDNN_DESC2(CTCLoss)
+//class cudnnConvolutionDesc
+//{
+//private:
+//    int desc_[64]{};
+//
+//public:
+//    cudnnConvolutionDesc()
+//    {
+//        desc_[23] = 1;    //此值从cudnn的create结果推断得到，原理不负责
+//    }
+//
+//    cudnnConvolutionDescriptor_t operator()() { return (cudnnConvolutionDescriptor_t)desc_; }
+//};
+CUDNN_DESC(Tensor)
+CUDNN_DESC(Filter)
+CUDNN_DESC(Pooling)
+CUDNN_DESC(Activation)
+CUDNN_DESC(Dropout)
+CUDNN_DESC(OpTensor)
+CUDNN_DESC(LRN)
+CUDNN_DESC(SpatialTransformer)
+CUDNN_DESC(CTCLoss)
+CUDNN_DESC(Convolution)
 
 //CUDNN_DESC(Convolution);
 #if ENABLE_HIP
@@ -182,6 +184,6 @@ MIOPEN_DESC2(Dropout)
 MIOPEN_DESC2(RNN)
 MIOPEN_DESC2(LRN)
 
-void find_gpu_functions();
+void DLL_EXPORT find_gpu_functions();
 
 }    //namespace cccc

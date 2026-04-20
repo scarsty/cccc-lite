@@ -21,8 +21,11 @@ thread_local GpuControl* current_gpu_ = nullptr;    //当前使用的cuda设备
 int GpuControl::device_count_ = -1;
 int GpuControl::device_count_c_ = 0;
 int GpuControl::device_count_h_ = 0;
-std::vector<int> GpuControl::gpu_devices_turn_;        //cuda设备按优劣的排序
+std::vector<int> GpuControl::gpu_devices_turn_;         //cuda设备按优劣的排序
 std::atomic<int> GpuControl::auto_choose_turn_{ 0 };    //若自动选择，当前使用哪个设备
+
+std::unordered_map<void*, GpuControl::MallocInfo> GpuControl::malloc_map_;
+std::mutex GpuControl::malloc_map_mutex_;
 
 GpuControl::GpuControl()
 {
@@ -105,7 +108,7 @@ int GpuControl::getDeviceCount()
     return device_count_;
 }
 
-GpuControl* GpuControl::getCurrentCuda()
+GpuControl* GpuControl::getCurrentGpu()
 {
     return current_gpu_;
 }
@@ -115,7 +118,7 @@ void GpuControl::setUseCPU()
     current_gpu_ = nullptr;
 }
 
-cccc::UnitType GpuControl::getGlobalCudaType()
+cccc::UnitType GpuControl::getGlobalGpuType()
 {
     if (current_gpu_)
     {
@@ -127,11 +130,15 @@ cccc::UnitType GpuControl::getGlobalCudaType()
 // 为每个设备评分
 void GpuControl::evaluateDevices()
 {
-    auto getSPcores = [](cudaDeviceProp& devive_prop) -> int
+    auto getSPcores = [](CUdevice& device) -> int
     {
-        int mp = devive_prop.multiProcessorCount;
-        int major = devive_prop.major;
-        int minor = devive_prop.minor;
+        int mp;
+        int major;
+        int minor;
+
+        cuDeviceGetAttribute(&mp, CU_DEVICE_ATTRIBUTE_MULTIPROCESSOR_COUNT, device);
+        cuDeviceGetAttribute(&major, CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR, device);
+        cuDeviceGetAttribute(&minor, CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MINOR, device);
 
         typedef struct
         {
@@ -159,6 +166,8 @@ void GpuControl::evaluateDevices()
             { 0x87, 128 },
             { 0x89, 128 },
             { 0x90, 128 },
+            { 10 << 4, 128 },
+            { 12 << 4, 128 },
             { -1, -1 }
         };
 
@@ -191,6 +200,8 @@ void GpuControl::evaluateDevices()
         int id;
         double state_score = 0;
         int pci;
+        int compute_mode = 0;
+        int clock_rate = 0;
     };
 
     double best_state = -1e8;
@@ -199,31 +210,41 @@ void GpuControl::evaluateDevices()
     int i_info = 0;
     for (int i = 0; i < device_count_c_; i++)
     {
-        infos[i_info].id = i_info;
+        auto& info = infos[i_info];
+        info.id = i_info;
         auto& state = infos[i_info].state_score;
         state = 0;
-        infos[i_info].pci = i;
+        info.pci = i;
 
-        cudaDeviceProp device_prop;
-        cudaGetDeviceProperties(&device_prop, i);
+        CUdevice device;
+        cuDeviceGet(&device, i);
         cudaSetDevice(i);
-        if (device_prop.computeMode != cudaComputeModeProhibited)
+        //cudaDeviceProp device_prop;
+        //cudaGetDeviceProperties(&device_prop, i);
+        cuDeviceGetAttribute(&info.compute_mode, CU_DEVICE_ATTRIBUTE_COMPUTE_MODE, device);
+        if (info.compute_mode != cudaComputeModeProhibited)
         {
+            cuDeviceGetAttribute(&info.clock_rate, CU_DEVICE_ATTRIBUTE_CLOCK_RATE, device);
             //通常情况系数是2，800M系列是1，但是不管了
-            double flops = 2.0e3 * device_prop.clockRate * getSPcores(device_prop);
+            double flops = 2.0e3 * info.clock_rate * getSPcores(device);
             char pci_info[128];
             cudaDeviceGetPCIBusId(pci_info, 128, i);
             size_t free, total;
             cudaMemGetInfo(&free, &total);
 #ifdef _WIN32
             size_t resident;
-            get_free_mem_by_luid(*(LUID*)device_prop.luid, &resident, nullptr);
+            char luid[8];
+            unsigned int mask;
+            cuDeviceGetLuid(luid, &mask, device);
+            get_free_mem_by_luid(luid, &resident, nullptr);
             free = total - resident;
 #endif
-            LOG("Device {} ({}): {}, {:7.5f} TFLOPS, {:7.2f}/{:7.2f} MB free/total\n",
-                i, pci_info, device_prop.name, flops / 1e12, free / 1048576.0, total / 1048576.0);
+            char name[256];
+            cuDeviceGetName(name, 256, device);
+            LOG("Device {} ({}): {}, {:.5f} TFLOPS, {:.2f} MB free, {:.2f} MB total\n",
+                i, pci_info, name, flops / 1e12, free / 1048576.0, total / 1048576.0);
             state = flops / 1e12 + free / 1e9;
-            infos[i].pci = device_prop.pciBusID;
+            cuDeviceGetAttribute(&info.pci, CU_DEVICE_ATTRIBUTE_PCI_BUS_ID, device);
             if (state > best_state)
             {
                 best_state = state;
@@ -254,7 +275,7 @@ void GpuControl::evaluateDevices()
         get_free_mem_by_pcibus(device_prop.pciBusID, &resident, nullptr);
         free = total - resident;
 #endif
-        LOG("Device {} ({}): {}, {:7.5f} TFLOPS, {:7.2f}/{:7.2f} MB free/total\n",
+        LOG("Device {} ({}): {}, {:.5f} TFLOPS, {:.2f} MB free, {:.2f} MB total\n",
             i + device_count_c_, pci_info, device_prop.name, flops / 1e12, free / 1048576.0, total / 1048576.0);
         state = flops / 1e12 + free / 1e9;
         infos[i].pci = device_prop.pciBusID;
@@ -302,30 +323,23 @@ void GpuControl::setAsCurrent()
 
 void GpuControl::getFreeMemory(size_t& free, size_t& total) const
 {
+#ifdef _WIN32
+    uint64_t resident;
+    get_free_mem_by_luid(luid_, &resident, nullptr);
+    total = total_memory_;
+    free = total - resident;
+#else
     if (api_type_ == API_CUDA)
     {
         cudaSetDevice(api_id_);
         cudaMemGetInfo(&free, &total);
-#ifdef _WIN32
-        cudaDeviceProp device_prop;
-        cudaGetDeviceProperties(&device_prop, api_id_);
-        uint64_t resident;
-        get_free_mem_by_luid(*(LUID*)device_prop.luid, &resident, nullptr);
-        free = total - resident;
-#endif
     }
     else if (api_type_ == API_HIP)
     {
         hipSetDevice(api_id_);
         hipMemGetInfo(&free, &total);
-#ifdef _WIN32
-        hipDeviceProp_t device_prop;
-        hipGetDeviceProperties(&device_prop, api_id_);
-        uint64_t resident;
-        get_free_mem_by_pcibus(device_prop.pciBusID, &resident, nullptr);
-        free = total - resident;
-#endif
     }
+#endif
 }
 
 //返回0正常，其他情况都有问题
@@ -362,12 +376,12 @@ int GpuControl::init(int dev_id /*= -1*/)
     {
         cudaSetDevice(api_id_);
         cublas_ = new Cublas();
-        if (cublas_->init() != CUBLAS_STATUS_SUCCESS)
+        if (cublas_->init())
         {
             LOG_ERR("CUBLAS initialization error on device {}!\n", dev_id);
             return 1;
         }
-        if (cudnnCreate(&cudnn_handle_) != CUDNN_STATUS_SUCCESS)
+        if (cudnnCreate(&cudnn_handle_))
         {
             LOG_ERR("CUDNN initialization error on device {}!\n", dev_id);
             return 2;
@@ -376,9 +390,15 @@ int GpuControl::init(int dev_id /*= -1*/)
         //LOG("CUBLAS Version = {}, CUDNN Version = {}\n", cublas_->get_version(), cudnnGetVersion());
         inited_ = true;
 
-        cudaDeviceProp device_prop;
-        cudaGetDeviceProperties(&device_prop, api_id_);
-        micro_arch_ = CudaArch(device_prop.major);
+        CUdevice device;
+        cuDeviceGet(&device, api_id_);
+        cuDeviceGetAttribute((int*)&micro_arch_, CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR, device);
+        size_t free;
+        cudaMemGetInfo(&free, &total_memory_);
+#ifdef _WIN32
+        unsigned int mask;
+        cuDeviceGetLuid(luid_, &mask, device);
+#endif
     }
     else if (api_type_ == API_HIP)
     {
@@ -389,7 +409,7 @@ int GpuControl::init(int dev_id /*= -1*/)
             LOG_ERR("ROCBLAS initialization error on device {}!\n", dev_id);
             return 1;
         }
-        if (miopenCreate(&miopen_handle_) != CUDNN_STATUS_SUCCESS)
+        if (miopenCreate(&miopen_handle_))
         {
             LOG_ERR("MIOpen initialization error on device {}!\n", dev_id);
             return 2;
@@ -397,6 +417,13 @@ int GpuControl::init(int dev_id /*= -1*/)
         LOG("HIP initialization on device {} succeed\n", gpu_id_);
         //LOG("ROCBLAS Version = {}, MIOpen Version = {}\n", rocblas_->get_version(), miopenGetVersion());
         inited_ = true;
+
+        hipDeviceProp_t device_prop;
+        hipGetDeviceProperties(&device_prop, api_id_);
+        total_memory_ = device_prop.totalGlobalMem;
+#ifdef _WIN32
+        get_luid_from_pcibus(device_prop.pciBusID, luid_);
+#endif
     }
 
     setAsCurrent();
@@ -420,33 +447,62 @@ void GpuControl::destroy()
     inited_ = false;
 }
 
-int GpuControl::malloc(void** p, size_t size)
+int GpuControl::malloc(void*& p, size_t size)
 {
+    int r = 1;
     if (api_type_ == API_CUDA)
     {
-        return cudaMalloc(p, size);
+        r = cudaMalloc(&p, size);
+        //static int count = 0;
+        //LOG("Malloc {}\n", count++);
     }
     else if (api_type_ == API_HIP)
     {
-        return hipMalloc(p, size);
+        r = hipMalloc(&p, size);
     }
-    return 1;
+
+    {
+        std::lock_guard<std::mutex> lock(malloc_map_mutex_);
+        malloc_map_[p] = { p, size, api_type_, api_id_ };
+    }
+    return r;
 }
 
+// 返回值含义：0 成功，1 无记录，一般是内存中指针，-1 有记录，但释放时错误
 int GpuControl::free(void* p)
 {
-    if (api_type_ == API_CUDA)
+    int r = 1;
+    MallocInfo info;
     {
-        return cudaFree(p);
+        std::lock_guard<std::mutex> lock(malloc_map_mutex_);
+        if (!malloc_map_.contains(p))
+        {
+            return 1;
+        }
+        info = malloc_map_[p];
+        malloc_map_.erase(p);
     }
-    else if (api_type_ == API_HIP)
+    if (info.api_type == API_CUDA)
     {
-        return hipFree(p);
+        cudaSetDevice(info.api_id);
+        r = cudaFree(p);
+        //static int count = 0;
+        //LOG("Free {}\n", count++);
     }
-    return 1;
+    else if (info.api_type == API_HIP)
+    {
+        hipSetDevice(info.api_id);
+        r = hipFree(p);
+    }
+    if (r != 0)
+    {
+        LOG_ERR("Free pointer {} failed on device {}, api type {}\n", p, info.api_id, (int)info.api_type);
+        return -1;
+    }
+    return 0;
 }
 
-int GpuControl::memcpy(void* dst, const void* src, size_t count, memcpyKind kind)
+int GpuControl::gpu_memcpy(void* dst, const void* src, size_t count, memcpyKind kind)
 {
     if (api_type_ == API_CUDA)
     {
@@ -457,6 +513,18 @@ int GpuControl::memcpy(void* dst, const void* src, size_t count, memcpyKind kind
         return hipMemcpy(dst, src, count, hipMemcpyKind(kind));
     }
     return 1;
+}
+
+void GpuControl::printState()
+{
+#ifdef _WIN32
+    size_t total, free;
+    getFreeMemory(free, total);
+    auto resident = total - free;
+    float temperature = get_temperature_by_luid(luid_);
+    LOG("State for Device {}: {:.2f} MB used, temperature {:.1f} C\n",
+        gpu_id_, resident / 1048576.0, temperature);
+#endif
 }
 
 int GpuControl::autoChooseId()
@@ -482,10 +550,12 @@ void GpuControl::setActivationDesc(void* activation, int mode, double v)
 std::string GpuControl::lastCudnnErrorString()
 {
     char msg[200] = { '\0' };
+#if ENABLE_CUDA
     if (cudnnGetLastErrorString)
     {
         cudnnGetLastErrorString(msg, 200);
     }
+#endif
     return msg;
 }
 }    // namespace cccc

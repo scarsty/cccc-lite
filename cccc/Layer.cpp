@@ -98,7 +98,7 @@ void Layer::message()
 
 void Layer::makeMatrixOp(std::vector<MatrixOp>& op_queue)
 {
-    int batch = option_->getInt("train", "batch", 1);
+    int batch = option_->getInt("train", "batch", 100);
     switch (connetion_type_)
     {
     case LAYER_CONNECTION_FULLCONNECT:

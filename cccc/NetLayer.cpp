@@ -38,9 +38,9 @@ int NetLayer::createAndConnectLayers()
     //lambda函数：计算上层和下层
     auto connect_layers = [this]()
     {
-        for (auto& name_layer : all_layer_map_)
+        for (auto& [name,layer] : all_layer_map_)
         {
-            auto& l = name_layer.second;
+            auto& l =layer;
             auto nexts = strfunc::splitString(option_->getString(l->getName(), "next"), ",");
             for (auto& next : nexts)
             {
@@ -143,18 +143,18 @@ int NetLayer::createAndConnectLayers()
     push_cal_stack(layer_out, -1, backward, false);
 
     //不在双向层中的都废弃
-    std::vector<std::pair<std::string, std::shared_ptr<Layer>>> temp;
-    for (auto& name_layer : all_layer_map_)
+    std::vector<std::string> temp;
+    for (auto& [name,layer] : all_layer_map_)
     {
-        auto l = name_layer.second.get();
+        auto l = layer.get();
         if (!(contains(forward, l) && contains(backward, l)))
         {
-            temp.push_back(name_layer);
+            temp.push_back(name);
         }
     }
-    for (auto& name_layer : temp)
+    for (auto& name : temp)
     {
-        all_layer_map_.erase(name_layer.first);
+        all_layer_map_.erase(name);
         //safe_delete(name_layer.second);
         //LOG("Remove bad layer {}\n", name_layer.first);
     }
@@ -202,10 +202,11 @@ int NetLayer::createAndConnectLayers()
     {
         LOG("Loss weight {}: {}\n", loss_weight_values.size(), loss_weight_values);
     }
-    loss_weight_->resize(loss_weight_values.size(), 1);
-    loss_weight_->importData(loss_weight_values.data(), loss_weight_values.size());
-    loss_weight_->resizeNumber(A_->getNumber());
-    loss_weight_->repeat(1);
+    auto& loss_weight = getMatrixByName("loss_weight");
+    loss_weight->resize(loss_weight_values.size(), 1);
+    loss_weight->importData(loss_weight_values.data(), loss_weight_values.size());
+    loss_weight->resizeNumber(A_->getNumber());
+    loss_weight->repeat(1);
     return 0;
 }
 

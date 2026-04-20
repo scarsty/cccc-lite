@@ -64,10 +64,15 @@ protected:
     //反向数据，实际上除了数据指针，其他必然跟原矩阵相同，矩阵赋值或复制之后仍然维持关联。除操作符和求解器外，禁止其他部分使用
     mutable std::shared_ptr<Matrix> d_this_;
 
-    bool need_back_ = true;    //仅反向使用此参数，决定是否需要更新D数据，本体的参数决定是否更新D数据
+    bool need_back_ = true;    //仅反向使用此参数，本体的参数决定是否更新D数据
+    bool need_load_ = true;    //在读取时是否需要加载数据，用于某些预训练的特殊情况
     float keep_weight_ = 0;
 
-    void* user_data_ = nullptr;
+    bool is_weight_ = false;
+    bool is_input_ = true;
+
+    mutable std::vector<Matrix> workspace_;
+    std::any user_data_;
 
 public:
     //Matrix& operator=(const Matrix& m);
@@ -83,11 +88,14 @@ public:
     //~Matrix();
     Matrix clone(UnitType device_type = UnitType::GPU) const;
     Matrix createShared() const;
-    Matrix createSharedCol(int col = 0) const;
+    Matrix createSharedCol(int col = 0, int count = 1) const;
     Matrix autoShareClone(UnitType device_type) const;
     Matrix transDataType(DataType data_type) const;
     void release();    //会释放所有共享的数据，除非特别需要，一般不要使用
-
+    void releaseWorkSpace()
+    {
+        workspace_.clear();
+    }
 
 private:
     void* data() const { return data_; }
@@ -111,14 +119,30 @@ public:
     int getDataTypeByInt() const { return int(shared_data_->getDataType()); }
     size_t getDataTypeSize() const { return shared_data_->getDataTypeSize(); }
     static void setCurrentDataType(DataType dt) { current_data_type() = dt; }
+    static DataType getCurrentDataType() { return current_data_type(); }
 
 public:
     Matrix& d() const;
     void setNeedBack(bool b) { need_back_ = b; }    //会生成反向矩阵，需慎用
     bool needBack() const { return need_back_; }
+    void setIsWeight(bool w) { is_weight_ = w; }
+    bool isWeight() const { return is_weight_; }
+    void setIsInput(bool b) { is_input_ = b; }
+    bool isInput() const { return is_input_; }
+    void setNeedLoad(bool l) { need_load_ = l; }
+    bool needLoad() const { return need_load_; }
     void setKeepWeight(float kw) { keep_weight_ = kw; }
     float keepWeight() const { return keep_weight_; }
-    void*& user_data() { return user_data_; }
+
+    template <typename T>
+    T& user_data()
+    {
+        if (!user_data_.has_value())
+        {
+            user_data_ = T();
+        }
+        return std::any_cast<T&>(user_data_);
+    }
 
 private:
     void setDim(const std::vector<int>& dim);
@@ -154,7 +178,19 @@ public:
 
     //以下3个函数，注意如果数据在显存中，一般x来说是无法赋值和输出的
     //注意只返回float
-    float getData(int i) const { return shared_data_->getData(i); }
+    //看起来如果是shared_data_为空，即数据实际是从外部共享，会出问题
+    float getData(int i) const
+    {
+        if (shared_data_->getDataPtr(0))
+        {
+            return shared_data_->getData(i);
+        }
+        if (data_)
+        {
+            return MatrixData::getData(data_, i, shared_data_->getDataType());
+        }
+        return 0;
+    }
     float getData(int m, int n) const { return getData(mn2i(m, n)); }
     float getData(int w, int h, int c, int n) const { return getData(whcn2i(w, h, c, n)); }
 
@@ -201,7 +237,7 @@ public:
     void shareData(const Matrix& A);
     void shareData(const Matrix& A, int m, int n);
     void shareData(const Matrix& A, int w, int h, int c, int n);
-    void shareData(float* data);
+    void shareData(void* data);
 
     //初始化数据后返回自身的引用，可以在一行代码内初始化
     Matrix& fillData(float v, float inc = 0);    //非常慢
@@ -211,6 +247,7 @@ public:
 public:
     //这两个会修改共享数据，影响所有相关的矩阵
     void toGPU();
+    void toCurrentGPU();
     void toCPU(bool reserve_data = true);
 
 public:
@@ -233,7 +270,7 @@ public:
 
     void sectionLimit(float v0, float v1);
     void scale(float v);
-    static void scale(const Matrix& A, Matrix& R, float v);
+    static void scale(const Matrix& A, Matrix& R, float a, float b = 0);
     void scaleCol(float v, int c);
 
     //为使功能完整，所有正向运算均应有这个返回矩阵的形式
@@ -297,7 +334,7 @@ public:
 using MatrixSP = std::shared_ptr<Matrix>;
 using MatrixUP = std::unique_ptr<Matrix>;
 template <typename... Args>
-inline MatrixSP makeMatrixSP(Args... args) { return std::make_shared<Matrix>(args...); }
+MatrixSP makeMatrixSP(Args... args) { return std::make_shared<Matrix>(args...); }
 
 //运算符重载：+-*数乘
 inline Matrix operator+(const Matrix& A, const Matrix& B)
@@ -316,7 +353,7 @@ inline Matrix operator-(const Matrix& A, const Matrix& B)
 
 inline Matrix operator*(const Matrix& A, const Matrix& B)
 {
-    Matrix R({A.getRow(), B.getNumber()}, A.getDataType(), A.getDeviceType());
+    Matrix R({ A.getRow(), B.getNumber() }, A.getDataType(), A.getDeviceType());
     Matrix::mul(A, B, R);
     return R;
 }

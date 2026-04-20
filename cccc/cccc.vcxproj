@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" ToolsVersion="14.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|x64">
@@ -20,13 +20,13 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
     <ConfigurationType>DynamicLibrary</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
-    <PlatformToolset>v143</PlatformToolset>
+    <PlatformToolset>v145</PlatformToolset>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
     <ConfigurationType>DynamicLibrary</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
-    <PlatformToolset>v143</PlatformToolset>
+    <PlatformToolset>v145</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
@@ -50,7 +50,6 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LinkIncremental>false</LinkIncremental>
     <OutDir>$(SolutionDir)$(Platform)\$(Configuration)\</OutDir>
-    <PreBuildEventUseInBuild>false</PreBuildEventUseInBuild>
   </PropertyGroup>
   <PropertyGroup Label="Vcpkg" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <VcpkgUseStatic>true</VcpkgUseStatic>
@@ -61,12 +60,12 @@
       </PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
-      <PreprocessorDefinitions>_DEBUG;_WINDOWS;__HIP_PLATFORM_AMD__;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_DEBUG;_WINDOWS;__HIP_PLATFORM_AMD__;AUTO_LOAD_GPU_FUNCTIONS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>.;./layer;../include;../include/cuda;../cccc-cuda;../cccc-hip;$(CUDA_PATH)/include;$(HIP_PATH)/include;../../mlcc;$(VCPKG_LIB_PATH)\x64-windows\include</AdditionalIncludeDirectories>
       <PreprocessToFile>false</PreprocessToFile>
       <OpenMPSupport>false</OpenMPSupport>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
-      <LanguageStandard>stdcpp20</LanguageStandard>
+      <LanguageStandard>stdcpplatest</LanguageStandard>
       <ScanSourceForModuleDependencies>false</ScanSourceForModuleDependencies>
       <TranslateIncludes>true</TranslateIncludes>
     </ClCompile>
@@ -76,7 +75,7 @@
       <AdditionalLibraryDirectories>$(CUDA_PATH)/lib/x64;$(HIP_PATH)/lib;../lib/x64;$(SolutionDir)$(Platform)\$(Configuration)\</AdditionalLibraryDirectories>
       <ForceSymbolReferences>%(ForceSymbolReferences)</ForceSymbolReferences>
       <Profile>true</Profile>
-      <AdditionalDependencies>cccc-cuda.lib;openblas.lib;cudart.lib;cublas.lib;cudnn_adv.lib;cudnn_cnn.lib;cudnn_ops.lib;cudnn_graph.lib;cccc-hip.lib;rocblas.lib;hiprtc.lib;miopen.lib;amdhip64.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>cccc-cuda.lib;openblas.lib;cuda.lib;cudart.lib;cublas.lib;cudnn_adv.lib;cudnn_cnn.lib;cudnn_ops.lib;cudnn_graph.lib;cccc-hip.lib;rocblas.lib;hiprtc.lib;amdhip64.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <Lib>
       <AdditionalDependencies>cccc-cuda.lib;openblas.lib;nvml.lib;cudart.lib;cublas.lib;cudnn_adv_infer.lib;cudnn_adv_train.lib;cudnn_cnn_infer.lib;cudnn_cnn_train.lib;cudnn_ops_infer.lib;cudnn_ops_train.lib;%(AdditionalDependencies)</AdditionalDependencies>
@@ -125,14 +124,12 @@
     <Lib>
       <AdditionalLibraryDirectories>$(CUDA_PATH)/lib/x64;../lib/x64;$(SolutionDir)$(Platform)\$(Configuration)\</AdditionalLibraryDirectories>
     </Lib>
-    <PreBuildEvent>
-      <Command>auto_version.exe --version $(ProjectName).rc --date2</Command>
-    </PreBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="..\..\mlcc\Cifa.cpp" />
     <ClCompile Include="..\..\mlcc\filefunc.cpp" />
     <ClCompile Include="..\..\mlcc\strfunc.cpp" />
+    <ClCompile Include="..\..\mlcc\vramusage.cpp" />
     <ClCompile Include="GpuControl.cpp" />
     <ClCompile Include="gpu_lib.cpp" />
     <ClCompile Include="DataPreparerFactory.cpp" />
@@ -188,7 +185,6 @@
     <ClInclude Include="dll_export.h" />
     <ClInclude Include="Matrix.h" />
     <ClInclude Include="MatrixEx.h" />
-    <ClInclude Include="predict.h" />
     <ClInclude Include="rocblas_real.h" />
     <ClInclude Include="Solver.h" />
     <ClInclude Include="TensorDesc.h" />

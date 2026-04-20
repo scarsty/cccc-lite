@@ -52,7 +52,6 @@ void Solver::init(Option* option, std::string section, Matrix& W)
     OPTION_GET_REAL(switch_sgd_random_);
 
     destory();
-
     switch (solver_type_)
     {
     case SOLVER_SGD:
@@ -191,13 +190,29 @@ int Solver::adjustLearnRate(int epoch, int total_epoch)
         }
         break;
     }
+    case ADJUST_LEARN_RATE_STEPS_WARM2:
+    {
+        if (epoch <= total_epoch / 4 * 0.66)
+        {
+            learn_rate_ = learn_rate_base_ * lr_step_decay_;
+        }
+        else if (epoch > total_epoch / 4)
+        {
+            learn_rate_ = learn_rate_base_ * pow(lr_step_decay_, (epoch - 1 - total_epoch / 4) / ((total_epoch / 4 * 3 + lr_steps_ - 1) / lr_steps_));
+        }
+        else
+        {
+            learn_rate_ = scale_inter(epoch, int(total_epoch / 4 * 0.66), int(total_epoch / 4), learn_rate_base_ * lr_step_decay_, learn_rate_base_);
+        }
+        break;
+    }
     default:
         break;
     }
     if (pre_lr != learn_rate_)
     {
         lr_keep_count_ = 0;
-        LOG("Learn rate is changed from {} to {}\n", pre_lr, learn_rate_);
+        //LOG("Learn rate is changed from {} to {}\n", pre_lr, learn_rate_);
     }
     return 0;
 }
@@ -245,7 +260,7 @@ void Solver::updateWeights(Matrix& W, int batch)
 
         //LOG("b {}\n", dW.sumAbs() / batch / l1w);
     }
-
+    //LOG("Solver Type {}\n", int(solver_type_));
     switch (solver_type_)
     {
     case SOLVER_SGD:

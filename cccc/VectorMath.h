@@ -1,5 +1,6 @@
 ﻿#pragma once
 #include <cmath>
+#include <numeric>
 
 namespace cccc
 {
@@ -218,6 +219,41 @@ bool vector_have(const std::vector<T>& ops, const T& op)
     }
     return false;
 }
+
+// 计算平均值
+template <typename T>
+double calculate_mean(const std::vector<T>& data)
+{
+    if (data.empty())
+    {
+        return 0.0;
+    }
+    double sum = std::accumulate(data.begin(), data.end(), 0.0);
+    return sum / data.size();
+}
+
+// 计算标准差
+template <typename T>
+double calculate_stddev(const std::vector<T>& data)
+{
+    if (data.empty())
+    {
+        return 0.0;
+    }
+
+    double mean = calculate_mean(data);
+    double sum_sq_diff = 0.0;
+
+    for (double val : data)
+    {
+        sum_sq_diff += pow(val - mean, 2);
+    }
+
+    double variance = sum_sq_diff / data.size();
+    return sqrt(variance);
+}
+
+
 }    // namespace VectorMath
 
 //极端情况使用vector可能过于臃肿

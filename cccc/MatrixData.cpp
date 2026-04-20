@@ -1,11 +1,12 @@
 ﻿#include "MatrixData.h"
 #include "Log.h"
-#include "Matrix.h"
 #include "gpu_lib.h"
 
 namespace cccc
 {
 //此处有问题，目前来看只能在同设备中resize
+
+static int64_t memory_used_ = 0;
 
 void* MatrixData::resize(int64_t size, DataType data_type, bool reserve_data, bool force)
 {
@@ -14,7 +15,7 @@ void* MatrixData::resize(int64_t size, DataType data_type, bool reserve_data, bo
     {
         return data_;
     }
-    float* new_data = nullptr;
+    void* new_data = nullptr;
     auto device_type = UnitType::GPU;
     if (!reserve_data)    //数据不需保留可以先行释放，可以节省显存的使用，否则峰值占用是新旧尺寸之和
     {
@@ -23,9 +24,8 @@ void* MatrixData::resize(int64_t size, DataType data_type, bool reserve_data, bo
     if (gpu_)
     {
         gpu_->setAsCurrent();
-        if (gpu_->malloc((void**)&new_data, size * getDataTypeSize(data_type_)) == 0)
+        if (gpu_->malloc(new_data, size * getDataTypeSize(data_type_)) == 0)
         {
-            gpu_->memory_used_ += size * getDataTypeSize(data_type_);
             //LOG("Device {} MALLOC {:g}, memory used {:g}!\n", cuda_->getDeviceID(), 1.0 * size * sizeof(real), 1.0 * cuda_->memory_used_);
             //if (size * sizeof(real) > 3e8)
             //{
@@ -40,7 +40,9 @@ void* MatrixData::resize(int64_t size, DataType data_type, bool reserve_data, bo
     else
     {
         device_type = UnitType::CPU;
-        new_data = new float[size];
+        //new_data = new char[size * getDataTypeSize(data_type_)];
+        new_data = malloc(size * getDataTypeSize(data_type_));
+        //cudaMallocHost(&new_data, size * getDataTypeSize(data_type_));
     }
     if (reserve_data)
     {
@@ -48,6 +50,7 @@ void* MatrixData::resize(int64_t size, DataType data_type, bool reserve_data, bo
         release();
     }
     occupy_data_size_ = size;
+    memory_used_ += occupy_data_size_ * getDataTypeSize(data_type_);
     return data_ = new_data;
 }
 
@@ -58,33 +61,25 @@ void MatrixData::release()
         occupy_data_size_ = 0;
         return;
     }
-    if (gpu_)
+
+    auto status = GpuControl::free(data_);
+    if (status == 0)
     {
-        auto current_gpu = GpuControl::getCurrentCuda();
-        if (current_gpu != gpu_)
-        {
-            gpu_->setAsCurrent();
-        }
-        auto status = gpu_->free(data_);
-        if (status == 0)
-        {
-            gpu_->memory_used_ -= occupy_data_size_ * getDataTypeSize(data_type_);
-            //LOG("Device {} FREE {:g}, memory used {:g}!\n", gpu_->getDeviceID(), 1.0 * occupy_data_size_ * getDataTypeSize(data_type_), 1.0 * gpu_->memory_used_);
-        }
-        else
-        {
-            //LOG("Device {} FAIL TO FREE {:g}!\n", gpu_->getDeviceID(), 1.0 * occupy_data_size_ * getDataTypeSize(data_type_));
-        }
-        if (current_gpu != gpu_)
-        {
-            current_gpu->setAsCurrent();
-        }
+        //LOG("Device {} FREE {:g}, memory used {:g}!\n", gpu_->getDeviceID(), 1.0 * occupy_data_size_ * getDataTypeSize(data_type_), 1.0 * gpu_->getMemoryUsed());
+    }
+    else if (status < 0)
+    {
+        LOG("Device {} FAIL TO FREE {:g}!\n", gpu_->getDeviceID(), 1.0 * occupy_data_size_ * getDataTypeSize(data_type_));
     }
     else
     {
-        delete[] data_;
+        //delete[] (char*)data_;
+        free(data_);
+        //cudaFreeHost(data_);
     }
+    memory_used_ -= occupy_data_size_ * getDataTypeSize(data_type_);
     occupy_data_size_ = 0;
+    //LOG("memory used {:g}!\n", 1.0 * memory_used_);
     data_ = nullptr;
 }
 

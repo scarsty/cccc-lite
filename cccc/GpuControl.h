@@ -1,6 +1,8 @@
 ﻿#pragma once
 #include "TensorDesc.h"
 #include "types.h"
+
+#include <any>
 #include <atomic>
 #include <memory>
 #include <mutex>
@@ -67,24 +69,31 @@ private:
 public:
     static void checkDevices();
     static int getDeviceCount();
-    static GpuControl* getCurrentCuda();
+    static GpuControl* getCurrentGpu();
     //static void setCurrentCuda(GpuControl* gpu);
     static void setUseCPU();
 
-    static UnitType getGlobalCudaType();
+    static UnitType getGlobalGpuType();
     static void evaluateDevices();
     static std::vector<int> gpuDevicesTurn();
 
     void setAsCurrent();
+
     int getDeviceID() const { return gpu_id_; }
+    int getApiID() const { return api_id_; }
+
     void getFreeMemory(size_t& free, size_t& total) const;
     int init(int dev_id = -1);
+
     ApiType getApiType() { return api_type_; }
+
     void destroy();
 
-    int malloc(void** p, size_t size);
-    int free(void* p);
-    int memcpy(void* dst, const void* src, size_t count, memcpyKind kind);
+    int malloc(void*& p, size_t size);
+    static int free(void* p);
+
+    int gpu_memcpy(void* dst, const void* src, size_t count, memcpyKind kind);
+    void printState();
 
 private:
     static int autoChooseId();
@@ -96,7 +105,11 @@ private:
 
     int api_id_ = -1;    //cuda或hip的id，从0开始
 
+    char luid_[8] = { 0 };    //设备的luid
+
     CudaArch micro_arch_{ ARCH_UNKNOWN };
+
+    uint64_t total_memory_ = 0;
 
 public:
     Cublas* cublas_ = nullptr;
@@ -105,22 +118,47 @@ public:
     Rocblas* rocblas_ = nullptr;
     miopenHandle* miopen_handle_ = nullptr;
 
-    size_t memory_used_ = 0;
-
 public:
     OtherDesc other_desc_;
+
     template <typename T>
     T getDesc()
     {
         return other_desc_.getDesc<T>();
     }
+
     //设置激活函数，用于简化代码
     static void setActivationDesc(void* activation, int mode, double v);
 
 public:
     ActivePhaseType active_phase_ = ACTIVE_PHASE_TRAIN;
+
     void setActivePhase(ActivePhaseType ap) { active_phase_ = ap; }
+
     static std::string lastCudnnErrorString();
+
+public:
+    struct MallocInfo
+    {
+        void* p;
+        size_t size;
+        ApiType api_type;
+        int api_id;
+    };
+    static std::unordered_map<void*, MallocInfo> malloc_map_;
+    static std::mutex malloc_map_mutex_;
+
+    std::any user_data_;
+
+    template <typename T>
+    T& getUserData()
+    {
+        if (!user_data_.has_value())
+        {
+            user_data_ = T();
+        }
+        return std::any_cast<T&>(user_data_);
+    }
 };
 
 }    // namespace cccc

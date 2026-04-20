@@ -9,7 +9,8 @@ Option::Option()
     initEnums();
 }
 
-Option::Option(const std::string& filename) : Option()
+Option::Option(const std::string& filename) :
+    Option()
 {
     loadFile(filename);
 }
@@ -33,46 +34,6 @@ Option::Option(const std::string& filename) : Option()
 //        }
 //    }
 //}
-
-std::string Option::dealString(std::string str, bool allow_path)
-{
-    size_t p = 0;
-    while ((p = str.find("{", p)) != std::string::npos)
-    {
-        auto p0 = p;
-        p++;
-        std::string section, key;
-        auto p1 = str.find("::", p);
-        if (p1 != std::string::npos)
-        {
-            section = str.substr(p, p1 - p);
-            p = p1 + 2;
-        }
-        auto p2 = str.find("}", p);
-        {
-            key = str.substr(p, p2 - p);
-            p = p2 + 1;
-        }
-        if (hasKey(section, key))
-        {
-            std::string sub = getString(section, key);
-            if (!allow_path)
-            {
-#ifdef _WIN32
-                strfunc::replaceAllSubStringRef(sub, "\\", "");
-#endif
-                strfunc::replaceAllSubStringRef(sub, "/", "");
-            }
-            if (sub.length() > 50)
-            {
-                sub = sub.substr(0, 50);
-            }
-            strfunc::replaceAllSubStringRef(str, str.substr(p0, p - p0), sub);
-            p = p0 + sub.size();
-        }
-    }
-    return str;
-}
 
 //初始化map，注意一些设置是有别名的
 //所有字符小写！！！！
@@ -112,8 +73,6 @@ void Option::initEnums()
             { "lcn", ACTIVE_FUNCTION_LOCAL_CONSTRAST_NORMALIZATION },
             { "divisive_normalization", ACTIVE_FUNCTION_DIVISIVE_NORMALIZATION },
             { "dn", ACTIVE_FUNCTION_DIVISIVE_NORMALIZATION },
-            { "batch_normalization", ACTIVE_FUNCTION_BATCH_NORMALIZATION },
-            { "bn", ACTIVE_FUNCTION_BATCH_NORMALIZATION },
             { "spatial_transformer", ACTIVE_FUNCTION_SPATIAL_TRANSFORMER },
             { "sum_max", ACTIVE_FUNCTION_SUMMAX },
             { "zero_channel", ACTIVE_FUNCTION_ZERO_CHANNEL },
@@ -182,8 +141,9 @@ void Option::initEnums()
             { "xavier", RANDOM_FILL_XAVIER },
             { "constant", RANDOM_FILL_CONSTANT },
             { "gaussian", RANDOM_FILL_GAUSSIAN },
-            { "msra", RANDOM_FILL_GAUSSIAN },
+            { "msra", RANDOM_FILL_MSRA },
             { "lecun", RANDOM_FILL_LECUN },
+            { "kaiming", RANDOM_FILL_KAIMING },
         });
 
     registerEnum<AdjustLearnRateType>(
@@ -194,6 +154,7 @@ void Option::initEnums()
             { "steps", ADJUST_LEARN_RATE_STEPS },
             { "steps_warm", ADJUST_LEARN_RATE_STEPS_WARM },
             { "steps_auto", ADJUST_LEARN_RATE_STEPS_AUTO },
+            { "steps_warm2", ADJUST_LEARN_RATE_STEPS_WARM2 },
         });
 
     registerEnum<BatchNormalizationType>(

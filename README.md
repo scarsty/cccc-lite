@@ -67,8 +67,10 @@ logo由Dr. Cheng ZD设计。
 
 ### 关于lite版
  
-lite版只支持几个基本的激活函数和卷积、池化等基本连接。
+lite版只支持relu、sigmoid、softmax等激活函数，和卷积、池化、全连接等基本算子。
 
 仅能使用一张显卡训练。
 
 不支持半精度。
+
+没有Predict部分。

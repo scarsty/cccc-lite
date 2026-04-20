@@ -8,6 +8,7 @@
 #include "strfunc.h"
 #include <algorithm>
 #include <cmath>
+#include <thread>
 
 namespace cccc
 {
@@ -59,11 +60,21 @@ int MainProcess::loadIni(const std::string& ini)
         if (filefunc::fileExist(ini))
         {
             option_.loadFile(ini);
+            train_filename_ = filefunc::getFileMainNameWithoutPath(ini);
         }
         else
         {
             option_.loadString(ini);
         }
+    }
+    //加载额外的环境变量
+    for (auto& kv : option_.getAllKeyValues("env"))
+    {
+#ifdef _WIN32
+        _putenv(std::format("{}={}", kv.key, kv.value).c_str());
+#else
+        putenv((char*)fmt1::format("{}={}", kv.key, kv.value).c_str());
+#endif
     }
     //option_.print();
     batch_ = (std::max)(1, option_.getInt("train", "batch", 100));
@@ -88,11 +99,12 @@ int MainProcess::testGPUDevice()
         return 1;
     }
 
-    MP_count_ = 1;
+    MP_count_ = option_.getInt("train", "mp", 1);
     if (MP_count_ <= 0)
     {
         MP_count_ = 1;
     }
+    MP_count_ = 1;    // lite版仅支持单卡
     return 0;
 }
 
@@ -103,6 +115,7 @@ int MainProcess::initNets()
     nets_.resize(MP_count_);
     //这里读取ini中指定的device顺序，其中第一个设备为主网络，该值一般来说应由用户指定
     auto mp_device = option_.getVector<int>("train", "mp_device");
+    LOG("MP device: {}\n", mp_device);
     //如果用户指定的不正确，则以best_device的顺序决定
     auto check_repeat = [](std::vector<int> v)
     {
@@ -119,28 +132,42 @@ int MainProcess::initNets()
         return false;
     };
     auto gpu_device_turn = GpuControl::gpuDevicesTurn();
-    if (mp_device.size() < MP_count_)
+    if (gpu_device_turn.empty())    //无GPU
     {
-        mp_device.resize(MP_count_);
-        if (gpu_device_turn.empty())    //无GPU
+        mp_device.resize(1);
+        mp_device[0] = 0;
+    }
+    else
+    {
+        //设备数不正确或者含负数则自动分配
+        bool auto_set = mp_device.size() != MP_count_;
+        for (int& d : mp_device)
         {
-            mp_device[0] = 0;
-        }
-        else
-        {
-            for (int i = 0; i < gpu_device_turn.size(); i++)
+            if (d < 0)
             {
-                mp_device[i] = gpu_device_turn[i];
+                auto_set = true;
+            }
+        }
+        mp_device.resize(MP_count_);
+        for (int i = 0; i < MP_count_; i++)
+        {
+            if (auto_set)
+            {
+                mp_device[i] = gpu_device_turn[i % gpu_device_turn.size()];
+            }
+            else
+            {
+                mp_device[i] %= gpu_device_turn.size();    //取模，防止越界
             }
         }
     }
-    LOG("MP device: {}\n", mp_device);
+    LOG("Reset MP device: {}\n", mp_device);
     gpus_.resize(mp_device.size());
     for (int i = 0; i < mp_device.size(); i++)
     {
         if (mp_device[i] < 0 || mp_device[i] >= gpu_device_turn.size())
         {
-            fatalError(fmt1::format("Error: Device {} is not available!! Check \"mp_device\"\n", mp_device[i]));
+            fatalError(std::format("Error: Device {} is not available!! Check \"mp_device\"\n", mp_device[i]));
             return 1;
         }
         gpus_[i].init(mp_device[i]);
@@ -150,7 +177,7 @@ int MainProcess::initNets()
         double need_free = option_.getReal("train", "need_free_mem", 0.6);
         if (1.0 * free_mem / total_mem < need_free)
         {
-            fatalError(fmt1::format("Error: Not enough memory on device {}!!\nNeed {:.4}%, but only {:.4}% free\n",
+            fatalError(std::format("Error: Not enough VIDEO memory on device GPU {}!!\nNeed {:.4}%, but only {:.4}% free\n",
                 mp_device[i], 100.0 * need_free, 100.0 * free_mem / total_mem));
             return 1;
         }
@@ -179,15 +206,12 @@ int MainProcess::initNets()
             }
         }
         net->setGpu(&gpus_[i]);
+        net->setId(i);
         int dev_id = net->getGpu()->getDeviceID();
         net->setOption(&option_);
         if (net->init() != 0)
         {
             return 1;
-        }
-        if (option_.getInt("train", "load_net") != 0)
-        {
-            net->loadWeight(option_.getString("train", "load_file"));
         }
         nets_[i] = std::move(net);
         if (dev_id >= 0)
@@ -199,19 +223,25 @@ int MainProcess::initNets()
             LOG("Net {} has been created on CPU\n", i);
         }
     }
-    if (MP_count_ > 1)
+
+    //0号网络加载权值
+    if (option_.getInt("train", "load_net") != 0 && !nets_.empty())
     {
-        for (int i = 0; i < nets_.size(); i++)
+        if (nets_[0]->loadWeight(option_.getString("train", "load_file")) < 0)
         {
-            auto& net = nets_[i];
-            //只使用0号网络的权值
-            if (i != 0)
-            {
-                Matrix::copyDataAcrossDevice(nets_[0]->getAllWeights(), net->getAllWeights());
-            }
+            fatalError("Error: Load net weight failed!!\n");
+            return 1;
         }
     }
-
+    for (int i = 0; i < nets_.size(); i++)
+    {
+        auto& net = nets_[i];
+        //只使用0号网络的权值，随机初始化也如此
+        if (i != 0)
+        {
+            Matrix::copyDataAcrossDevice(nets_[0]->getAllWeights(), net->getAllWeights());
+        }
+    }
     //主线程使用0号网络
     nets_[0]->setDeviceSelf();
     return 0;
@@ -266,22 +296,78 @@ void MainProcess::initTestData()
     }
 }
 
-std::string MainProcess::makeSaveName(const std::string& save_format, int epoch_count)
+std::string MainProcess::makeSaveName(const std::string& save_format, int epoch_count, bool is_filename)
 {
     std::string save_name = save_format;
     strfunc::replaceAllSubStringRef(save_name, "{epoch}", std::to_string(epoch_count));
     strfunc::replaceAllSubStringRef(save_name, "{date}", Timer::getNowAsString("%F"));
     strfunc::replaceAllSubStringRef(save_name, "{time}", Timer::getNowAsString("%T"));
+    strfunc::replaceAllSubStringRef(save_name, "{filename}", train_filename_);
+
+    while (true)
+    {
+        auto pos_l = save_name.find("{");
+        if (pos_l != std::string::npos)
+        {
+            auto pos_r = save_name.find("}", pos_l);
+            if (pos_r != std::string::npos)
+            {
+                auto name = save_name.substr(pos_l + 1, pos_r - pos_l - 1);
+                auto pos = name.find("::");
+                if (pos != std::string::npos)
+                {
+                    auto section = name.substr(0, pos);
+                    auto key = name.substr(pos + 2);
+                    auto value = option_.getString(section, key, "");
+                    if (is_filename)
+                    {
+                        value = filefunc::toLegalFilename(value, false);
+                    }
+                    strfunc::replaceAllSubStringRef(save_name, "{" + name + "}", value);
+                }
+                else
+                {
+                    std::string value;
+                    for (auto& section : option_.getAllSections())
+                    {
+                        value = option_.getString(section, name, "");
+                        if (value != "")
+                        {
+                            break;
+                        }
+                    }
+                    if (is_filename)
+                    {
+                        value = filefunc::toLegalFilename(value, false);
+                    }
+                    strfunc::replaceAllSubStringRef(save_name, "{" + name + "}", value);
+                }
+            }
+            else
+            {
+                strfunc::replaceOneSubStringRef(save_name, "{", "");
+            }
+        }
+        else
+        {
+            break;
+        }
+    }
+
     //convert::replaceAllSubStringRef(save_name, "{accurary}", std::to_string(test_accuracy_));
-    save_name = filefunc::toLegalFilename(save_name);
+    if (is_filename)
+    {
+        save_name = filefunc::toLegalFilename(save_name);
+    }
     return save_name;
 }
 
 std::string MainProcess::makeSaveSign()
 {
     std::string sign = option_.getString("train", "save_sign");
-    sign = fmt1::format("{}, {}, {}, {}",
-        option_.dealString(sign, true),
+    sign = makeSaveName(sign, epoch_count_, false);
+    sign = std::format("{}, {}, {}, {}",
+        sign,
         Timer::getNowAsString(),
         Timer::autoFormatTime(timer_total_.getElapsedTime()),
         data_preparer_->X.getNumber() * epoch_count_);
@@ -340,7 +426,6 @@ void MainProcess::train(std::vector<std::unique_ptr<Net>>& nets, DataPreparer* d
             } };
     }
 
-    Timer timer_per_epoch;    //计时
     for (int epoch_count = 0;; epoch_count++)
     {
         data_preparer->prepareData(epoch_count, "train");
@@ -355,12 +440,6 @@ void MainProcess::train(std::vector<std::unique_ptr<Net>>& nets, DataPreparer* d
         if (running_callback_) { running_callback_(this); }
         iter_count_ += iter_per_epoch;
         epoch_count_++;
-        if (epoch_count > 0)
-        {
-            LOG("{} s for this epoch, {} elapsed totally\n",
-                timer_per_epoch.getElapsedTime(), Timer::autoFormatTime(timer_total_.getElapsedTime()));
-        }
-        timer_per_epoch.start();
         if (ti.stop)
         {
             break;
@@ -374,12 +453,13 @@ void MainProcess::train(std::vector<std::unique_ptr<Net>>& nets, DataPreparer* d
         net_threads[i].join();
     }
 
-    LOG("{} s for this epoch, {} elapsed totally\n", timer_per_epoch.getElapsedTime(), Timer::autoFormatTime(timer_total_.getElapsedTime()));
     LOG("\n");
+    data_preparer->summary();
 }
 
 //训练网络数组nets中的一个
 //在并行时需注意batch的设置，可以认为batch（非并行） = batch（并行）* 线程数
+//因分发需要，应传入所有网络
 void MainProcess::trainOneNet(std::vector<std::unique_ptr<Net>>& nets, int net_id, TrainInfo& ti, int total_epochs)
 {
     auto& net = nets[net_id];
@@ -390,32 +470,29 @@ void MainProcess::trainOneNet(std::vector<std::unique_ptr<Net>>& nets, int net_i
     auto y_dim = data_preparer_->Y.getDim();
     x_dim.back() /= MP_count_;
     y_dim.back() /= MP_count_;
-    Matrix X_train_gpu(x_dim), Y_train_gpu(y_dim), A_train_gpu(y_dim), lw_train_gpu;
-
-    if (data_preparer_->LW.getDataSize() > 0)
+    Matrix X_train_gpu(x_dim), Y_train_gpu(y_dim), A_train_gpu(y_dim);
+    std::unordered_map<std::string, Matrix> extra_train_gpu;
+    for (auto& [name, m] : data_preparer_->getExtraData())
     {
-        lw_train_gpu.resize(y_dim);
-        net->initLossWeight();
+        auto dim = m.getDim();
+        dim.back() /= MP_count_;
+        extra_train_gpu[name] = Matrix(dim);
+        dim.back() = net->getBatch();
+        net->addExtraMatrix(name, dim);
     }
 
     int test_epoch = option_.getInt("train", "test_epoch", 1);
-    int test_train = option_.getInt("train", "test_train", 0);
-    int test_train_origin = option_.getInt("train", "test_train_origin", 0);
     int pre_test_train = option_.getInt("train", "pre_test_train", 0);
-    int test_test = option_.getInt("train", "test_test", 0);
-    int test_test_origin = option_.getInt("train", "test_test_origin", 0);
 
     int save_epoch = option_.getInt("train", "save_epoch", 10);
+    int save_solver_state = option_.getInt("train", "save_solver_state", 0);
     int out_iter = option_.getInt("train", "out_iter", 100);
-    int test_type = option_.getInt("train", "test_type", 1);
 
     int stop_no_effective_grad = option_.getInt("train", "stop_no_effective_grad", 1);
 
-    std::string save_format = option_.dealString(option_.getString("train", "save_format", "save/save-{epoch}.txt"), false);
+    std::string save_format = option_.getString("train", "save_format", "save/save-{epoch}.txt");
     int total_batch = data_preparer_->X.getNumber();
 
-    float max_test_origin_accuracy = 0;
-    int max_test_origin_accuracy_epoch = 0;
     float max_test_accuracy = 0;
     int max_test_accuracy_epoch = 0;
 
@@ -424,9 +501,9 @@ void MainProcess::trainOneNet(std::vector<std::unique_ptr<Net>>& nets, int net_i
 
     //时间计算相关
     double time_limited = option_.getReal("train", "time_limited", 86400 * 100);
-    Timer timer_test, timer_trained;
-    double time_test0 = 0;
-    double time_per_epoch = 1;
+    Timer timer_trained, timer_per_epoch;
+    double time_test_total = 0;
+    int test_count = 0;
 
     Matrix workspace;    //同步使用
 
@@ -444,18 +521,28 @@ void MainProcess::trainOneNet(std::vector<std::unique_ptr<Net>>& nets, int net_i
     int failed_count = 0;
     bool is_effective = false;
     double increase_limited = 0;
-    std::vector<TestInfo> resultv_max, resultvp;
-    std::vector<std::vector<TestInfo>> all_resultv;
-    int effective_epoch_count = 0;    //有效epoch计数，注意仅主网络的这个值在更新
+    std::vector<TestInfo> group_result_max, group_result_prev;    //只保存分组测试结果
+    std::vector<std::vector<TestInfo>> all_group_result;          //保存所有的测试结果
+    int effective_epoch_count = 0;                                //有效epoch计数，注意仅主网络的这个值在更新
 
     while (ti.stop == 0)
     {
         //等待数据准备完成
+        Timer timer_copy;
         WAIT_UNTIL(ti.data_prepared == epoch_count || ti.stop);
         epoch_count++;
-        Matrix::copyRows(data_preparer_->X, net_id * total_batch / MP_count_, X_train_gpu, 0, X_train_gpu.getNumber());
-        Matrix::copyRows(data_preparer_->Y, net_id * total_batch / MP_count_, Y_train_gpu, 0, Y_train_gpu.getNumber());
-        Matrix::copyRows(data_preparer_->LW, net_id * total_batch / MP_count_, lw_train_gpu, 0, lw_train_gpu.getNumber());
+        net->setEpoch(epoch_count);
+        if (data_preparer_->is_new_data_)
+        {
+            Matrix::copyRows(data_preparer_->X, net_id * total_batch / MP_count_, X_train_gpu, 0, X_train_gpu.getNumber());
+            Matrix::copyRows(data_preparer_->Y, net_id * total_batch / MP_count_, Y_train_gpu, 0, Y_train_gpu.getNumber());
+            for (auto& [name, m] : data_preparer_->getExtraData())
+            {
+                Matrix::copyRows(m, net_id * total_batch / MP_count_, extra_train_gpu[name], 0, extra_train_gpu[name].getNumber());
+            }
+        }
+        //如果将数据复制放到数据准备线程，则计算线程也会变慢
+        LOG("Data for epoch {} copied in {} s\n", epoch_count, timer_copy.getElapsedTime());
         //发出拷贝数据结束信号
         ++ti.data_distributed;
         if (net_id == 0)
@@ -465,28 +552,32 @@ void MainProcess::trainOneNet(std::vector<std::unique_ptr<Net>>& nets, int net_i
             int progress_by_time = timer_trained.getElapsedTime() / time_limited * total_epochs;
             if (progress_by_time < epoch_count)
             {
-                net->getSolver().adjustLearnRate(epoch_count, total_epochs);
+                net->solverAdjustLearnRate(epoch_count, total_epochs);
             }
             else
             {
-                net->getSolver().adjustLearnRate(progress_by_time, total_epochs);
+                net->solverAdjustLearnRate(progress_by_time, total_epochs);
             }
             LOG("Learn rate for epoch {} is {}\n", epoch_count, net->getSolver().getLearnRate());
             //训练前在训练集上的测试，若训练集实时生成可以使用
             if (epoch_count % test_epoch == 0 && pre_test_train)
             {
-                net->test(&X_train_gpu, &Y_train_gpu, &A_train_gpu, "Test on train set before training", 0, 1);
+                LOG("Test net {}: before training\n", net_id);
+                net->test(&X_train_gpu, &Y_train_gpu, &A_train_gpu);
             }
         }
-
+        Timer timer_net;
+        net->clearTime();
         for (int iter = 0; iter < X_train_gpu.getNumber() / net->getX().getNumber(); iter++)
         {
             iter_count++;
             bool output = (iter + 1) % out_iter == 0;
             net->getX().shareData(X_train_gpu, 0, iter * net->getX().getNumber());
             net->getY().shareData(Y_train_gpu, 0, iter * net->getY().getNumber());
-            net->getLossWeight().shareData(lw_train_gpu, 0, iter * net->getLossWeight().getNumber());
-
+            for (auto& [name, m] : extra_train_gpu)
+            {
+                net->getMatrixByName(name)->shareData(m, 0, iter * net->getMatrixByName(name)->getNumber());
+            }
             //WAIT_UNTIL(ti.dweight_uncollected == 0 || ti.stop);
             float e = 0;
             net->active(nullptr, nullptr, nullptr, true, output ? &e : nullptr);
@@ -527,51 +618,14 @@ void MainProcess::trainOneNet(std::vector<std::unique_ptr<Net>>& nets, int net_i
                 //主网络负责测试，因可能出现回退的情况，故需在分发前处理
                 if (iter == X_train_gpu.getNumber() / net->getX().getNumber() - 1)
                 {
+                    WAIT_UNTIL(ti.data_prepared == epoch_count || ti.stop);    //需要使用到最新的数据，故等待数据准备完成
                     //LOG("Epoch {} finished\n", epoch_count);
                     if (epoch_count % test_epoch == 0)
                     {
-                        std::string content = fmt1::format("Test net {}: ", net_id);
-                        double test_result;
-                        std::vector<TestInfo> resultv;
-                        //int test_error = 0;
-                        if (test_train_origin)
-                        {
-                            net->test(&data_preparer_->X, &data_preparer_->Y, nullptr, content + "original train set", 0, test_type, 0, &test_result);
-                        }
-                        if (test_train)
-                        {
-                            std::vector<std::vector<TestInfo>> resultvv;
-                            net->test(&X_train_gpu, &Y_train_gpu, nullptr, content + "transformed train set", 0, test_type, 0, &test_result, &resultvv);    //有返回分开的准确率
-                            if (!resultvv.empty())
-                            {
-                                //注意后续的判断只考虑第一组
-                                resultv = resultvv[0];
-                                all_resultv.push_back(resultv);
-                            }
-                        }
-                        if (data_preparer2_)
-                        {
-                            if (test_test_origin)
-                            {
-                                net->test(&data_preparer2_->X0, &data_preparer2_->Y0, nullptr, content + "original test set", 0, test_type, 0, &test_result);
-                                if (test_result >= max_test_origin_accuracy)
-                                {
-                                    max_test_origin_accuracy = test_result;
-                                    max_test_origin_accuracy_epoch = epoch_count;
-                                }
-                            }
-                            if (test_test)
-                            {
-                                net->test(&data_preparer2_->X, &data_preparer2_->Y, nullptr, content + "transformed test set", 0, test_type, 0, &test_result);
-                                if (test_result >= max_test_accuracy)
-                                {
-                                    max_test_accuracy = test_result;
-                                    max_test_accuracy_epoch = epoch_count;
-                                }
-                            }
-                        }
-
-                        if (net->getSolver().adjustLearnRate2(epoch_count, total_epochs, all_resultv))
+                        //测试开始
+                        Timer timer_test;
+                        testData(net.get(), epoch_count, total_epochs, &max_test_accuracy_epoch, &max_test_accuracy, &all_group_result, &X_train_gpu, &Y_train_gpu);
+                        if (net->solverAdjustLearnRate2(epoch_count, total_epochs, all_group_result))
                         {
                             ti.stop = 1;
                         }
@@ -588,16 +642,16 @@ void MainProcess::trainOneNet(std::vector<std::unique_ptr<Net>>& nets, int net_i
                         //当训练集测试准确率达到一定水平后，认为训练开始生效
                         if (is_effective == false && epoch_count > test_epoch)
                         {
-                            is_effective = checkTestEffective(resultv_max, resultv);
+                            is_effective = checkTestEffective(group_result_max, net->getGroupTestInfo());
                         }
 
-                        if (checkTrainHealth(resultvp, resultv, l1p, l2p, l1, l2, increase_limited, effective_epoch_count))
+                        if (checkTrainHealth(group_result_prev, net->getGroupTestInfo(), l1p, l2p, l1, l2, increase_limited, effective_epoch_count))
                         {
                             Matrix::copyData(net->getAllWeights(), weight_backup);
                             Matrix::copyData(net->getAllWeights().d(), weight_backup.d());
                             l1p = l1;
                             l2p = l2;
-                            resultvp = resultv;
+                            group_result_prev = net->getGroupTestInfo();
                             failed_count = 0;
                             if (is_effective > 0)
                             {
@@ -618,21 +672,13 @@ void MainProcess::trainOneNet(std::vector<std::unique_ptr<Net>>& nets, int net_i
                                 net->getAllWeights().d().fillData(0);
                                 failed_count = 0;
                             }
-                            net->getSolver().reset();
+                            net->solverReset();
                             //train_info.need_reset = MP_count_ - 1;
                             //net->checkNorm();
                         }
-
-                        auto time_test = timer_test.getElapsedTime();
-                        time_per_epoch = (time_test - time_test0) / test_epoch;
-                        time_test0 = time_test;
-                        double time_rest;
-                        time_rest = (total_epochs - epoch_count) * time_per_epoch;
-                        time_rest = std::min(time_rest, time_limited - timer_trained.getElapsedTime());
-                        time_rest = std::max(time_rest, 0.0);
-                        net->getSolver().outputState();
                         LOG("Effective epoch {}, restore {}\n", effective_epoch_count, restore_count);
-                        LOG("About {} left\n", Timer::autoFormatTime(time_rest));
+                        test_count++;
+                        time_test_total += timer_test.getElapsedTime();
                     }
                 }
                 //收集梯度完成，开始下一轮梯度收集的通知
@@ -662,15 +708,17 @@ void MainProcess::trainOneNet(std::vector<std::unique_ptr<Net>>& nets, int net_i
                 //}
             }
         }
+        LOG("Data for epoch {} trained in {} s\n", epoch_count, timer_net.getElapsedTime());
         //主网络负责保存，判断结束条件
         if (net_id == 0)
         {
+            //net->outputTime();
             bool stop = false;
             if (epoch_count >= total_epochs)
             {
                 stop = true;
             }
-            if (stop_no_effective_grad && test_train && epoch_count - effective_epoch_count > total_epochs / 3)
+            if (stop_no_effective_grad && epoch_count - effective_epoch_count > total_epochs / 3)
             {
                 LOG("Cannot find effective gradient!\n");
                 stop = true;
@@ -680,59 +728,60 @@ void MainProcess::trainOneNet(std::vector<std::unique_ptr<Net>>& nets, int net_i
                 LOG("Time limited {} s reached, stop training\n", time_limited);
                 stop = true;
             }
-            if (!save_format.empty()
-                && epoch_count % save_epoch == 0)
+            if (!save_format.empty() && epoch_count % save_epoch == 0)
             {
-                net->saveWeight(makeSaveName(save_format, epoch_count), makeSaveSign());
+                net->saveWeight(makeSaveName(save_format, epoch_count), makeSaveSign(), save_solver_state);
             }
+            LOG("{} s for this epoch, {} elapsed totally\n",
+                timer_per_epoch.getElapsedTime(), Timer::autoFormatTime(timer_total_.getElapsedTime()));
+            int total_test = total_epochs / test_epoch;
+            double train_time = timer_trained.getElapsedTime() - time_test_total;
+            double rest_time = train_time / epoch_count * (total_epochs - epoch_count) + time_test_total / total_test * (total_test - test_count);
+            LOG("About {} left\n", Timer::autoFormatTime(rest_time));
+            timer_per_epoch.start();
             if (stop)
             {
                 break;
             }
         }
+        if (epoch_count % test_epoch == 0)
+        {
+            net->getGpu()->printState();
+        }
     }
     ti.stop = 1;
     if (net_id == 0)
     {
-        ConsoleControl::setColor(CONSOLE_COLOR_LIGHT_RED);
-        if (test_test_origin)
-        {
-            LOG("Maximum accuracy on original test set is {:5.2f}% at epoch {}\n",
-                max_test_origin_accuracy * 100, max_test_origin_accuracy_epoch);
-        }
-        if (test_test)
-        {
-            LOG("Maximum accuracy on transformed test set is {:5.2f}% at epoch {}\n",
-                max_test_accuracy * 100, max_test_accuracy_epoch);
-        }
+        ConsoleControl::setColor(CONSOLE_COLOR_RED);
+        LOG("Maximum accuracy on transformed test set is {:5.2f}% at epoch {}\n", max_test_accuracy * 100, max_test_accuracy_epoch);
         if (!save_format.empty())
         {
-            net->saveWeight(makeSaveName(save_format, epoch_count), makeSaveSign());
+            net->saveWeight(makeSaveName(save_format, epoch_count), makeSaveSign(), save_solver_state);
         }
-        ConsoleControl::setColor(CONSOLE_COLOR_NONE);
+        ConsoleControl::resetColor();
     }
 }
 
-bool MainProcess::checkTestEffective(std::vector<TestInfo>& resultv_max, std::vector<TestInfo>& resultv)
+bool MainProcess::checkTestEffective(std::vector<TestInfo>& group_result_max, const std::vector<TestInfo>& group_result)
 {
     //有效epoch计数，所有非NAN的准确率都曾经大于0.1，则认为训练开始有效果
-    if (resultv.empty())
+    if (group_result.empty())
     {
         //特别情况
         return true;
     }
-    if (resultv_max.empty() && !resultv.empty())
+    if (group_result_max.empty() && !group_result.empty())
     {
-        resultv_max = resultv;
+        group_result_max = group_result;
     }
     int not_nan = 0, more_than_10 = 0;
-    for (int i = 0; i < resultv.size(); i++)
+    for (int i = 0; i < group_result.size(); i++)
     {
-        if (!std::isnan(resultv_max[i].accuracy) && !std::isnan(resultv[i].accuracy))
+        if (!std::isnan(group_result_max[i].accuracy) && !std::isnan(group_result[i].accuracy))
         {
             not_nan++;
-            resultv_max[i].accuracy = std::max(resultv_max[i].accuracy, resultv[i].accuracy);
-            if (resultv_max[i].accuracy > 0.1)
+            group_result_max[i].accuracy = std::max(group_result_max[i].accuracy, group_result[i].accuracy);
+            if (group_result_max[i].accuracy > 0.1)
             {
                 more_than_10++;
             }
@@ -745,55 +794,58 @@ bool MainProcess::checkTestEffective(std::vector<TestInfo>& resultv_max, std::ve
     return false;
 }
 
-bool MainProcess::checkTrainHealth(const std::vector<TestInfo>& resultvp, const std::vector<TestInfo>& resultv, float l1p, float l2p, float l1, float l2, double increase_limited, int effective_epoch_count)
+bool MainProcess::checkTrainHealth(const std::vector<TestInfo>& group_result_prev, const std::vector<TestInfo>& group_result, float l1p, float l2p, float l1, float l2, double increase_limited, int effective_epoch_count)
 {
-    //返回真表示有问题
-    auto checkResultV = [](const std::vector<TestInfo>& resultv) -> bool
+    //返回真表示没有问题
+    auto checkResultV = [](const std::vector<TestInfo>& group_result) -> bool
     {
         //若准确率只有1或0，则表示该结果有问题
         //但若全是1，则没有问题
-        if (resultv.size() == 0)
+        if (group_result.size() == 0)
         {
-            return false;
+            return true;
         }
         int count0 = 0, count1 = 0;
-        for (int i = 0; i < resultv.size(); i++)
+        for (int i = 0; i < group_result.size(); i++)
         {
-            if (resultv[i].right == resultv[i].total)    //若total为0也视为正确
+            if (group_result[i].right == group_result[i].total)    //若total为0也视为正确
             {
                 count1++;
             }
-            else if (resultv[i].right == 0)
+            else if (group_result[i].right == 0)
             {
                 count0++;
             }
         }
-        if (count0 > 0 && count0 + count1 == resultv.size())
+        if (count0 > 0 && count0 + count1 == group_result.size())
         {
-            return true;
+            return false;
         }
-        return false;
+        return true;
     };
-    //以下返回真表示没有问题
-    auto checkTestError = [checkResultV, effective_epoch_count, &resultv]() -> bool
+    //返回真表示没有问题
+    auto checkTestError = [checkResultV, effective_epoch_count, &group_result]() -> bool
     {
-        //在训练已经生效的情况下测试失败
-        return !(effective_epoch_count > 0 && checkResultV(resultv));
+        //训练未成功，则暂时为真
+        //结果正常即为真
+        return effective_epoch_count == 0 || checkResultV(group_result);
     };
-    auto checkAccurBack = [&resultv, &resultvp]() -> bool
+    //返回真表示没有问题
+    auto checkAccurBack = [&group_result, &group_result_prev]() -> bool
     {
         //若准确率在达到一定水平后忽然降低过多则认为失败
         int count = 0;
-        for (int i = 0; i < std::min(resultv.size(), resultvp.size()); i++)
+        for (int i = 0; i < std::min(group_result.size(), group_result_prev.size()); i++)
         {
-            if (!std::isnan(resultv[i].accuracy) && !std::isnan(resultvp[i].accuracy)
-                && resultvp[i].accuracy > 0.1 && resultv[i].accuracy / resultvp[i].accuracy < 0.1)
+            if (!std::isnan(group_result[i].accuracy) && !std::isnan(group_result_prev[i].accuracy)
+                && group_result_prev[i].accuracy > 0.1 && group_result[i].accuracy / group_result_prev[i].accuracy < 0.1)
             {
                 count++;
             }
         }
         return count == 0;
     };
+    //返回真表示没有问题
     auto checkNetWeights = [l1p, l2p, l1, l2, increase_limited]() -> bool
     {
         if (l1p == 0 || l2p == 0)
@@ -801,41 +853,32 @@ bool MainProcess::checkTrainHealth(const std::vector<TestInfo>& resultvp, const 
             return true;
         }
         //权重变化不能太剧烈
-        return !std::isnan(l1) && !std::isnan(l2) && l1 / l1p < increase_limited && l2 / l2p < increase_limited && l2 < l1;
+        return !std::isnan(l1) && !std::isnan(l2) && l1 / l1p < increase_limited && l2 / l2p < increase_limited;    // && l2 < l1;   暂时去掉这个条件
     };
+    //返回真表示没有问题
     return checkTestError() && checkNetWeights() && checkAccurBack();
 }
 
 //运行，注意容错保护较弱
 //注意通常情况下是使用第一个网络测试数据
-void MainProcess::run(int train_epochs /*= -1*/)
+void MainProcess::run()
 {
     auto& net = nets_[0];
 
     //初测
-    //使用CPU时不测试，终测同
-    if (GpuControl::getGlobalCudaType() == UnitType::GPU)
-    {
-        testData(net.get(), option_.getInt("train", "force_output"), option_.getInt("train", "test_type", 1));
-    }
-    if (train_epochs < 0)
-    {
-        train_epochs = option_.getInt("train", "train_epochs", 20);
-    }
+    testData(net.get());
 
-    train(nets_, data_preparer_.get(), train_epochs);
+    train(nets_, data_preparer_.get(), option_.getInt("train", "train_epochs", 10));
 
     std::string save_filename = option_.getString("train", "save_file");
     if (save_filename != "")
     {
-        net->saveWeight(save_filename, makeSaveSign());
+        net->saveWeight(save_filename, makeSaveSign(), option_.getInt("train", "save_solver_state"));
     }
-    net->getSolver().outputState();
+    //net->getSolver().outputState();
     //终测
-    if (GpuControl::getGlobalCudaType() == UnitType::GPU)
-    {
-        testData(net.get(), option_.getInt("train", "force_output"), option_.getInt("train", "test_type", 1));
-    }
+    testData(net.get());
+
     //附加测试，有多少个都能用
     extraTest(net.get(), "extra_test", option_.getInt("train", "force_output"), option_.getInt("train", "test_type", 1));
 
@@ -852,7 +895,7 @@ void MainProcess::run(int train_epochs /*= -1*/)
 }
 
 //输出训练集和测试集的测试结果
-void MainProcess::testData(Net* net, int force_output /*= 0*/, int test_type /*= 0*/)
+void MainProcess::testData(Net* net, int epoch, int total_epochs, int* max_accuracy_epoch, float* max_accuracy, std::vector<std::vector<TestInfo>>* collect_test_info, Matrix* X, Matrix* Y)
 {
     if (net == nullptr)
     {
@@ -862,21 +905,69 @@ void MainProcess::testData(Net* net, int force_output /*= 0*/, int test_type /*=
     //data_preparer_->X.message("Train data X");
     if (option_.getInt("train", "test_train_origin"))
     {
-        net->test(&data_preparer_->X0, &data_preparer_->Y0, nullptr, "Test on original train set", force_output, test_type);
+        LOG("Test net {}: original train set\n", net->getId());
+        Matrix temp(DataType::CURRENT, UnitType::CPU);
+        net->test(&data_preparer_->X0, &data_preparer_->Y0, &temp);
+        if (epoch >= total_epochs * 0.833)
+        {
+            data_preparer_->checkData(temp);
+        }
     }
     if (option_.getInt("train", "test_train"))
     {
-        net->test(&data_preparer_->X, &data_preparer_->Y, nullptr, "Test on transformed train set", force_output, test_type);
+        LOG("Test net {}: transformed train set\n", net->getId());
+        Matrix temp(DataType::CURRENT, UnitType::CPU);
+        //注意其实变换后的训练集应该在显存中，且训练中必定存在，因此可以通过参数传入
+        if (X && Y)
+        {
+            net->test(X, Y, &temp);
+        }
+        else
+        {
+            net->test(&data_preparer_->X, &data_preparer_->Y, &temp);
+        }
+        //if (epoch >= total_epochs * 0.833)
+        {
+            data_preparer_->checkData(temp);
+        }
+        if (collect_test_info)
+        {
+            collect_test_info->push_back(net->getGroupTestInfo());
+        }
     }
-    if (option_.getInt("train", "test_test_origin"))
+    if (data_preparer2_)
     {
-        net->test(&data_preparer2_->X0, &data_preparer2_->Y0, nullptr, "Test on original test set", force_output, test_type);
+        if (option_.getInt("train", "test_test_origin"))
+        {
+            LOG("Test net {}: original test set\n", net->getId());
+            Matrix temp(DataType::CURRENT, UnitType::CPU);
+            net->test(&data_preparer2_->X0, &data_preparer2_->Y0, &temp);
+            data_preparer2_->checkData(temp);
+            if (max_accuracy_epoch && max_accuracy)
+            {
+                if (net->getTestInfo().accuracy >= *max_accuracy)
+                {
+                    *max_accuracy = net->getTestInfo().accuracy;
+                    *max_accuracy_epoch = epoch;
+                }
+            }
+        }
+        if (option_.getInt("train", "test_test"))
+        {
+            LOG("Test net {}: transformed test set\n", net->getId());
+            Matrix temp(DataType::CURRENT, UnitType::CPU);
+            net->test(&data_preparer2_->X, &data_preparer2_->Y, &temp);
+            data_preparer2_->checkData(temp);
+            if (max_accuracy_epoch && max_accuracy)
+            {
+                if (net->getTestInfo().accuracy >= *max_accuracy)
+                {
+                    *max_accuracy = net->getTestInfo().accuracy;
+                    *max_accuracy_epoch = epoch;
+                }
+            }
+        }
     }
-    if (option_.getInt("train", "test_test"))
-    {
-        net->test(&data_preparer2_->X, &data_preparer2_->Y, nullptr, "Test on transformed test set", force_output, test_type);
-    }
-    net->outputNorm();
 }
 
 //附加测试集，一般无用
@@ -887,7 +978,8 @@ void MainProcess::extraTest(Net* net, const std::string& section, int force_outp
         return;
     }
     auto dp_test = DataPreparerFactory::makeUniquePtr(&option_, section, net->getX().getDim(), net->getY().getDim());
-    net->test(&dp_test->X, &dp_test->Y, nullptr, "Extra test", force_output, test_type);
+    LOG("Extra test\n");
+    net->test(&dp_test->X, &dp_test->Y, nullptr);
 }
 
 int MainProcess::testExternalData(void* x, void* y, void* a, int n, int attack_times, double* error)
@@ -895,37 +987,39 @@ int MainProcess::testExternalData(void* x, void* y, void* a, int n, int attack_t
     std::vector<int> n_begin(1, 0), n_count(1, n);
     auto run = [this, x, y, a, attack_times, error, &n_begin, &n_count](int i)
     {
-        Matrix X(DataType::FLOAT, UnitType::CPU), Y(DataType::FLOAT, UnitType::CPU), A(DataType::FLOAT, UnitType::CPU);
-
         auto net = nets_[i].get();
+        auto dt = net->getX().getDataType();
+        Matrix X(dt, UnitType::CPU), Y(dt, UnitType::CPU), A(dt, UnitType::CPU);
         auto dim0 = net->getX().getDim();
         dim0.back() = n_count[i];
         auto dim1 = net->getY().getDim();
         dim1.back() = n_count[i];
+        auto size = X.getDataTypeSize();
 
         Matrix *x1 = nullptr, *y1 = nullptr, *a1 = nullptr;
         if (x)
         {
-            X.shareData((float*)x + net->getX().getRow() * n_begin[i]);
+            X.shareData((char*)x + net->getX().getRow() * n_begin[i] * size);
             X.resize(dim0);
+            //X = X.transDataType(DataType::HALF);
             x1 = &X;
         }
         if (y)
         {
-            Y.shareData((float*)y + net->getY().getRow() * n_begin[i]);
+            Y.shareData((char*)y + net->getY().getRow() * n_begin[i] * size);
             Y.resize(dim1);
             y1 = &Y;
         }
         if (a)
         {
-            A.shareData((float*)a + net->getA().getRow() * n_begin[i]);
+            A.shareData((char*)a + net->getA().getRow() * n_begin[i] * size);
             A.resize(dim1);
             a1 = &A;
         }
 
         //auto& m = CudaControl::select(net->getDeviceID())->getMutex();
         //std::lock_guard<std::mutex> lk(m);
-        return net->test(x1, y1, a1, "", 0, 0, attack_times, error);
+        return net->test_only(X, A);
     };
     if (nets_.size() == 1)
     {
@@ -950,7 +1044,6 @@ int MainProcess::testExternalData(void* x, void* y, void* a, int n, int attack_t
                 } };
         }
         run(0);
-        //#pragma omp parallel for
         for (int i = 1; i < nets_.size(); i++)
         {
             ths[i].join();

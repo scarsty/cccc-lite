@@ -11,7 +11,16 @@ private:
     MatrixEx() = delete;
 
 public:
+    struct ConvMethod
+    {
+        int algo = -1, math_type = -1, group_number = 0;
+    };
+
+    static const int conv_method_count = 8;
+
     //以下函数不属于矩阵基本运算
+
+    static void elementMulSum(const Matrix& A, const Matrix& B, Matrix& R, float a = 1, float r = 0);
 
     //按channel加偏置
     static void addBias(const Matrix& X, const Matrix& bias, Matrix& Y, float a = 1, float b = 1);
@@ -19,51 +28,47 @@ public:
 
     // the function is private for concat the data and append the data
     static void concatByChannel(const std::vector<MatrixSP>& X_vector, Matrix& Y);
-    static void concatByChannelBackward(std::vector<MatrixSP>& X_vector, const Matrix& Y);
+    static void concatByChannelBackward(std::vector<MatrixSP>& X_vector, Matrix& Y);
     static void splitByChannel(const Matrix& X, std::vector<Matrix>& Y_vector);
 
-    static void activeBufferInit(const Matrix& X, ActiveFunctionType af, std::vector<int>& int_vector, std::vector<float>& real_vector, std::vector<Matrix>& matrix_vector);
+    static void activeBufferInit(const Matrix& X, Matrix& Y, ActiveFunctionType af, std::vector<int>& int_vector, std::vector<float>& real_vector);
 
     //激活的实际计算
     //激活和反向激活中，输入和输出矩阵都是同维度
     //请注意反向的情况，常数a和r的含义与正向的对应关系不同
     static void activeForward(const Matrix& X, Matrix& Y, ActiveFunctionType af,
-        std::vector<int>& int_vector, std::vector<float>& real_vector, std::vector<Matrix>& matrix_vector, float a = 1, float r = 0);
+        std::vector<int>& int_vector, std::vector<float>& real_vector, float a = 1, float r = 0);
     static void activeBackward(Matrix& X, const Matrix& Y, ActiveFunctionType af,
-        std::vector<int>& int_vector, std::vector<float>& real_vector, std::vector<Matrix>& matrix_vector, float a = 1, float r = 0);
+        std::vector<int>& int_vector, std::vector<float>& real_vector, float a = 1, float r = 0);
 
     static void activeForwardSimple(const Matrix& X, Matrix& Y, ActiveFunctionType af, float a = 1, float r = 0);
     static void activeBackwardSimple(Matrix& X, const Matrix& Y, ActiveFunctionType af, float a = 1, float r = 0);
 
     static void poolingForward(const Matrix& X, Matrix& Y, PoolingType pooling_type, PoolingReverseType reverse_type,
         const std::vector<int>& window, const std::vector<int>& stride, const std::vector<int>& padding,
-        float a = 1, float r = 0, Matrix* workspace = nullptr);
+        float a = 1, float r = 0);
     static void poolingBackward(Matrix& X, const Matrix& Y, PoolingType pooling_type, PoolingReverseType reverse_type,
         const std::vector<int>& window, const std::vector<int>& stride, const std::vector<int>& padding,
-        float a = 1, float r = 0, Matrix* workspace = nullptr);
+        float a = 1, float r = 0);
 
-    struct ConvMethod
-    {
-        int algo = -1, math_type = -1, group_number = 0;
-    };
+    static void poolingChannelForward(Matrix& X, Matrix& Y, PoolingType pooling_type, PoolingReverseType reverse_type, float a = 1, float r = 0);
+    static void poolingChannelBackward(Matrix& X, Matrix& Y, PoolingType pooling_type, PoolingReverseType reverse_typ, float a = 1, float r = 0);
 
-    static const int conv_method_count = 8;
     static void convolutionForward(const Matrix& X, const Matrix& W, Matrix& Y,
         const std::vector<int>& stride, const std::vector<int>& padding,
-        float a = 1, float r = 0, ConvMethod* method = nullptr, Matrix* workspace = nullptr);
+        float a = 1, float r = 0);
     static void convolutionBackward(Matrix& X, Matrix& W, const Matrix& Y,
         const std::vector<int>& stride, const std::vector<int>& padding,
-        float a = 1, float rx = 0, float aw = 1, float rw = 0,
-        ConvMethod* method_dx = nullptr, ConvMethod* method_dw = nullptr, Matrix* workspace_dx = nullptr, Matrix* workspace_dw = nullptr);
+        float a = 1, float rx = 0, float aw = 1, float rw = 0);
     static void convolutionBackwardDX(Matrix& X, const Matrix& W, const Matrix& Y,
         const std::vector<int>& stride, const std::vector<int>& padding,
-        float a = 1, float r = 0, ConvMethod* method_dx = nullptr, Matrix* workspace_dx = nullptr);
+        float a = 1, float r = 0);
     static void convolutionBackwardDW(const Matrix& X, Matrix& W, const Matrix& Y,
         const std::vector<int>& stride, const std::vector<int>& padding,
-        float a = 1, float r = 0, ConvMethod* method_dw = nullptr, Matrix* workspace_dw = nullptr);
+        float a = 1, float r = 0);
 
-    static void dropoutForward(const Matrix& X, Matrix& Y, ActivePhaseType work_phase, float v, int seed, Matrix& rg_stat, Matrix& reverse_space);
-    static void dropoutBackward(Matrix& X, const Matrix& Y, float v, int seed, Matrix& rg_stat, Matrix& reverse_space);
+    static void dropoutForward(const Matrix& X, Matrix& Y, float v, int seed);
+    static void dropoutBackward(Matrix& X, const Matrix& Y, float v, int seed);
 
     //GPU only ----------------------------------------------------------------------------------------------------
 
@@ -94,12 +99,15 @@ public:
     static void leaky_relu(const Matrix& X, Matrix& Y, float l, float a = 1, float b = 0);
     static void leaky_relub(Matrix& X, const Matrix& Y, float l, float a = 1, float b = 0);
 
-    static void correlationForward(const Matrix& X, const Matrix& W, Matrix& Y, std::vector<int>& methods, std::vector<Matrix>& workspaces,
-        const std::vector<int>& stride, const std::vector<int>& padding, float a = 1, float r = 0);
-    static void correlationBackward(Matrix& X, Matrix& W, const Matrix& Y, std::vector<int>& methods, std::vector<Matrix>& workspaces,
+    static void correlationForward(const Matrix& X, const Matrix& W, Matrix& Y,
+        const std::vector<int>& stride, const std::vector<int>& padding,
+        float a = 1, float r = 0);
+    static void correlationBackward(Matrix& X, Matrix& W, const Matrix& Y, std::vector<int>& methods,
         const std::vector<int>& stride, const std::vector<int>& padding, float a = 1, float rx = 0, float rw = 0);
     static void matrix_max(const Matrix& X1, const Matrix& X2, Matrix& Y);
     static void matrix_maxb(Matrix& X1, Matrix& X2, const Matrix& Y, float a1, float a2, float r);
+
+    static void zero_limit(const Matrix& A, const Matrix& B, Matrix& R, float beta_a, float beta_b);
 };
 
 }    // namespace cccc

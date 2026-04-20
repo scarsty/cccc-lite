@@ -18,14 +18,14 @@ namespace cccc
 //描述符最低为4维
 Matrix::Matrix(const std::vector<int>& dim, DataType data_type, UnitType device_type, bool create_d)
 {
-    if (GpuControl::getGlobalCudaType() == UnitType::CPU) { device_type = UnitType::CPU; }
+    if (GpuControl::getGlobalGpuType() == UnitType::CPU) { device_type = UnitType::CPU; }
     if (data_type == DataType::CURRENT) { data_type = current_data_type(); }
     shared_data_->setDataType(data_type);
     auto size = VectorMath::multiply(dim);
-    assert(device_type == UnitType::CPU || device_type == UnitType::GPU && GpuControl::getGlobalCudaType() == UnitType::GPU);
-    if (device_type == UnitType::GPU && GpuControl::getGlobalCudaType() == UnitType::GPU)
+    assert(device_type == UnitType::CPU || device_type == UnitType::GPU && GpuControl::getGlobalGpuType() == UnitType::GPU);
+    if (device_type == UnitType::GPU && GpuControl::getGlobalGpuType() == UnitType::GPU)
     {
-        shared_data_->setCudaAsCurrent();
+        shared_data_->setCurrentGpuToHere();
     }
     resize(dim);
     if (create_d)
@@ -81,10 +81,10 @@ Matrix Matrix::createShared() const
     return *this;
 }
 
-Matrix Matrix::createSharedCol(int col) const
+Matrix Matrix::createSharedCol(int col, int count) const
 {
     auto dim = dim_;
-    dim.back() = 1;
+    dim.back() = count;
     Matrix M(dim, getDataType(), getDeviceType());
     M.shareData(*this, 0, col);
     return M;
@@ -108,7 +108,7 @@ Matrix Matrix::transDataType(DataType data_type) const
     {
         return *this;
     }
-    Matrix M(dim_, data_type);
+    Matrix M(dim_, data_type, getDeviceType());
     if (isCuda())
     {
         //unfinished
@@ -137,6 +137,7 @@ Matrix& Matrix::d() const
     if (d_this_->data_size_ != data_size_)
     {
         d_this_->resize(dim_);
+        d_this_->fillData(0);
     }
     return *d_this_;
 }
@@ -208,7 +209,7 @@ int Matrix::resize(int w, int h, int c, int n, bool reserve_data, bool force)
 int Matrix::resize(const std::vector<int>& dim, bool reserve_data, bool force)
 {
     setDim(dim);
-    //指针与共享指针不同时，则认为是数据不由自己管理，不分配空间，此时可能会有隐患
+    //指针与共享指针不同时，则认为是数据不由自己管理，不分配空间，此时若实际的空间比记录的尺寸小，则会有隐患
     if (data() != shared_data_->data_)
     {
         return 2;
@@ -405,12 +406,14 @@ void Matrix::shareData(const Matrix& A, int w, int h, int c, int n)
 }
 
 //指针来自外部，故此时不宜将指针交由自身管理
-void Matrix::shareData(float* data)
+void Matrix::shareData(void* data)
 {
     data_ = data;
     auto gpu = shared_data_->gpu_;
+    auto data_type_ = shared_data_->data_type_;
     shared_data_ = std::make_shared<MatrixData>();
     shared_data_->gpu_ = gpu;
+    shared_data_->data_type_ = data_type_;
 }
 
 //以同一个值初始化矩阵
@@ -483,13 +486,13 @@ Matrix& Matrix::fillRandom(int seed /*= 0*/)
 //内存中的数据转移到显存
 void Matrix::toGPU()
 {
-    if (!isCuda() && GpuControl::getGlobalCudaType() == UnitType::GPU)
+    if (!inGpu() && GpuControl::getGlobalGpuType() == UnitType::GPU)
     {
         auto temp = shared_data_;
         //std::swap(temp, shared_data_->data_);
         shared_data_ = std::make_shared<MatrixData>();
         shared_data_->occupy_data_size_ = 0;
-        shared_data_->setCudaAsCurrent();
+        shared_data_->setCurrentGpuToHere();
         shared_data_->resize(data_size_, getDataType());
         MatrixData::copy(API_UNKNOWN, temp->data_, getApiType(), shared_data_->data_, data_size_, getDataType());
         //delete[] temp;
@@ -497,16 +500,33 @@ void Matrix::toGPU()
     }
 }
 
+void Matrix::toCurrentGPU()
+{
+    if (gpu() == GpuControl::getCurrentGpu())
+    {
+        return;
+    }
+    if (inGpu() && gpu() != GpuControl::getCurrentGpu())
+    {
+        toCPU();
+        toGPU();
+    }
+    else
+    {
+        toGPU();
+    }
+}
+
 //显存中的数据转移到内存
 void Matrix::toCPU(bool reserve_data)
 {
-    if (isCuda())
+    if (inGpu())
     {
         void* temp = new char[getDataSizeInByte()];
         MatrixData::copy(getApiType(), shared_data_->data_, API_UNKNOWN, temp, data_size_, getDataType());
         //shared_data_->free();
         shared_data_ = std::make_shared<MatrixData>();
-        shared_data_->setCuda(nullptr);
+        shared_data_->setGpu(nullptr);
         shared_data_->occupy_data_size_ = data_size_;
         std::swap(temp, shared_data_->data_);
         data_ = shared_data_->data_;
@@ -516,7 +536,7 @@ void Matrix::toCPU(bool reserve_data)
 //flip和transpose暂时仅用于cpu
 void Matrix::flip(int flip_flag)
 {
-    if (isCuda())
+    if (inGpu())
     {
         return;
     }
@@ -614,7 +634,17 @@ std::shared_ptr<MatrixData> Matrix::dataMirrorCPU(bool reserve_data) const
     }
     else
     {
-        return shared_data_;
+        if (shared_data_->data_)
+        {
+            return shared_data_;
+        }
+        else
+        {
+            auto shared_data = std::make_shared<MatrixData>();
+            shared_data->resize(data_size_, getDataType());
+            memcpy(shared_data->data_, data_, getDataSizeInByte());
+            return shared_data;
+        }
     }
 }
 
@@ -808,10 +838,9 @@ void Matrix::scale(float v)
 }
 
 //好像没有直接的功能
-void Matrix::scale(const Matrix& A, Matrix& R, float v)
+void Matrix::scale(const Matrix& A, Matrix& R, float a, float b)
 {
-    copyData(A, R);
-    R.scale(v);
+    Matrix::add(A, R, R, a, b);
 }
 
 //选择一列数乘
@@ -981,7 +1010,7 @@ void Matrix::elementMul(const Matrix& A, const Matrix& B, Matrix& R, float a, fl
     }
     else
     {
-        for (int i = 0; i < A.data_size_; i++)
+        for (int i = 0; i < std::min(B.data_size_, R.data_size_); i++)
         {
             R.setData(i, A.getData(i) * B.getData(i) * a + R.getData(i) * r);
         }
@@ -1435,11 +1464,11 @@ std::string Matrix::sizeMessage(int include_batch) const
 {
     if (include_batch)
     {
-        return fmt1::format("Matrix({}, {}, {}, {})", width_, height_, channel_, number_, getDataPtr());
+        return std::format("Matrix({}, {}, {}, {})", width_, height_, channel_, number_, getDataPtr());
     }
     else
     {
-        return fmt1::format("Matrix({}, {}, {}, batch)", width_, height_, channel_);
+        return std::format("Matrix({}, {}, {}, batch)", width_, height_, channel_);
     }
 }
 }    // namespace cccc

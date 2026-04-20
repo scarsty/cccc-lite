@@ -1,6 +1,6 @@
 ﻿#pragma once
 
-#include "dll_export.h"
+#include "cccc_export.h"
 #include <cfloat>
 #include <climits>
 #include <cstdint>
@@ -53,7 +53,7 @@ enum ActiveFunctionType
     ACTIVE_FUNCTION_LOCAL_RESPONSE_NORMALIZATION,
     ACTIVE_FUNCTION_LOCAL_CONSTRAST_NORMALIZATION,
     ACTIVE_FUNCTION_DIVISIVE_NORMALIZATION,
-    ACTIVE_FUNCTION_BATCH_NORMALIZATION,
+    ACTIVE_FUNCTION_BATCH_NORMALIZATION_deprecated,
     ACTIVE_FUNCTION_SPATIAL_TRANSFORMER,
     ACTIVE_FUNCTION_SQUARE,
     ACTIVE_FUNCTION_SUMMAX,
@@ -86,7 +86,7 @@ enum PoolingType
     POOLING_MAX = 0,
     POOLING_AVERAGE_PADDING = 1,
     POOLING_AVERAGE_NOPADDING = 2,
-    POOLING_MA,    //实验功能，正向max，反向average
+    POOLING_MA,    //实验功能
 };
 
 //是否反卷积
@@ -146,6 +146,7 @@ enum RandomFillType
     RANDOM_FILL_GAUSSIAN,
     RANDOM_FILL_MSRA,
     RANDOM_FILL_LECUN,
+    RANDOM_FILL_KAIMING,
 };
 
 //调整学习率模式
@@ -157,6 +158,7 @@ enum AdjustLearnRateType
     ADJUST_LEARN_RATE_STEPS,
     ADJUST_LEARN_RATE_STEPS_WARM,
     ADJUST_LEARN_RATE_STEPS_AUTO,
+    ADJUST_LEARN_RATE_STEPS_WARM2,
 };
 
 enum BatchNormalizationType
@@ -218,6 +220,7 @@ enum PruneType
 struct TestInfo
 {
     double accuracy = 0;
+    double error = 0;
     int64_t right = 0, total = 0;
 };
 

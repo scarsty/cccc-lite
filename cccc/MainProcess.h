@@ -26,14 +26,17 @@ protected:
     Option option_;
     Timer timer_total_;
     int MP_count_ = 1;
+    std::string train_filename_;
+    std::vector<GpuControl> gpus_;    //需要在网络后面析构，即GpuControl必须在所有矩阵析构之后析构
     std::vector<std::unique_ptr<Net>> nets_;
-    std::vector<GpuControl> gpus_;
+
     WorkModeType work_mode_ = WORK_MODE_NORMAL;
 
 public:
     void setCallback(std::function<void(MainProcess*)> f) { running_callback_ = f; }
 
     Option* getOption() { return &option_; }
+    void setTrainFilename(const std::string& filename) { train_filename_ = filename; }    //训练集文件名，主要用于保存权重时的命名
 
 protected:
     //epoch和iter的统计
@@ -64,7 +67,7 @@ public:
     virtual void initDataPreparer();
     void initTrainData();
     void initTestData();
-    std::string makeSaveName(const std::string& save_format, int epoch_count);
+    std::string makeSaveName(const std::string& save_format, int epoch_count, bool is_filename = true);
     std::string makeSaveSign();
 
 public:
@@ -98,8 +101,8 @@ private:
 
     void trainOneNet(std::vector<std::unique_ptr<Net>>& nets, int net_id, TrainInfo& ti, int total_epochs);
 
-    bool checkTestEffective(std::vector<TestInfo>& resultv_max, std::vector<TestInfo>& resultv);
-    bool checkTrainHealth(const std::vector<TestInfo>& resultvp, const std::vector<TestInfo>& resultv, float l1p, float l2p, float l1, float l2, double increase_limited, int effective_epoch_count);
+    static bool checkTestEffective(std::vector<TestInfo>& group_result_max, const std::vector<TestInfo>& group_result);
+    static bool checkTrainHealth(const std::vector<TestInfo>& group_result_prev, const std::vector<TestInfo>& group_result, float l1p, float l2p, float l1, float l2, double increase_limited, int effective_epoch_count);
 
 public:
     //获取网络的时候，应注意当前的gpu
@@ -115,8 +118,8 @@ public:
     const std::vector<std::unique_ptr<Net>>& getNets() { return nets_; }
 
 public:
-    void run(int train_epochs = -1);
-    void testData(Net* net, int force_output = 0, int test_type = 0);
+    void run();
+    void testData(Net* net, int epoch = 0, int total_epochs = 0, int* max_accuracy_epoch = nullptr, float* max_accuracy = nullptr, std::vector<std::vector<TestInfo>>* collect_test_info = nullptr, Matrix* X = nullptr, Matrix* Y = nullptr);
     void extraTest(Net* net, const std::string& section, int force_output = 0, int test_type = 0);
 
 public:

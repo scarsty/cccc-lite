@@ -12,7 +12,7 @@ C_EXPORT int cuda_half2float(void* p1, void* p2, unsigned int size);
 
 C_EXPORT int cuda_reciprocal(int type, void* A, void* B, unsigned int size, float scale, float epsilon);
 C_EXPORT int cuda_addnumber(int type, void* A, void* R, unsigned int size, float number, float scale);
-C_EXPORT int cuda_pow(int type, void* A, void* R, unsigned int size, float bias, float a2);
+C_EXPORT int cuda_pow(int type, void* A, void* R, unsigned int size, float e, float bias);
 C_EXPORT int cuda_sparse(int type, void* p1, void* p2, unsigned int size, float rou, float beta);
 C_EXPORT int cuda_sign(int type, void* A, void* R, unsigned int size, float v, float section);
 C_EXPORT int cuda_cross_entropy(int type, void* A, void* B, void* R, unsigned int size, float a, float scale);
@@ -37,3 +37,5 @@ C_EXPORT int cuda_leaky_relub(int type, void* A, void* dA, void* R, void* dR, un
 
 C_EXPORT int cuda_max(int type, void* A, void* B, void* R, unsigned int size, float unuse1, float unuse2, float unuse3);
 C_EXPORT int cuda_maxb(int type, void* A, void* dA, void* B, void* dB, void* R, void* dR, unsigned int size, float alpha, float beta_a, float beta_b);
+
+C_EXPORT int cuda_zero_limit(int type, void* A, void* B, void* R, unsigned int size, float beta_a, float beta_b);

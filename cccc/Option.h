@@ -20,9 +20,6 @@ public:
     Option();
     Option(const std::string& filename);
 
-public:
-    std::string dealString(std::string str, bool allow_path);
-
     //以下为枚举值的处理
 private:
     struct CompareNoUnderline
@@ -56,13 +53,13 @@ private:
     template <typename T>
     void registerEnum(std::vector<std::pair<std::string, T>> members)
     {
-        for (auto m : members)
+        for (auto [k, v] : members)
         {
-            enum_map_[typeid(T).name()][m.first] = int(m.second);
+            enum_map_[typeid(T).name()][k] = int(v);
             //反查map只保留第一个，注册时需注意顺序
-            if (enum_map_reverse_[typeid(T).name()].count(int(m.second)) == 0)
+            if (enum_map_reverse_[typeid(T).name()].count(int(v)) == 0)
             {
-                enum_map_reverse_[typeid(T).name()][int(m.second)] = m.first;
+                enum_map_reverse_[typeid(T).name()][int(v)] = k;
             }
         }
     }
