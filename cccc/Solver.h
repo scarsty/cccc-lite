@@ -98,5 +98,8 @@ public:
     void outputState() const;
 
 private:
-    
+    static int findInter(int x, std::vector<int>& xv);
+
+};    // class Solver
+
 }    // namespace cccc

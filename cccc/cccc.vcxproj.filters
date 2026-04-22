@@ -50,6 +50,9 @@
     <Filter Include="mainprocess">
       <UniqueIdentifier>{0b817fea-8808-42c4-8adb-6c357148dd45}</UniqueIdentifier>
     </Filter>
+    <Filter Include="cifa">
+      <UniqueIdentifier>{064b1fbf-4a5a-4780-b41b-18e4b0691ce4}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="DataPreparer.cpp">
@@ -106,9 +109,6 @@
     <ClCompile Include="predict.cpp">
       <Filter>predict</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\mlcc\Cifa.cpp">
-      <Filter>mlcc</Filter>
-    </ClCompile>
     <ClCompile Include="..\..\mlcc\filefunc.cpp">
       <Filter>mlcc</Filter>
     </ClCompile>
@@ -120,6 +120,12 @@
     </ClCompile>
     <ClCompile Include="..\..\mlcc\strfunc.cpp">
       <Filter>mlcc</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\mlcc\vramusage.cpp">
+      <Filter>sources</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\cifa\Cifa.cpp">
+      <Filter>cifa</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -192,9 +198,6 @@
     <ClInclude Include="Log.h">
       <Filter>log</Filter>
     </ClInclude>
-    <ClInclude Include="predict.h">
-      <Filter>predict</Filter>
-    </ClInclude>
     <ClInclude Include="..\..\mlcc\Random.h">
       <Filter>mlcc</Filter>
     </ClInclude>
@@ -202,9 +205,6 @@
       <Filter>mlcc</Filter>
     </ClInclude>
     <ClInclude Include="..\..\mlcc\Timer.h">
-      <Filter>mlcc</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\mlcc\Cifa.h">
       <Filter>mlcc</Filter>
     </ClInclude>
     <ClInclude Include="..\..\mlcc\ConsoleControl.h">
@@ -245,6 +245,9 @@
     </ClInclude>
     <ClInclude Include="..\..\mlcc\vramusage.h">
       <Filter>mlcc</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\cifa\Cifa.h">
+      <Filter>cifa</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

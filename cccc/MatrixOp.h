@@ -242,8 +242,7 @@ std::vector<MatrixOp> L2(const std::vector<MatrixSP>& v);
 template <typename CharT>
 struct std::formatter<cccc::MatrixSP, CharT>
 {
-    template <typename FormatParseContext>
-    auto parse(FormatParseContext& pc)
+    constexpr auto parse(std::basic_format_parse_context<CharT>& pc)
     {
         return pc.begin();
     }

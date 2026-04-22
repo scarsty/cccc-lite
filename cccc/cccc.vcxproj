@@ -61,13 +61,14 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <PreprocessorDefinitions>_DEBUG;_WINDOWS;__HIP_PLATFORM_AMD__;AUTO_LOAD_GPU_FUNCTIONS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>.;./layer;../include;../include/cuda;../cccc-cuda;../cccc-hip;$(CUDA_PATH)/include;$(HIP_PATH)/include;../../mlcc;$(VCPKG_LIB_PATH)\x64-windows\include</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>.;./layer;../include;../include/cuda;../cccc-cuda;../cccc-hip;$(CUDA_PATH)/include;$(HIP_PATH)/include;../../mlcc;$(VCPKG_LIB_PATH)\x64-windows\include;../../cifa</AdditionalIncludeDirectories>
       <PreprocessToFile>false</PreprocessToFile>
       <OpenMPSupport>false</OpenMPSupport>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <LanguageStandard>stdcpplatest</LanguageStandard>
       <ScanSourceForModuleDependencies>false</ScanSourceForModuleDependencies>
-      <TranslateIncludes>true</TranslateIncludes>
+      <TranslateIncludes>false</TranslateIncludes>
+      <AdditionalOptions>/utf-8 /FS %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -93,7 +94,7 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <PreprocessorDefinitions>NNO_CUDA;NDEBUG;_WINDOWS;DISABLE_OUTOUT_NET;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>.;./layer;../include;../include/cuda;../../mlcc;../cccc-cuda;../cccc-hip;$(CUDA_PATH)/include;$(HIP_PATH)/include;$(VCPKG_LIB_PATH)\x64-windows\include</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>.;./layer;../include;../include/cuda;../../mlcc;../cccc-cuda;../cccc-hip;$(CUDA_PATH)/include;$(HIP_PATH)/include;$(VCPKG_LIB_PATH)\x64-windows\include;../../cifa</AdditionalIncludeDirectories>
       <EnableParallelCodeGeneration>true</EnableParallelCodeGeneration>
       <OpenMPSupport>true</OpenMPSupport>
       <PreprocessToFile>false</PreprocessToFile>
@@ -104,6 +105,7 @@
       <ConformanceMode>true</ConformanceMode>
       <ScanSourceForModuleDependencies>false</ScanSourceForModuleDependencies>
       <TranslateIncludes>false</TranslateIncludes>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -126,7 +128,7 @@
     </Lib>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="..\..\mlcc\Cifa.cpp" />
+    <ClCompile Include="..\..\cifa\Cifa.cpp" />
     <ClCompile Include="..\..\mlcc\filefunc.cpp" />
     <ClCompile Include="..\..\mlcc\strfunc.cpp" />
     <ClCompile Include="..\..\mlcc\vramusage.cpp" />
@@ -152,7 +154,7 @@
     <ClCompile Include="TensorDesc.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\..\mlcc\Cifa.h" />
+    <ClInclude Include="..\..\cifa\Cifa.h" />
     <ClInclude Include="..\..\mlcc\ConsoleControl.h" />
     <ClInclude Include="..\..\mlcc\INIReaderBin.h" />
     <ClInclude Include="..\..\mlcc\strfunc.h" />
