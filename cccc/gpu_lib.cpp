@@ -118,6 +118,7 @@ private:
         "cudnn64_7",
         "cccc-cuda",
         "amdhip64_7",
+        "amdhip64_6",
         "rocblas",
         "miopen",
         "cccc-hip",
