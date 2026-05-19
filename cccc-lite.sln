@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio Version 17
-VisualStudioVersion = 17.0.31903.59
+# Visual Studio Version 18
+VisualStudioVersion = 18.6.11806.211 stable
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "cccc", "cccc\cccc.vcxproj", "{271C3640-1916-4736-B07F-DABF0F3914DF}"
 	ProjectSection(ProjectDependencies) = postProject
@@ -12,6 +12,7 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "cccc-windows", "cccc-window
 	ProjectSection(ProjectDependencies) = postProject
 		{271C3640-1916-4736-B07F-DABF0F3914DF} = {271C3640-1916-4736-B07F-DABF0F3914DF}
 		{A5C5A5AE-E816-4189-9518-23190FDAC9AE} = {A5C5A5AE-E816-4189-9518-23190FDAC9AE}
+		{E5F2A3B8-7C4D-4E6F-9A1B-0C8D5E7F2A3B} = {E5F2A3B8-7C4D-4E6F-9A1B-0C8D5E7F2A3B}
 	EndProjectSection
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "cccc-cuda", "cccc-cuda\cccc-cuda.vcxproj", "{41A4761D-BA0D-47FF-83CA-F4445F7AEDE0}"
@@ -22,6 +23,11 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "cccc-mnist", "cccc-mnist\cc
 	EndProjectSection
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "cccc-hip", "cccc-hip\cccc-hip.vcxproj", "{0C83E964-B8EF-4EB9-BEA5-8446F6A7A965}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "cccc-sd", "cccc-sd\cccc-sd.vcxproj", "{E5F2A3B8-7C4D-4E6F-9A1B-0C8D5E7F2A3B}"
+	ProjectSection(ProjectDependencies) = postProject
+		{271C3640-1916-4736-B07F-DABF0F3914DF} = {271C3640-1916-4736-B07F-DABF0F3914DF}
+	EndProjectSection
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -49,6 +55,10 @@ Global
 		{0C83E964-B8EF-4EB9-BEA5-8446F6A7A965}.Debug|x64.Build.0 = Debug|x64
 		{0C83E964-B8EF-4EB9-BEA5-8446F6A7A965}.Release|x64.ActiveCfg = Release|x64
 		{0C83E964-B8EF-4EB9-BEA5-8446F6A7A965}.Release|x64.Build.0 = Release|x64
+		{E5F2A3B8-7C4D-4E6F-9A1B-0C8D5E7F2A3B}.Debug|x64.ActiveCfg = Debug|x64
+		{E5F2A3B8-7C4D-4E6F-9A1B-0C8D5E7F2A3B}.Debug|x64.Build.0 = Debug|x64
+		{E5F2A3B8-7C4D-4E6F-9A1B-0C8D5E7F2A3B}.Release|x64.ActiveCfg = Release|x64
+		{E5F2A3B8-7C4D-4E6F-9A1B-0C8D5E7F2A3B}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

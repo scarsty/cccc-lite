@@ -42,11 +42,11 @@
 #include "rocblas/rocblas.h"
 #endif
 
-#ifndef _DEBUG
+//#ifndef _DEBUG
 #ifndef AUTO_LOAD_GPU_FUNCTIONS
 #define AUTO_LOAD_GPU_FUNCTIONS
 #endif
-#endif
+//#endif
 
 namespace cccc
 {
@@ -91,14 +91,34 @@ namespace cccc
 
 inline cudnnDataType_t toCudnnDataType(DataType dt)
 {
-    const cudnnDataType_t t[] = { CUDNN_DATA_FLOAT, CUDNN_DATA_DOUBLE, CUDNN_DATA_HALF };
-    return t[int(dt)];
+    switch (dt)
+    {
+    case DataType::FLOAT:    return CUDNN_DATA_FLOAT;
+    case DataType::DOUBLE:   return CUDNN_DATA_DOUBLE;
+    case DataType::HALF:     return CUDNN_DATA_HALF;
+    case DataType::BFLOAT16: return CUDNN_DATA_BFLOAT16;
+    default:                 return CUDNN_DATA_FLOAT;
+    }
+}
+
+// BF16 convolution compute type must be FLOAT (pseudo-BF16 mode);
+// HALF uses HALF (tensor-core mode); others use their own type.
+inline cudnnDataType_t toConvComputeType(DataType dt)
+{
+    if (dt == DataType::BFLOAT16) return CUDNN_DATA_FLOAT;
+    return toCudnnDataType(dt);
 }
 
 inline miopenDataType_t toMiopenDataType(DataType dt)
 {
-    const miopenDataType_t t[] = { miopenFloat, miopenDouble, miopenHalf };
-    return t[int(dt)];
+    switch (dt)
+    {
+    case DataType::FLOAT:    return miopenFloat;
+    case DataType::DOUBLE:   return miopenDouble;
+    case DataType::HALF:     return miopenHalf;
+    case DataType::BFLOAT16: return miopenBFloat16;
+    default:                 return miopenFloat;
+    }
 }
 
 #if ENABLE_CUDA
@@ -184,6 +204,6 @@ MIOPEN_DESC2(Dropout)
 MIOPEN_DESC2(RNN)
 MIOPEN_DESC2(LRN)
 
-void DLL_EXPORT find_gpu_functions();
+void CCCC_EXPORT find_gpu_functions();
 
 }    //namespace cccc

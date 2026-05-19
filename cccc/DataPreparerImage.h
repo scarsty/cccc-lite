@@ -4,7 +4,7 @@
 namespace cccc
 {
 
-class DLL_EXPORT DataPreparerImage : public DataPreparer
+class CCCC_EXPORT DataPreparerImage : public DataPreparer
 {
 protected:
     int flip_ = 0;                      //翻转

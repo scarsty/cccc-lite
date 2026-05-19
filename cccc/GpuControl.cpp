@@ -468,6 +468,10 @@ int GpuControl::malloc(void*& p, size_t size)
     {
         std::lock_guard<std::mutex> lock(malloc_map_mutex_);
         malloc_map_[p] = { p, size, api_type_, api_id_ };
+        if (r != 0)
+        {
+            LOG_ERR("FAIL TO MALLOC size={} ret={}\n", size, r);
+        }
     }
     return r;
 }

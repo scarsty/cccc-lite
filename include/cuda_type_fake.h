@@ -1,9 +1,11 @@
-#pragma once
+﻿#pragma once
+
+#include <cstddef>
 
 struct cudaDeviceProp
 {
     char name[256];                               /**< ASCII string identifying device */
-    uint16_t uuid;                              /**< 16-byte unique identifier */
+    unsigned short uuid;                          /**< 16-byte unique identifier */
     char luid[8];                                 /**< 8-byte locally unique identifier. Value is undefined on TCC and non-Windows platforms */
     unsigned int luidDeviceNodeMask;              /**< LUID device node mask. Value is undefined on TCC and non-Windows platforms */
     size_t totalGlobalMem;                        /**< Global memory available on device in bytes */
@@ -118,6 +120,9 @@ enum
     CUDNN_BIDIRECTIONAL,
     CUDNN_CROSS_CORRELATION,
     CUDNN_DATA_FLOAT,
+    CUDNN_DATA_DOUBLE,
+    CUDNN_DATA_HALF,
+    CUDNN_DATA_BFLOAT16 = 9,
     CUDNN_GRU,
     CUDNN_LINEAR_INPUT,
     CUDNN_LRN_CROSS_CHANNEL_DIM1,
@@ -193,6 +198,7 @@ using cudnnPoolingDescriptor_t = void*;
 using cudnnPoolingMode_t = int;
 using cudnnRNNDescriptor_t = void*;
 using cudnnSpatialTransformerDescriptor_t = void*;
+using cudnnCTCLossDescriptor_t = void*;
 using cudnnStatus_t = int;
 
 struct cudnnTensorStruct{};

@@ -1,5 +1,6 @@
 ﻿#include "MainProcess.h"
 #include "ConsoleControl.h"
+#include "CudnnGraph.h"
 #include "DynamicLibrary.h"
 #include "NetCifa.h"
 #include "NetLayer.h"
@@ -19,12 +20,32 @@ MainProcess::MainProcess()
 
 MainProcess::~MainProcess()
 {
+    for (auto& gpu : gpus_)
+    {
+        if (gpu.getApiType() == API_CUDA)
+        {
+            cudaSetDevice(gpu.getApiID());
+            cudaDeviceSynchronize();
+        }
+        else if (gpu.getApiType() == API_HIP)
+        {
+            hipSetDevice(gpu.getApiID());
+            hipDeviceSynchronize();
+        }
+    }
+    CudnnGraphOps::clearCache();
 }
 
 //返回为0是正确创建
 int MainProcess::init(const std::string& ini /*= ""*/)
 {
     LOG("{}\n", Timer::getNowAsString());
+#ifdef _WIN32
+    long pid = GetCurrentProcessId();
+#else
+    long pid = getpid();    // Linux 使用 getpid()
+#endif
+    LOG("Process ID: {}\n", pid);
     find_gpu_functions();
     if (loadIni(ini))
     {
@@ -100,15 +121,15 @@ int MainProcess::testGPUDevice()
     }
 
     MP_count_ = 1;
-    MP_count_ = 1;    // lite版仅支持单卡
     return 0;
 }
 
 int MainProcess::initNets()
 {
     Matrix::setCurrentDataType(option_.getEnum<DataType>("train", "data_type", DataType::FLOAT));
+    net_group_count_ = option_.getInt("net", "net_num", 1);
     nets_.clear();
-    nets_.resize(MP_count_);
+    nets_.resize(net_group_count_);
     //这里读取ini中指定的device顺序，其中第一个设备为主网络，该值一般来说应由用户指定
     auto mp_device = option_.getVector<int>("train", "mp_device");
     LOG("MP device: {}\n", mp_device);
@@ -161,7 +182,7 @@ int MainProcess::initNets()
     gpus_.resize(mp_device.size());
     for (int i = 0; i < mp_device.size(); i++)
     {
-        if (mp_device[i] < 0 || mp_device[i] >= gpu_device_turn.size())
+        if (mp_device[i] < 0 || mp_device[i] >= (int)gpu_device_turn.size())
         {
             fatalError(std::format("Error: Device {} is not available!! Check \"mp_device\"\n", mp_device[i]));
             return 1;
@@ -178,68 +199,99 @@ int MainProcess::initNets()
             return 1;
         }
     }
-    auto cifa = option_.getInt("net", "cifa", 1);
+    // 应用 cuDNN graph 开关（全局静态，读一次即可）
+    {
+        bool use_graph = (option_.getInt("train", "use_cudnn_graph", 0) != 0);
+        CudnnGraphOps::setEnabled(use_graph);
+        if (use_graph)
+        {
+            LOG("[CudnnGraph] cuDNN backend graph API enabled (use_cudnn_graph=1)\n");
+        }
+    }
     using MYFUNC = Net* (*)();
     auto creator = (MYFUNC)DynamicLibrary::getFunction(option_.getString("net", "library"), option_.getString("net", "function"));
-    for (int i = 0; i < MP_count_; i++)
+
+    // 决定每个 group 使用的 structure 脚本
+    // net_group_count_=1 时 "structure" 和 "structure0" 等价（向后兼容 [cifa] 段）
+    auto get_structure = [this](int g) -> std::string
     {
-        LOG("Trying to create net {}...\n", i);
-        gpus_[i].setAsCurrent();
-        std::unique_ptr<Net> net;
-        if (creator)
+        std::string key0 = "structure" + std::to_string(g);
+        std::string s = option_.getString("net", key0);
+        if (s.empty() && g == 0)
         {
-            net = std::unique_ptr<Net>(creator());
+            // 兼容旧格式：[net] structure 或 [cifa] structure
+            s = option_.getString("net", "structure", option_.getString("cifa", "structure"));
         }
-        else
+        return s;
+    };
+
+    for (int g = 0; g < net_group_count_; g++)
+    {
+        std::string struct_str = get_structure(g);
+        // group 1+ 的 MP 副本数固定为 1（不同结构网络不做 MP 并行）
+        int mp_count_for_group = (g == 0) ? MP_count_ : 1;
+        nets_[g].resize(mp_count_for_group);
+
+        for (int i = 0; i < mp_count_for_group; i++)
         {
-            if (cifa)
+            int gpu_idx = (g == 0) ? i : 0;    // 非主组始终使用第0号GPU
+            gpus_[gpu_idx].setAsCurrent();
+            std::unique_ptr<Net> net;
+            if (creator)
             {
-                net = std::make_unique<NetCifa>();
+                net = std::unique_ptr<Net>(creator());
             }
             else
             {
-                net = std::make_unique<NetLayer>();
+                net = std::make_unique<NetCifa>();
             }
-        }
-        net->setGpu(&gpus_[i]);
-        net->setId(i);
-        int dev_id = net->getGpu()->getDeviceID();
-        net->setOption(&option_);
-        if (net->init() != 0)
-        {
-            return 1;
-        }
-        nets_[i] = std::move(net);
-        if (dev_id >= 0)
-        {
-            LOG("Net {} has been created on device {}\n", i, dev_id);
-        }
-        else
-        {
-            LOG("Net {} has been created on CPU\n", i);
+            net->setGpu(&gpus_[gpu_idx]);
+            net->setId(i);
+            net->setOption(&option_);
+            // 注入 structure 脚本（覆盖 option 读取逻辑）
+            if (!struct_str.empty())
+            {
+                net->setStructureScript(struct_str);
+            }
+            // group 1+ 在 init 前预载 group 0 的矩阵（权重+KV cache 共享，零拷贝）
+            if (g > 0 && !nets_[0].empty())
+            {
+                net->preloadMatrices(nets_[0][0]->getAllExtraMatrices());
+            }
+
+            if (net->init() != 0)
+            {
+                return 1;
+            }
+            int dev_id = net->getGpu()->getDeviceID();
+            nets_[g][i] = std::move(net);
+            if (dev_id >= 0)
+            {
+                LOG("Net group={} mp={} created on device {}\n", g, i, dev_id);
+            }
+            else
+            {
+                LOG("Net group={} mp={} created on CPU\n", g, i);
+            }
         }
     }
 
-    //0号网络加载权值
-    if (option_.getInt("train", "load_net") != 0 && !nets_.empty())
+    //0号group、0号网络加载权值（group 1+ 通过共享 MatrixSP 自动获得相同权重）
+    if (option_.getInt("train", "load_net") != 0 && !nets_.empty() && !nets_[0].empty())
     {
-        if (nets_[0]->loadWeight(option_.getString("train", "load_file")) < 0)
+        if (nets_[0][0]->loadWeight(option_.getString("train", "load_file")) < 0)
         {
             fatalError("Error: Load net weight failed!!\n");
             return 1;
         }
     }
-    for (int i = 0; i < nets_.size(); i++)
+    // 主组内多个 MP 副本同步权重
+    for (int i = 1; i < (int)nets_[0].size(); i++)
     {
-        auto& net = nets_[i];
-        //只使用0号网络的权值，随机初始化也如此
-        if (i != 0)
-        {
-            Matrix::copyDataAcrossDevice(nets_[0]->getAllWeights(), net->getAllWeights());
-        }
+        Matrix::copyDataAcrossDevice(nets_[0][0]->getAllWeights(), nets_[0][i]->getAllWeights());
     }
-    //主线程使用0号网络
-    nets_[0]->setDeviceSelf();
+    //主线程使用0号group 0号网络
+    nets_[0][0]->setDeviceSelf();
     return 0;
 }
 
@@ -255,8 +307,8 @@ void MainProcess::initDataPreparer()
 {
     //数据准备器
     //这里使用公共数据准备器，实际上完全可以创建私有的准备器
-    auto dim0 = nets_[0]->getX().getDim();
-    auto dim1 = nets_[0]->getY().getDim();
+    auto dim0 = nets_[0][0]->getX().getDim();
+    auto dim1 = nets_[0][0]->getY().getDim();
     //DataPreparerFactory::destroy(data_preparer_);
     //data_preparer_ =  std::make_unique<>  DataPreparerFactory::create(&option_, "data_preparer", dim0, dim1);
     if (option_.hasSection("data_preparer"))
@@ -425,7 +477,7 @@ void MainProcess::train(std::vector<std::unique_ptr<Net>>& nets, DataPreparer* d
     for (int epoch_count = 0;; epoch_count++)
     {
         data_preparer->prepareData(epoch_count, "train");
-        if (data_preparer2_ && (test_test || test_test_origin) && epoch_count % test_epoch == test_epoch - 1 && data_preparer2_->isFill())
+        if (data_preparer2_ && (test_test || test_test_origin) && data_preparer2_->isFill())
         {
             data_preparer2_->prepareData(epoch_count, "test");
         }
@@ -859,12 +911,12 @@ bool MainProcess::checkTrainHealth(const std::vector<TestInfo>& group_result_pre
 //注意通常情况下是使用第一个网络测试数据
 void MainProcess::run()
 {
-    auto& net = nets_[0];
+    auto& net = nets_[0][0];
 
     //初测
     testData(net.get());
 
-    train(nets_, data_preparer_.get(), option_.getInt("train", "train_epochs", 10));
+    train(nets_[0], data_preparer_.get(), option_.getInt("train", "train_epochs", 10));
 
     std::string save_filename = option_.getString("train", "save_file");
     if (save_filename != "")
@@ -879,7 +931,7 @@ void MainProcess::run()
     extraTest(net.get(), "extra_test", option_.getInt("train", "force_output"), option_.getInt("train", "test_type", 1));
 
 #ifdef LAYER_TIME
-    for (auto& l : nets_[0]->getLayerVector())
+    for (auto& l : nets_[0][0]->getLayerVector())
     {
         LOG("{}: {},{},{}\n", l->getName(), l->total_time1_, l->total_time2_, l->total_time3_);
     }
@@ -895,7 +947,7 @@ void MainProcess::testData(Net* net, int epoch, int total_epochs, int* max_accur
 {
     if (net == nullptr)
     {
-        net = nets_[0].get();
+        net = nets_[0][0].get();
     }
     //ata_preparer_->X0.message("Train data X0");
     //data_preparer_->X.message("Train data X");
@@ -978,61 +1030,83 @@ void MainProcess::extraTest(Net* net, const std::string& section, int force_outp
     net->test(&dp_test->X, &dp_test->Y, nullptr);
 }
 
-int MainProcess::testExternalData(void* x, void* y, void* a, int n, int attack_times, double* error)
+int MainProcess::rebuildKVCache(int prefill_group, int decode_group, const float* x, int n, float* y)
 {
-    std::vector<int> n_begin(1, 0), n_count(1, n);
-    auto run = [this, x, y, a, attack_times, error, &n_begin, &n_count](int i)
+    Net* prefill_net = getNet(0, prefill_group);
+    if (!prefill_net)
     {
-        auto net = nets_[i].get();
+        return -1;
+    }
+    prefill_net->resetKVCache();
+    if (testExternalData((void*)x, nullptr, y, 1, 0, nullptr, prefill_group) != 0)
+    {
+        return -2;
+    }
+    Net* decode_net = getNet(0, decode_group);
+    if (decode_net)
+    {
+        decode_net->setKVCachePos(n);
+        decode_net->setRopeOffset(n);
+        decode_net->setAttentionOffset(n);
+    }
+    return 0;
+}
+
+int MainProcess::testExternalData(void* x, void* y, void* a, int n, int attack_times, double* error, int group)
+{
+    auto& gnets = nets_[group];
+    std::vector<int> n_begin(1, 0), n_count(1, n);
+    auto run = [this, x, y, a, attack_times, error, &n_begin, &n_count, &gnets](int i)
+    {
+        auto net = gnets[i].get();
         auto dt = net->getX().getDataType();
-        Matrix X(dt, UnitType::CPU), Y(dt, UnitType::CPU), A(dt, UnitType::CPU);
+        auto a_dt = net->getA().getDataType();
+        Matrix X(dt, UnitType::CPU), Y(a_dt, UnitType::CPU), A(a_dt, UnitType::CPU);
         auto dim0 = net->getX().getDim();
         dim0.back() = n_count[i];
-        auto dim1 = net->getY().getDim();
+        auto dim1 = net->getA().getDim();
         dim1.back() = n_count[i];
-        auto size = X.getDataTypeSize();
+        auto x_size = X.getDataTypeSize();
+        auto a_size = A.getDataTypeSize();
 
         Matrix *x1 = nullptr, *y1 = nullptr, *a1 = nullptr;
         if (x)
         {
-            X.shareData((char*)x + net->getX().getRow() * n_begin[i] * size);
+            X.shareData((char*)x + net->getX().getRow() * n_begin[i] * x_size);
             X.resize(dim0);
-            //X = X.transDataType(DataType::HALF);
             x1 = &X;
         }
         if (y)
         {
-            Y.shareData((char*)y + net->getY().getRow() * n_begin[i] * size);
+            Y.shareData((char*)y + net->getA().getRow() * n_begin[i] * a_size);
             Y.resize(dim1);
             y1 = &Y;
         }
         if (a)
         {
-            A.shareData((char*)a + net->getA().getRow() * n_begin[i] * size);
+            A.shareData((char*)a + net->getA().getRow() * n_begin[i] * a_size);
             A.resize(dim1);
             a1 = &A;
         }
 
-        //auto& m = CudaControl::select(net->getDeviceID())->getMutex();
-        //std::lock_guard<std::mutex> lk(m);
-        return net->test_only(X, A);
+        return net->inference(X, A);
     };
-    if (nets_.size() == 1)
+    if (gnets.size() == 1)
     {
         run(0);
     }
-    else if (nets_.size() > 1)
+    else if (gnets.size() > 1)
     {
-        n_begin.resize(nets_.size());
-        n_count.resize(nets_.size());
-        int k = (n + nets_.size() - 1) / nets_.size();
-        for (int i = 0; i < nets_.size(); i++)
+        n_begin.resize(gnets.size());
+        n_count.resize(gnets.size());
+        int k = (n + gnets.size() - 1) / gnets.size();
+        for (int i = 0; i < (int)gnets.size(); i++)
         {
             n_begin[i] = k * i;
             n_count[i] = std::min(n - k * i, k);
         }
-        std::vector<std::thread> ths(nets_.size());
-        for (int i = 1; i < nets_.size(); i++)
+        std::vector<std::thread> ths(gnets.size());
+        for (int i = 1; i < (int)gnets.size(); i++)
         {
             ths[i] = std::thread{ [i, &run]()
                 {
@@ -1040,7 +1114,7 @@ int MainProcess::testExternalData(void* x, void* y, void* a, int n, int attack_t
                 } };
         }
         run(0);
-        for (int i = 1; i < nets_.size(); i++)
+        for (int i = 1; i < (int)gnets.size(); i++)
         {
             ths[i].join();
         }

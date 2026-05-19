@@ -19,6 +19,10 @@ struct MatrixData
     //int api_id_ = -1;
 
 public:
+    // Global lazy-allocation switch: when enabled, MatrixData::resize only records
+    // requested size/type and does not allocate CPU/GPU memory.
+    static inline bool lazy_mode = false;
+
     MatrixData() = default;
     ~MatrixData() { release(); }
     MatrixData(const MatrixData&) = delete;
@@ -30,6 +34,8 @@ public:
     size_t getDataTypeSize() const { return getDataTypeSize(data_type_); }
     size_t size() const { return occupy_data_size_; }
     size_t sizeInByte() const { return occupy_data_size_ * getDataTypeSize(); }
+    static bool isLazyMode() { return lazy_mode; }
+    static void setLazyMode(bool enabled) { lazy_mode = enabled; }
     void* resize(int64_t size, DataType data_type, bool reserve_data = true, bool force = false);    //resize前应setCuda
     std::shared_ptr<void*> make_shared_data() { return std::make_shared<void*>(data_); }
     void release();
@@ -50,6 +56,8 @@ public:
             return *(double*)p;
         case DataType::HALF:
             return *(half*)p;
+        case DataType::BFLOAT16:
+            return (float)(*(bfloat16*)p);
         default:
             return 0;
         }
@@ -64,6 +72,8 @@ public:
             return *(double*)((char*)data + i * getDataTypeSize(dt));
         case DataType::HALF:
             return *(half*)((char*)data + i * getDataTypeSize(dt));
+        case DataType::BFLOAT16:
+            return (float)(*(bfloat16*)((char*)data + i * getDataTypeSize(dt)));
         default:
             return 0;
         }
@@ -82,6 +92,9 @@ public:
         case DataType::HALF:
             *(half*)p = v;
             break;
+        case DataType::BFLOAT16:
+            *(bfloat16*)p = bfloat16(static_cast<float>(v));
+            break;
         }
     }
     template <typename T>
@@ -99,12 +112,17 @@ public:
         case DataType::HALF:
             setData(i, *(half*)p);
             break;
+        case DataType::BFLOAT16:
+            setData(i, *(bfloat16*)p);
+            break;
         }
     }
 
 public:
     static int64_t copy(ApiType dt_src, const void* src, ApiType dt_dst, void* dst, int64_t size, DataType dt);
     static int64_t copyByByte(ApiType dt_src, const void* src, ApiType dt_dst, void* dst, int64_t size_in_byte);
+    // 异步重载：仅支持 CUDA H2D/D2H/D2D，stream 为非阻塞 cudaStream_t；其他路径退化为同步
+    static int64_t copyByByteAsync(ApiType dt_src, const void* src, ApiType dt_dst, void* dst, int64_t size_in_byte, void* stream);
     static size_t getDataTypeSize(DataType dt)
     {
         switch (dt)
@@ -115,6 +133,8 @@ public:
             return sizeof(double);
         case DataType::HALF:
             return sizeof(half);
+        case DataType::BFLOAT16:
+            return sizeof(bfloat16);
         default:
             return 0;
         }

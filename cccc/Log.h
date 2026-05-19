@@ -5,7 +5,7 @@
 
 namespace cccc
 {
-static inline std::atomic<int> errorCount;
+static inline std::atomic<int> errorCount;    //线程安全的错误计数器
 
 template <typename T>
 concept formattable = std::default_initializable<std::formatter<std::remove_cvref_t<T>>>;
@@ -14,6 +14,7 @@ template <formattable... Args>
 void LOG(const std::format_string<Args...> fmt, Args&&... args)
 {
     fputs(std::format(fmt, std::forward<Args>(args)...).c_str(), stdout);
+    fflush(stdout);
 }
 
 template <formattable... Args>

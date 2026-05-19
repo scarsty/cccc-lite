@@ -39,13 +39,12 @@ TensorDesc::~TensorDesc()
 #endif
 }
 
-void TensorDesc::setDesc4D(DataType data_type, int w, int h, int c, int n)
+void TensorDesc::setDesc4D(DataType data_type, int w, int h, int c, int n, TensorForm form)
 {
     if (n * c * h * w > 0)
     {
         if (cudnn_tensor_desc_)
         {
-
             auto r = cudnnSetTensor4dDescriptor(cudnn_tensor_desc_, CUDNN_TENSOR_NCHW, toCudnnDataType(data_type), n, c, h, w);
             if (r)
             {
@@ -63,7 +62,7 @@ void TensorDesc::setDesc4D(DataType data_type, int w, int h, int c, int n)
     }
 }
 
-void TensorDesc::setDescND(DataType data_type, std::vector<int> dim)
+void TensorDesc::setDescND(DataType data_type, std::vector<int> dim, TensorForm /*form*/)
 {
     std::vector<int> dim1, stride;
     int size = dim.size();

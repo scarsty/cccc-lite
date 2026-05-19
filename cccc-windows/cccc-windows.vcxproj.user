@@ -8,9 +8,9 @@
     <LocalDebuggerCommandArgumentsHistory>-c mnist-lenet.ini|</LocalDebuggerCommandArgumentsHistory>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <LocalDebuggerCommandArguments>-c mnist-lenet.ini</LocalDebuggerCommandArguments>
-    <LocalDebuggerWorkingDirectory>$(SolutionDir)work</LocalDebuggerWorkingDirectory>
+    <LocalDebuggerCommandArguments>--sd -c . -p "a cat"</LocalDebuggerCommandArguments>
+    <LocalDebuggerWorkingDirectory>..\..\cccc-models\cccc-sd\z-image-turbo</LocalDebuggerWorkingDirectory>
     <DebuggerFlavor>WindowsLocalDebugger</DebuggerFlavor>
-    <LocalDebuggerCommandArgumentsHistory>-c mnist-lenet.ini|</LocalDebuggerCommandArgumentsHistory>
+    <LocalDebuggerCommandArgumentsHistory>--sd -c . -p "an orange  cat"|--sd -c .|--llm -c qwen3_8b_fp16.ini|--sd -c . -p "orange cat"|--sd -c . -p "a cat"|</LocalDebuggerCommandArgumentsHistory>
   </PropertyGroup>
 </Project>

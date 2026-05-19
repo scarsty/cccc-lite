@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" ToolsVersion="14.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|x64">
@@ -26,7 +26,7 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
     <ConfigurationType>DynamicLibrary</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
-    <PlatformToolset>v145</PlatformToolset>
+    <PlatformToolset>v143</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
@@ -50,9 +50,13 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LinkIncremental>false</LinkIncremental>
     <OutDir>$(SolutionDir)$(Platform)\$(Configuration)\</OutDir>
+    <PreBuildEventUseInBuild>false</PreBuildEventUseInBuild>
   </PropertyGroup>
   <PropertyGroup Label="Vcpkg" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <VcpkgUseStatic>true</VcpkgUseStatic>
+  </PropertyGroup>
+  <PropertyGroup Label="Vcpkg" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <VcpkgUseStatic>false</VcpkgUseStatic>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
@@ -60,15 +64,14 @@
       </PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
-      <PreprocessorDefinitions>_DEBUG;_WINDOWS;__HIP_PLATFORM_AMD__;AUTO_LOAD_GPU_FUNCTIONS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_DEBUG;_WINDOWS;__HIP_PLATFORM_AMD__;ENABLE_CUDA=1;ENABLE_HIP=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>.;./layer;../include;../include/cuda;../cccc-cuda;../cccc-hip;$(CUDA_PATH)/include;$(HIP_PATH)/include;../../mlcc;$(VCPKG_LIB_PATH)\x64-windows\include;../../cifa</AdditionalIncludeDirectories>
       <PreprocessToFile>false</PreprocessToFile>
       <OpenMPSupport>false</OpenMPSupport>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <LanguageStandard>stdcpplatest</LanguageStandard>
       <ScanSourceForModuleDependencies>false</ScanSourceForModuleDependencies>
-      <TranslateIncludes>false</TranslateIncludes>
-      <AdditionalOptions>/utf-8 /FS %(AdditionalOptions)</AdditionalOptions>
+      <TranslateIncludes>true</TranslateIncludes>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -76,7 +79,7 @@
       <AdditionalLibraryDirectories>$(CUDA_PATH)/lib/x64;$(HIP_PATH)/lib;../lib/x64;$(SolutionDir)$(Platform)\$(Configuration)\</AdditionalLibraryDirectories>
       <ForceSymbolReferences>%(ForceSymbolReferences)</ForceSymbolReferences>
       <Profile>true</Profile>
-      <AdditionalDependencies>cccc-cuda.lib;openblas.lib;cuda.lib;cudart.lib;cublas.lib;cudnn_adv.lib;cudnn_cnn.lib;cudnn_ops.lib;cudnn_graph.lib;cccc-hip.lib;rocblas.lib;hiprtc.lib;amdhip64.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>cccc-cuda.lib;openblas.lib;cudart.lib;cublas.lib;cudnn_adv.lib;cudnn_cnn.lib;cudnn_ops.lib;cudnn_graph.lib;cccc-hip.lib;cuda.lib;rocblas.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <Lib>
       <AdditionalDependencies>cccc-cuda.lib;openblas.lib;nvml.lib;cudart.lib;cublas.lib;cudnn_adv_infer.lib;cudnn_adv_train.lib;cudnn_cnn_infer.lib;cudnn_cnn_train.lib;cudnn_ops_infer.lib;cudnn_ops_train.lib;%(AdditionalDependencies)</AdditionalDependencies>
@@ -105,7 +108,7 @@
       <ConformanceMode>true</ConformanceMode>
       <ScanSourceForModuleDependencies>false</ScanSourceForModuleDependencies>
       <TranslateIncludes>false</TranslateIncludes>
-      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>/FS %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -113,12 +116,16 @@
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalLibraryDirectories>$(CUDA_PATH)/lib/x64;$(HIP_PATH)/lib;../lib/x64;$(SolutionDir)$(Platform)\$(Configuration)\</AdditionalLibraryDirectories>
-      <AdditionalDependencies>cccc-cuda.lib;openblas.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>openblas.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <ForceSymbolReferences>%(ForceSymbolReferences)</ForceSymbolReferences>
       <ModuleDefinitionFile>
       </ModuleDefinitionFile>
       <Profile>true</Profile>
-      <IgnoreSpecificDefaultLibraries>amdhip64.lib</IgnoreSpecificDefaultLibraries>
+      <IgnoreSpecificDefaultLibraries>
+      </IgnoreSpecificDefaultLibraries>
+      <ProgramDatabaseFile>C:\ProgramData\doc\pdb\$(TargetName).pdb</ProgramDatabaseFile>
+      <DelayLoadDLLs>
+      </DelayLoadDLLs>
     </Link>
     <Lib>
       <AdditionalDependencies>cccc-cuda.lib;openblas.lib</AdditionalDependencies>
@@ -126,6 +133,8 @@
     <Lib>
       <AdditionalLibraryDirectories>$(CUDA_PATH)/lib/x64;../lib/x64;$(SolutionDir)$(Platform)\$(Configuration)\</AdditionalLibraryDirectories>
     </Lib>
+    <PreBuildEvent>
+    </PreBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="..\..\cifa\Cifa.cpp" />
@@ -151,6 +160,7 @@
     <ClCompile Include="MainProcess.cpp" />
     <ClCompile Include="Solver.cpp" />
     <ClCompile Include="TensorDesc.cpp" />
+    <ClCompile Include="CudnnGraph.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\cifa\Cifa.h" />
@@ -159,7 +169,6 @@
     <ClInclude Include="..\..\mlcc\strfunc.h" />
     <ClInclude Include="..\..\mlcc\DynamicLibrary.h" />
     <ClInclude Include="..\..\mlcc\filefunc.h" />
-    <ClInclude Include="..\..\mlcc\fmt1.h" />
     <ClInclude Include="..\..\mlcc\INIReader.h" />
     <ClInclude Include="..\..\mlcc\Random.h" />
     <ClInclude Include="..\..\mlcc\SimpleBuffer.h" />
@@ -183,24 +192,27 @@
     <ClInclude Include="Net.h" />
     <ClInclude Include="NetCifa.h" />
     <ClInclude Include="Netlayer.h" />
-    <ClInclude Include="dll_export.h" />
+    <ClInclude Include="cccc_export.h" />
     <ClInclude Include="Matrix.h" />
     <ClInclude Include="MatrixEx.h" />
+    <ClInclude Include="resource.h" />
     <ClInclude Include="rocblas_real.h" />
     <ClInclude Include="Solver.h" />
     <ClInclude Include="TensorDesc.h" />
+    <ClInclude Include="CudnnGraph.h" />
     <ClInclude Include="VectorMath.h" />
     <ClInclude Include="MainProcess.h" />
     <ClInclude Include="Option.h" />
     <ClInclude Include="types.h" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="..\..\README.md" />
     <None Include="cuda_libs.inc" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="..\CMakeLists.txt" />
     <Text Include="CMakeLists.txt" />
+  </ItemGroup>
+  <ItemGroup>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

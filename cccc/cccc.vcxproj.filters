@@ -51,7 +51,7 @@
       <UniqueIdentifier>{0b817fea-8808-42c4-8adb-6c357148dd45}</UniqueIdentifier>
     </Filter>
     <Filter Include="cifa">
-      <UniqueIdentifier>{064b1fbf-4a5a-4780-b41b-18e4b0691ce4}</UniqueIdentifier>
+      <UniqueIdentifier>{26ebf8f7-f8a4-4952-9cbd-4034f1283d3f}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
@@ -122,10 +122,13 @@
       <Filter>mlcc</Filter>
     </ClCompile>
     <ClCompile Include="..\..\mlcc\vramusage.cpp">
-      <Filter>sources</Filter>
+      <Filter>mlcc</Filter>
     </ClCompile>
     <ClCompile Include="..\..\cifa\Cifa.cpp">
       <Filter>cifa</Filter>
+    </ClCompile>
+    <ClCompile Include="CudnnGraph.cpp">
+      <Filter>sources</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -165,7 +168,7 @@
     <ClInclude Include="cblas_real.h">
       <Filter>math</Filter>
     </ClInclude>
-    <ClInclude Include="dll_export.h">
+    <ClInclude Include="cccc_export.h">
       <Filter>base</Filter>
     </ClInclude>
     <ClInclude Include="Netlayer.h">
@@ -198,6 +201,10 @@
     <ClInclude Include="Log.h">
       <Filter>log</Filter>
     </ClInclude>
+    <ClInclude Include="predict.h">
+      <Filter>predict</Filter>
+    </ClInclude>
+    <ClInclude Include="resource.h" />
     <ClInclude Include="..\..\mlcc\Random.h">
       <Filter>mlcc</Filter>
     </ClInclude>
@@ -217,9 +224,6 @@
       <Filter>mlcc</Filter>
     </ClInclude>
     <ClInclude Include="..\..\mlcc\filefunc.h">
-      <Filter>mlcc</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\mlcc\fmt1.h">
       <Filter>mlcc</Filter>
     </ClInclude>
     <ClInclude Include="..\..\mlcc\INIReader.h">
@@ -249,15 +253,18 @@
     <ClInclude Include="..\..\cifa\Cifa.h">
       <Filter>cifa</Filter>
     </ClInclude>
+    <ClInclude Include="CudnnGraph.h" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="..\CMakeLists.txt" />
     <Text Include="CMakeLists.txt" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="..\..\README.md" />
     <None Include="cuda_libs.inc">
       <Filter>gpu</Filter>
     </None>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="cccc.rc" />
   </ItemGroup>
 </Project>

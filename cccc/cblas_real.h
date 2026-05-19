@@ -406,8 +406,7 @@ public:
     {
     }
 
-#if REAL_PRECISION == 2
-    //half precision (only when half != float)
+    //half precision
     CBLAS_FUNCTION float dot(const int N, const half* X, const int incX, const half* Y, const int incY)
     {
         float r;
@@ -437,7 +436,14 @@ public:
     CBLAS_FUNCTION void gemm(const MatrixTransType TransA, const MatrixTransType TransB, const int M, const int N, const int K, const half alpha, const half* A, const int lda, const half* B, const int ldb, const half beta, half* C, const int ldc)
     {
     }
-#endif
+
+    CBLAS_FUNCTION void gemm(const MatrixTransType TransA, const MatrixTransType TransB, const int M, const int N, const int K, const float alpha, const half* A, const int lda, const half* B, const int ldb, const float beta, half* C, const int ldc)
+    {
+    }
+
+    CBLAS_FUNCTION void gemmStridedBatched(const MatrixTransType TransA, const MatrixTransType TransB, const int M, const int N, const int K, const float alpha, const half* A, const int lda, const long long strideA, const half* B, const int ldb, const long long strideB, const float beta, half* C, const int ldc, const long long strideC, const int batch)
+    {
+    }
 };
 
 }    // namespace cccc

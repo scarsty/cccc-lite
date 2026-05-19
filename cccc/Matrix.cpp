@@ -1,4 +1,4 @@
-﻿#include "Matrix.h"
+#include "Matrix.h"
 #include "Log.h"
 #include "Random.h"
 #include "VectorMath.h"
@@ -135,6 +135,15 @@ void Matrix::release()
     shared_data_->release();
 }
 
+void Matrix::releaseForReuse()
+{
+    if (data_ == nullptr) { return; }                           // 懒分配模式：data_ 已为 null，无需释放
+    const int64_t planned = shared_data_->occupy_data_size_;    // 保存规划容量，供贪心池的最优匹配使用
+    shared_data_->release();                                    // 释放 GPU 显存，data_=null，occupy=0
+    shared_data_->occupy_data_size_ = planned;                  // 还原容量
+    data_ = nullptr;                                            // 同步 Matrix 的裸指针
+}
+
 Matrix& Matrix::d() const
 {
     if (d_this_->data_size_ != data_size_)
@@ -152,15 +161,16 @@ void Matrix::setDim(const std::vector<int>& dim)
     dim_ = dim;
     int dim_size = dim.size();
 
+    data_size_ = 1;
+    for (int i = 0; i < dim_size; i++) { data_size_ *= int64_t(dim[i]); }
+
     number_ = dim.back();
     width_ = 1;
     height_ = 1;
     channel_ = 1;
-    data_size_ = 1;
     row_ = 1;
     for (int i = 0; i < dim_size; i++)
     {
-        data_size_ *= int64_t(dim[i]);
         if (i < dim_size - 1) { row_ *= dim[i]; }
         if (i < dim_size - 3) { width_ *= dim[i]; }
         if (i == dim_size - 3) { height_ = dim[i]; }
@@ -169,12 +179,39 @@ void Matrix::setDim(const std::vector<int>& dim)
     tensor_desc_ = std::make_shared<TensorDesc>();
     if (dim.size() <= 4)
     {
-        tensor_desc_->setDesc4D(getDataType(), width_, height_, channel_, number_);
+        tensor_desc_->setDesc4D(getDataType(), width_, height_, channel_, number_, tensor_form_);
     }
     else
     {
         tensor_desc_->setDescND(getDataType(), dim);
     }
+}
+
+void Matrix::setTensorForm(TensorForm form)
+{
+    tensor_form_ = form;
+    if (data_size_ > 0)
+    {
+        setDim(dim_);    // re-run with new form → updates logical dims + tensor descriptor
+    }
+}
+
+// Replace data/layout fields from src.
+// Preserves metadata: is_weight_, weight_name_, need_back_, need_load_, etc.
+void Matrix::moveFrom(Matrix& src)
+{
+    shared_data_ = src.shared_data_;
+    data_ = src.data_;
+    dim_ = src.dim_;
+    data_size_ = src.data_size_;
+    row_ = src.row_;
+    width_ = src.width_;
+    height_ = src.height_;
+    channel_ = src.channel_;
+    number_ = src.number_;
+    tensor_form_ = src.tensor_form_;
+    tensor_desc_ = src.tensor_desc_;
+    // d_this_ is lazily resized in d() when data_size_ mismatch is detected
 }
 
 int Matrix::coord2i(const std::vector<int>& c)
@@ -215,6 +252,13 @@ int Matrix::resize(const std::vector<int>& dim, bool reserve_data, bool force)
     //指针与共享指针不同时，则认为是数据不由自己管理，不分配空间，此时若实际的空间比记录的尺寸小，则会有隐患
     if (data() != shared_data_->data_)
     {
+        // Lazy-mode share: data_ was null at shareData time (source had no allocation yet),
+        // but shared_data_ has since been allocated by another tensor. Sync the pointer.
+        // This only applies when data_ is null and the shared buffer (offset 0) is ready.
+        if (data_ == nullptr && shared_data_->data_ != nullptr)
+        {
+            data_ = shared_data_->data_;
+        }
         return 2;
     }
     //空间不够或者强制则重新分配
@@ -301,7 +345,8 @@ int64_t Matrix::save(void* buffer, int64_t size) const
 
 int64_t Matrix::load(const void* buffer, int64_t size)
 {
-    return MatrixData::copy(API_UNKNOWN, (float*)buffer, getApiType(), getDataPtr(), std::min(data_size_, size), getDataType());
+    // size is in bytes; data_size_ is in elements
+    return MatrixData::copy(API_UNKNOWN, buffer, getApiType(), getDataPtr(), std::min(data_size_, size / (int64_t)getDataTypeSize()), getDataType());
 }
 
 //将外界的值复制到矩阵，参数指针必须指向Host内存！
@@ -401,7 +446,9 @@ void Matrix::shareData(const Matrix& A, int w, int h, int c, int n)
     if (getDeviceType() == A.getDeviceType())
     {
         data_ = A.getDataPtr(w, h, c, n);
-        if (shared_data_->data_ != A.shared_data_->data_)
+        // Compare shared_data_ objects, not data_ pointers: the old data_ comparison
+        // fails in lazy mode where both tensors have data_=nullptr, preventing sharing.
+        if (shared_data_ != A.shared_data_)
         {
             shared_data_ = A.shared_data_;
         }
@@ -425,10 +472,22 @@ Matrix& Matrix::fillData(float v, float inc /*=0*/)
 {
     if (!data())
     {
-        return *this;
+        if (getDataSize() <= 0)
+        {
+            return *this;
+        }
+        // Lazy-build may leave tensors without storage. For explicit writes,
+        // force materialization so constants/aux buffers are correctly initialized.
+        shared_data_->resize(getDataSize(), getDataType(), false, true);
+        data_ = shared_data_->data_;
+        if (!data())
+        {
+            return *this;
+        }
     }
     if (isCuda() && inc == 0)
     {
+        gpu()->setAsCurrent();
         if (v == 0)
         {
             cudaMemset(data(), 0, getDataSizeInByte());
@@ -440,14 +499,30 @@ Matrix& Matrix::fillData(float v, float inc /*=0*/)
     }
     else if (isHip() && inc == 0)
     {
+        gpu()->setAsCurrent();
         if (v == 0)
         {
             hipMemset(data(), 0, getDataSizeInByte());
         }
-        else
+        else if (getDataType() == DataType::FLOAT)
         {
-            //利用hip_addnumber实现非零值填充：R = A * 0 + v，即所有元素置为v
-            hip_addnumber(getDataTypeByInt(), data(), data(), data_size_, v, 0);
+            // miopenSetTensor correctly interprets float* alpha for FLOAT tensors.
+            miopenSetTensor(gpu()->miopen_handle_, miopen_desc(), data(), &v);
+        }
+        else if (getDataType() == DataType::BFLOAT16)
+        {
+            // miopenSetTensor misinterprets float* alpha bytes as target-dtype bits:
+            // float 1.0f (0x3F800000, LE: 00 00 80 3F) gives BF16 0x0000=0.0, not 1.0.
+            // Instead build a CPU BF16 buffer and hipMemcpy.
+            bfloat16 bf16_v(v);
+            std::vector<bfloat16> cpu_buf(static_cast<size_t>(data_size_), bf16_v);
+            hipMemcpy(data(), cpu_buf.data(), static_cast<size_t>(data_size_) * sizeof(bfloat16), hipMemcpyHostToDevice);
+        }
+        else if (getDataType() == DataType::HALF)
+        {
+            half half_v(v);
+            std::vector<half> cpu_buf(static_cast<size_t>(data_size_), half_v);
+            hipMemcpy(data(), cpu_buf.data(), static_cast<size_t>(data_size_) * sizeof(half), hipMemcpyHostToDevice);
         }
     }
     else
@@ -497,12 +572,14 @@ void Matrix::toGPU()
     if (!inGpu() && GpuControl::getGlobalGpuType() == UnitType::GPU)
     {
         auto temp = shared_data_;
+        DataType dt = temp->getDataType();    // 在替换 shared_data_ 前保存，避免新 MatrixData 默认 FLOAT 覆盖类型
         //std::swap(temp, shared_data_->data_);
         shared_data_ = std::make_shared<MatrixData>();
         shared_data_->occupy_data_size_ = 0;
         shared_data_->setCurrentGpuToHere();
-        shared_data_->resize(data_size_, getDataType());
-        MatrixData::copy(API_UNKNOWN, temp->data_, getApiType(), shared_data_->data_, data_size_, getDataType());
+        shared_data_->setDataType(dt);
+        shared_data_->resize(data_size_, dt);
+        MatrixData::copy(API_UNKNOWN, temp->data_, getApiType(), shared_data_->data_, data_size_, dt);
         //delete[] temp;
         data_ = shared_data_->data_;
     }
@@ -699,6 +776,9 @@ int Matrix::indexColMaxAbs(int c) const
         case DataType::HALF:
             return gpu()->cublas_->iamax(row_, (half*)getDataPtr(0, c), 1);
             break;
+        case DataType::BFLOAT16:
+            return gpu()->cublas_->iamax(row_, (bfloat16*)getDataPtr(0, c), 1);
+            break;
         }
     }
     else if (isHip())
@@ -713,6 +793,9 @@ int Matrix::indexColMaxAbs(int c) const
             break;
         case DataType::HALF:
             return gpu()->rocblas_->iamax(row_, (half*)getDataPtr(0, c), 1);
+            break;
+        case DataType::BFLOAT16:
+            return gpu()->rocblas_->iamax(row_, (bfloat16*)getDataPtr(0, c), 1);
             break;
         }
     }
@@ -738,11 +821,20 @@ float Matrix::sumAbs() const
         case DataType::HALF:
             return gpu()->cublas_->asum(data_size_, datah(), 1);
             break;
+        case DataType::BFLOAT16:
+            return gpu()->cublas_->asum(data_size_, databf(), 1);
+            break;
         }
     }
     else if (isHip())
     {
-        return gpu()->rocblas_->asum(data_size_, dataf(), 1);
+        switch (getDataType())
+        {
+        case DataType::DOUBLE: return gpu()->rocblas_->asum(data_size_, datad(), 1);
+        case DataType::HALF: return gpu()->rocblas_->asum(data_size_, datah(), 1);
+        case DataType::BFLOAT16: return gpu()->rocblas_->asum(data_size_, databf(), 1);
+        default: return gpu()->rocblas_->asum(data_size_, dataf(), 1);
+        }
     }
     else
     {
@@ -784,15 +876,19 @@ float Matrix::sumAbsCol(int c) const
         case DataType::HALF:
             return gpu()->cublas_->asum(row_, (half*)getDataPtr(0, c), 1);
             break;
+        case DataType::BFLOAT16:
+            return gpu()->cublas_->asum(row_, (bfloat16*)getDataPtr(0, c), 1);
+            break;
         }
     }
     else if (isHip())
     {
-        return gpu()->rocblas_->asum(row_, (float*)getDataPtr(0, c), 1);
-    }
-    else
-    {
-        return Cblas::asum(row_, (float*)getDataPtr(0, c), 1);
+        switch (getDataType())
+        {
+        case DataType::HALF: return gpu()->rocblas_->asum(row_, (half*)getDataPtr(0, c), 1);
+        case DataType::BFLOAT16: return gpu()->rocblas_->asum(row_, (bfloat16*)getDataPtr(0, c), 1);
+        default: return gpu()->rocblas_->asum(row_, (float*)getDataPtr(0, c), 1);
+        }
     }
 }
 
@@ -812,6 +908,7 @@ void Matrix::sectionLimit(float v0, float v1)
     }
     else if (isHip())
     {
+        hip_sectionlimit(getDataTypeByInt(), data(), nullptr, data(), data_size_, v0, v1);
     }
     else
     {
@@ -848,11 +945,20 @@ void Matrix::scale(float v)
         case DataType::HALF:
             gpu()->cublas_->scal(data_size_, (half)v, datah(), 1);
             break;
+        case DataType::BFLOAT16:
+            gpu()->cublas_->scal(data_size_, bfloat16(v), databf(), 1);
+            break;
         }
     }
     else if (isHip())
     {
-        gpu()->rocblas_->scal(data_size_, v, dataf(), 1);
+        switch (getDataType())
+        {
+        case DataType::HALF: gpu()->rocblas_->scal(data_size_, (half)v, datah(), 1); break;
+        case DataType::BFLOAT16: gpu()->rocblas_->scal(data_size_, bfloat16(v), databf(), 1); break;
+        case DataType::DOUBLE: gpu()->rocblas_->scal(data_size_, (double)v, datad(), 1); break;
+        default: gpu()->rocblas_->scal(data_size_, v, dataf(), 1); break;
+        }
     }
     else
     {
@@ -886,11 +992,19 @@ void Matrix::scaleCol(float v, int c)
         case DataType::HALF:
             gpu()->cublas_->scal(row_, (half)v, (half*)getDataPtr(0, c), 1);
             break;
+        case DataType::BFLOAT16:
+            gpu()->cublas_->scal(row_, bfloat16(v), (bfloat16*)getDataPtr(0, c), 1);
+            break;
         }
     }
     else if (isHip())
     {
-        gpu()->rocblas_->scal(row_, v, (float*)getDataPtr(0, c), 1);
+        switch (getDataType())
+        {
+        case DataType::HALF: gpu()->rocblas_->scal(row_, (half)v, (half*)getDataPtr(0, c), 1); break;
+        case DataType::BFLOAT16: gpu()->rocblas_->scal(row_, bfloat16(v), (bfloat16*)getDataPtr(0, c), 1); break;
+        default: gpu()->rocblas_->scal(row_, v, (float*)getDataPtr(0, c), 1); break;
+        }
     }
     else
     {
@@ -924,15 +1038,114 @@ void Matrix::mul(const Matrix& A, const Matrix& B, Matrix& R, float a, float r, 
         case DataType::HALF:
             R.gpu()->cublas_->gemm(ta, tb, m, n, k, (half)a, A.datah(), lda, B.datah(), ldb, (half)r, R.datah(), m);
             break;
+        case DataType::BFLOAT16:
+            R.gpu()->cublas_->gemm(ta, tb, m, n, k, bfloat16(a), A.databf(), lda, B.databf(), ldb, bfloat16(r), R.databf(), m);
+            break;
         }
     }
     else if (R.isHip())
     {
-        R.gpu()->rocblas_->gemm(ta, tb, m, n, k, a, A.dataf(), lda, B.dataf(), ldb, r, R.dataf(), m);
+        switch (R.getDataType())
+        {
+        case DataType::HALF:
+            R.gpu()->rocblas_->gemm(ta, tb, m, n, k, a, A.datah(), lda, B.datah(), ldb, r, R.datah(), m);
+            break;
+        case DataType::BFLOAT16:
+            R.gpu()->rocblas_->gemm(ta, tb, m, n, k, a, A.databf(), lda, B.databf(), ldb, r, R.databf(), m);
+            break;
+        default:
+            R.gpu()->rocblas_->gemm(ta, tb, m, n, k, a, A.dataf(), lda, B.dataf(), ldb, r, R.dataf(), m);
+            break;
+        }
     }
     else
     {
         Cblas::gemm(ta, tb, m, n, k, a, A.dataf(), lda, B.dataf(), ldb, r, R.dataf(), m);
+    }
+}
+
+//批量矩阵乘 (用于 self-attention).
+//把 A/B/R 视为 batch 个独立的小矩阵, 每个 batch 在内存里是连续 col-major 切片,
+//A 的每个 batch 大小 = M*K, B = K*N, R = M*N.
+void Matrix::mulBatched(const Matrix& A, const Matrix& B, Matrix& R,
+    MatrixTransType ta, MatrixTransType tb, float a, float r)
+{
+    assert(checkMatrixDevice({ &A, &B, &R }));
+    int M = (ta == MATRIX_NO_TRANS) ? A.width_ : A.height_;
+    int K = (ta == MATRIX_NO_TRANS) ? A.height_ : A.width_;
+    int N = (tb == MATRIX_NO_TRANS) ? B.height_ : B.width_;
+    int batch = A.number_;
+    int lda = (ta == MATRIX_NO_TRANS) ? M : K;
+    int ldb = (tb == MATRIX_NO_TRANS) ? K : N;
+    int ldc = M;
+    long long strideA = (long long)M * K;
+    long long strideB = (long long)K * N;
+    long long strideC = (long long)M * N;
+    if (R.isCuda())
+    {
+        switch (R.getDataType())
+        {
+        case DataType::FLOAT:
+            R.gpu()->cublas_->gemmStridedBatched(ta, tb, M, N, K, a,
+                A.dataf(), lda, strideA, B.dataf(), ldb, strideB,
+                r, R.dataf(), ldc, strideC, batch);
+            break;
+        case DataType::HALF:
+            R.gpu()->cublas_->gemmStridedBatched(ta, tb, M, N, K, (half)a,
+                A.datah(), lda, strideA, B.datah(), ldb, strideB,
+                (half)r, R.datah(), ldc, strideC, batch);
+            break;
+        case DataType::BFLOAT16:
+            R.gpu()->cublas_->gemmStridedBatched(ta, tb, M, N, K, bfloat16(a),
+                A.databf(), lda, strideA, B.databf(), ldb, strideB,
+                bfloat16(r), R.databf(), ldc, strideC, batch);
+            break;
+        default:
+            //其他精度暂未支持, 退化为逐 batch 调用 gemm
+            for (int b = 0; b < batch; b++)
+            {
+                R.gpu()->cublas_->gemm(ta, tb, M, N, K, a,
+                    A.dataf() + b * strideA, lda,
+                    B.dataf() + b * strideB, ldb,
+                    r, R.dataf() + b * strideC, ldc);
+            }
+            break;
+        }
+    }
+    else if (R.isHip())
+    {
+        switch (R.getDataType())
+        {
+        case DataType::HALF:
+            R.gpu()->rocblas_->gemmStridedBatched(ta, tb, M, N, K, a,
+                A.datah(), lda, strideA, B.datah(), ldb, strideB,
+                r, R.datah(), ldc, strideC, batch);
+            break;
+        case DataType::BFLOAT16:
+            R.gpu()->rocblas_->gemmStridedBatched(ta, tb, M, N, K, a,
+                A.databf(), lda, strideA, B.databf(), ldb, strideB,
+                r, R.databf(), ldc, strideC, batch);
+            break;
+        default:
+            for (int b = 0; b < batch; b++)
+            {
+                R.gpu()->rocblas_->gemm(ta, tb, M, N, K, a,
+                    A.dataf() + b * strideA, lda,
+                    B.dataf() + b * strideB, ldb,
+                    r, R.dataf() + b * strideC, ldc);
+            }
+            break;
+        }
+    }
+    else
+    {
+        for (int b = 0; b < batch; b++)
+        {
+            Cblas::gemm(ta, tb, M, N, K, a,
+                A.dataf() + b * strideA, lda,
+                B.dataf() + b * strideB, ldb,
+                r, R.dataf() + b * strideC, ldc);
+        }
     }
 }
 
@@ -956,11 +1169,28 @@ void Matrix::mulVector(Matrix& A, Matrix& B, Matrix& R, float a, float r, Matrix
         case DataType::HALF:
             R.gpu()->cublas_->gemv(ta, m, n, (half)a, A.datah(), A.row_, B.datah(), 1, (half)r, R.datah(), 1);
             break;
+        case DataType::BFLOAT16:
+            R.gpu()->cublas_->gemv(ta, m, n, bfloat16(a), A.databf(), A.row_, B.databf(), 1, bfloat16(r), R.databf(), 1);
+            break;
         }
     }
     else if (R.isHip())
     {
-        R.gpu()->rocblas_->gemv(ta, m, n, a, A.dataf(), A.row_, B.dataf(), 1, r, R.dataf(), 1);
+        // rocblas has no half/bf16 gemv; use gemm with single output column instead
+        int M_r = (ta == MATRIX_NO_TRANS) ? m : n;
+        int K_r = (ta == MATRIX_NO_TRANS) ? n : m;
+        switch (R.getDataType())
+        {
+        case DataType::HALF:
+            R.gpu()->rocblas_->gemm(ta, MATRIX_NO_TRANS, M_r, 1, K_r, a, A.datah(), A.row_, B.datah(), K_r, r, R.datah(), M_r);
+            break;
+        case DataType::BFLOAT16:
+            R.gpu()->rocblas_->gemm(ta, MATRIX_NO_TRANS, M_r, 1, K_r, a, A.databf(), A.row_, B.databf(), K_r, r, R.databf(), M_r);
+            break;
+        default:
+            R.gpu()->rocblas_->gemv(ta, m, n, a, A.dataf(), A.row_, B.dataf(), 1, r, R.dataf(), 1);
+            break;
+        }
     }
     else
     {
@@ -1015,7 +1245,7 @@ void Matrix::elementMul(const Matrix& A, const Matrix& B, Matrix& R, float a, fl
     if (R.isCuda())
     {
         int op_desc[64] = { 0 };
-        cudnnSetOpTensorDescriptor((cudnnOpTensorDescriptor_t)op_desc, CUDNN_OP_TENSOR_MUL, toCudnnDataType(R.getDataType()), CUDNN_NOT_PROPAGATE_NAN);
+        cudnnSetOpTensorDescriptor((cudnnOpTensorDescriptor_t)op_desc, CUDNN_OP_TENSOR_MUL, CUDNN_DATA_FLOAT, CUDNN_NOT_PROPAGATE_NAN);
         //好像B不能与R相同
         if (R.data() != B.data())
         {
@@ -1027,9 +1257,16 @@ void Matrix::elementMul(const Matrix& A, const Matrix& B, Matrix& R, float a, fl
             cudnnOpTensor(R.gpu()->cudnn_handle_, (cudnnOpTensorDescriptor_t)op_desc,
                 &a, B.cudnn_desc(), B.data(), &const_real_1, A.cudnn_desc(), A.data(), &r, R.cudnn_desc(), R.data());
         }
+        // float16 overflow guard: product of two large half values can exceed 65504 → inf → downstream NaN
+        if (R.getDataType() == DataType::HALF)
+        {
+            cuda_clamp_scores_half(R.data(), (unsigned int)R.getDataSize(), 65000.0f);
+        }
+        // bfloat16 has same range as float32, no clamping needed
     }
     else if (R.isHip())
     {
+        hip_elementwise_mul(R.getDataTypeByInt(), A.data(), B.data(), R.data(), R.data_size_, (unsigned int)B.data_size_, a, r);
     }
     else
     {
@@ -1044,27 +1281,46 @@ void Matrix::elementMul(const Matrix& A, const Matrix& B, Matrix& R, float a, fl
 void Matrix::add(const Matrix& A, const Matrix& B, Matrix& R, float a, float b, float r)
 {
     assert(checkMatrixDevice({ &A, &B, &R }));
-    if (A.data() == B.data() && B.data() == R.data() && a + b + r == 1)
+    const Matrix* Ap = &A;
+    const Matrix* Bp = &B;
+    Matrix A_shadow;
+    Matrix B_shadow;
+
+    // cudnnOpTensor/cudnnAddTensor 对输入输出内存重叠较敏感。
+    // 当 A/B 与 R 共享同一底层存储但 data 指针不同（view/offset alias）时，
+    // 先做影子拷贝，避免残差加法出现异常。
+    if (A.shared_data_ == R.shared_data_ && A.data() != R.data())
+    {
+        A_shadow = A.clone(A.getDeviceType());
+        Ap = &A_shadow;
+    }
+    if (B.shared_data_ == R.shared_data_ && B.data() != R.data())
+    {
+        B_shadow = B.clone(B.getDeviceType());
+        Bp = &B_shadow;
+    }
+
+    if (Ap->data() == Bp->data() && Bp->data() == R.data() && a + b + r == 1)
     {
         return;
     }
     //注意只使用R的tensor_desc
     if (R.isCuda())
     {
-        if (A.data() == R.data())
+        if (Ap->data() == R.data())
         {
             r = r + a;
             if (b != 0 || r != 1)
             {
-                cudnnAddTensor(R.gpu()->cudnn_handle_, &b, R.cudnn_desc(), B.data(), &r, R.cudnn_desc(), A.data());
+                cudnnAddTensor(R.gpu()->cudnn_handle_, &b, R.cudnn_desc(), Bp->data(), &r, R.cudnn_desc(), Ap->data());
             }
         }
-        else if (B.data() == R.data())
+        else if (Bp->data() == R.data())
         {
             r = r + b;
             if (a != 0 || r != 1)
             {
-                cudnnAddTensor(R.gpu()->cudnn_handle_, &a, R.cudnn_desc(), A.data(), &r, R.cudnn_desc(), B.data());
+                cudnnAddTensor(R.gpu()->cudnn_handle_, &a, R.cudnn_desc(), Ap->data(), &r, R.cudnn_desc(), Bp->data());
             }
         }
         else
@@ -1074,7 +1330,7 @@ void Matrix::add(const Matrix& A, const Matrix& B, Matrix& R, float a, float b, 
             //R.cuda()->cublas_->geam(MATRIX_NO_TRANS, MATRIX_NO_TRANS, A.row_, A.number_, a, A.data(), A.row_, b, B.data(), B.row_, R.data(), R.row_);
             cudnnSetOpTensorDescriptor(op_desc(), CUDNN_OP_TENSOR_ADD, CUDNN_DATA_FLOAT, CUDNN_NOT_PROPAGATE_NAN);
             //这个函数要求R不可等于A或B
-            auto ret = cudnnOpTensor(R.gpu()->cudnn_handle_, op_desc(), &a, R.cudnn_desc(), A.data(), &b, R.cudnn_desc(), B.data(), &r, R.cudnn_desc(), R.data());
+            auto ret = cudnnOpTensor(R.gpu()->cudnn_handle_, op_desc(), &a, R.cudnn_desc(), Ap->data(), &b, R.cudnn_desc(), Bp->data(), &r, R.cudnn_desc(), R.data());
             if (ret)
             {
                 LOG_ERR("{}\n", R.gpu()->lastCudnnErrorString());
@@ -1083,13 +1339,20 @@ void Matrix::add(const Matrix& A, const Matrix& B, Matrix& R, float a, float b, 
     }
     else if (R.isHip())
     {
-        R.gpu()->rocblas_->geam(MATRIX_NO_TRANS, MATRIX_NO_TRANS, A.row_, A.number_, a, A.dataf(), A.row_, b, B.dataf(), B.row_, R.dataf(), R.row_);
+        if (R.getDataType() == DataType::HALF || R.getDataType() == DataType::BFLOAT16)
+        {
+            hip_elementwise_add(R.getDataTypeByInt(), Ap->data(), Bp->data(), R.data(), R.data_size_, a, b, r);
+        }
+        else
+        {
+            R.gpu()->rocblas_->geam(MATRIX_NO_TRANS, MATRIX_NO_TRANS, Ap->row_, Ap->number_, a, Ap->dataf(), Ap->row_, b, Bp->dataf(), Bp->row_, R.dataf(), R.row_);
+        }
     }
     else
     {
         for (int i = 0; i < R.data_size_; i++)
         {
-            R.setData(i, a * A.getData(i) + b * B.getData(i) + r * R.getData(i));
+            R.setData(i, a * Ap->getData(i) + b * Bp->getData(i) + r * R.getData(i));
         }
     }
 }
@@ -1110,6 +1373,9 @@ float Matrix::dot(const Matrix& A, const Matrix& B)
             break;
         case DataType::HALF:
             return A.gpu()->cublas_->dot(A.data_size_, A.datah(), 1, B.datah(), 1);
+            break;
+        case DataType::BFLOAT16:
+            return A.gpu()->cublas_->dot(A.data_size_, A.databf(), 1, B.databf(), 1);
             break;
         }
     }
@@ -1140,6 +1406,9 @@ float Matrix::dotCol(const Matrix& A, int cA, const Matrix& B, int cB)
         case DataType::HALF:
             return A.gpu()->cublas_->dot(A.row_, (half*)A.getDataPtr(0, cA), 1, (half*)B.getDataPtr(0, cA), 1);
             break;
+        case DataType::BFLOAT16:
+            return A.gpu()->cublas_->dot(A.row_, (bfloat16*)A.getDataPtr(0, cA), 1, (bfloat16*)B.getDataPtr(0, cA), 1);
+            break;
         }
     }
     else if (A.isHip())
@@ -1168,6 +1437,9 @@ float Matrix::dotPart(int size, const Matrix& A, void* a, int cA, void* b, int c
         case DataType::HALF:
             return A.gpu()->cublas_->dot(size, (half*)a, cA, (half*)b, cB);
             break;
+        case DataType::BFLOAT16:
+            return A.gpu()->cublas_->dot(size, (bfloat16*)a, cA, (bfloat16*)b, cB);
+            break;
         }
     }
     else if (A.isHip())
@@ -1195,6 +1467,9 @@ float Matrix::dotSelf() const
             break;
         case DataType::HALF:
             return gpu()->cublas_->dot(data_size_, datah(), 1, datah(), 1);
+            break;
+        case DataType::BFLOAT16:
+            return gpu()->cublas_->dot(data_size_, databf(), 1, databf(), 1);
             break;
         }
     }

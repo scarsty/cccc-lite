@@ -4,6 +4,12 @@
 
 #if ENABLE_CUDA
 #include "cublas_v2.h"
+#if defined(_WIN32)
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#endif
 
 namespace cccc
 {
@@ -45,7 +51,23 @@ public:
     CUBLAS_FUNCTION cublasStatus_t init()
     {
         auto r = cublasCreate(&handle_);
-        cublasSetMathMode(handle_, CUBLAS_TENSOR_OP_MATH);
+        cublasSetMathMode(handle_, CUBLAS_MATH_DISALLOW_REDUCED_PRECISION_REDUCTION);
+        // cublasGemmStridedBatchedEx with cublasComputeType_t is not exported by older cublas.lib;
+        // the project's cublas_v2.h doesn't declare it either, so we must load at runtime.
+        static const char* cublas_libs[] = { "cublas64_13", "cublas64_12", "cublas64_11", nullptr };
+        for (int i = 0; cublas_libs[i]; i++)
+        {
+            HMODULE h = GetModuleHandleA(cublas_libs[i]);
+            if (!h) h = LoadLibraryA(cublas_libs[i]);
+            if (h)
+            {
+                cublasGemmEx_fp_ = reinterpret_cast<cublasGemmEx_t>(
+                    GetProcAddress(h, "cublasGemmEx"));
+                cublasGemmStridedBatchedEx_fp_ = reinterpret_cast<cublasGemmStridedBatchedEx_t>(
+                    GetProcAddress(h, "cublasGemmStridedBatchedEx"));
+                if (cublasGemmStridedBatchedEx_fp_) break;
+            }
+        }
         return r;
     }
     CUBLAS_FUNCTION void destroy()
@@ -308,6 +330,16 @@ public:
     {
         cublasSgemm(handle_, get_trans(TransA), get_trans(TransB), M, N, K, &alpha, A, lda, B, ldb, &beta, C, ldc);
     }
+    CUBLAS_FUNCTION void gemmStridedBatched(const MatrixTransType TransA, const MatrixTransType TransB,
+        const int M, const int N, const int K,
+        const float alpha, const float* A, const int lda, long long strideA,
+        const float* B, const int ldb, long long strideB,
+        const float beta, float* C, const int ldc, long long strideC,
+        const int batchCount)
+    {
+        cublasSgemmStridedBatched(handle_, get_trans(TransA), get_trans(TransB),
+            M, N, K, &alpha, A, lda, strideA, B, ldb, strideB, &beta, C, ldc, strideC, batchCount);
+    }
     CUBLAS_FUNCTION void symm(const MatrixSideType Side, const MatrixFillType Uplo, const int M, const int N, const float alpha, const float* A, const int lda, const float* B, const int ldb, const float beta, float* C, const int ldc)
     {
         cublasSsymm(handle_, get_side(Side), get_uplo(Uplo), M, N, &alpha, A, lda, B, ldb, &beta, C, ldc);
@@ -371,7 +403,7 @@ public:
         cublasDdgmm(handle_, get_side(Side), m, n, A, lda, x, incx, C, ldc);
     }
     //half precision
-    CUBLAS_FUNCTION float doth(const int N, const half* X, const int incX, const half* Y, const int incY)
+    CUBLAS_FUNCTION float dot(const int N, const half* X, const int incX, const half* Y, const int incY)
     {
         //float r;
         //cublasDotEx(handle_, N, X, CUDA_R_16F, incX, Y, CUDA_R_16F, incY, &r, CUDA_R_32F, CUDA_R_32F);
@@ -386,7 +418,7 @@ public:
         cudaFree(bufferY);
         return r;
     }
-    CUBLAS_FUNCTION float asumh(const int N, const half* X, const int incX)
+    CUBLAS_FUNCTION float asum(const int N, const half* X, const int incX)
     {
         float r = 0;
         float* buffer = nullptr;
@@ -396,7 +428,7 @@ public:
         cudaFree(buffer);
         return r;
     }
-    CUBLAS_FUNCTION int iamaxh(const int N, const half* X, const int incX)
+    CUBLAS_FUNCTION int iamax(const int N, const half* X, const int incX)
     {
         int r = 1;
         float* buffer = nullptr;
@@ -406,21 +438,178 @@ public:
         cudaFree(buffer);
         return r - 1;
     }
-    CUBLAS_FUNCTION void scalh(const int N, const half alpha, half* X, const int incX)
+    CUBLAS_FUNCTION void scal(const int N, const half alpha, half* X, const int incX)
     {
         cublasScalEx(handle_, N, &alpha, CUDA_R_16F, X, CUDA_R_16F, incX, CUDA_R_32F);
     }
-    CUBLAS_FUNCTION void gemvh(const MatrixTransType TransA, const int M, const int N, const half alpha, const half* A, const int lda, const half* X, const int incX, const half beta, half* Y, const int incY)
+    CUBLAS_FUNCTION void gemv(const MatrixTransType TransA, const int M, const int N, const half alpha, const half* A, const int lda, const half* X, const int incX, const half beta, half* Y, const int incY)
     {
         cublasHgemm(handle_, get_trans(TransA), CUBLAS_OP_N, M, 1, N, (__half*)&alpha, (__half*)A, lda, (__half*)X, N, (__half*)&beta, (__half*)Y, lda);
     }
-    CUBLAS_FUNCTION void gemmh(const MatrixTransType TransA, const MatrixTransType TransB, const int M, const int N, const int K, const half alpha, const half* A, const int lda, const half* B, const int ldb, const half beta, half* C, const int ldc)
+    CUBLAS_FUNCTION void gemm(const MatrixTransType TransA, const MatrixTransType TransB, const int M, const int N, const int K, const half alpha, const half* A, const int lda, const half* B, const int ldb, const half beta, half* C, const int ldc)
     {
         cublasHgemm(handle_, get_trans(TransA), get_trans(TransB), M, N, K, (__half*)&alpha, (__half*)A, lda, (__half*)B, ldb, (__half*)&beta, (__half*)C, ldc);
+    }
+    CUBLAS_FUNCTION void gemmStridedBatched(const MatrixTransType TransA, const MatrixTransType TransB,
+        const int M, const int N, const int K,
+        const half alpha, const half* A, const int lda, long long strideA,
+        const half* B, const int ldb, long long strideB,
+        const half beta, half* C, const int ldc, long long strideC,
+        const int batchCount)
+    {
+        float fa = (float)alpha, fb = (float)beta;
+        if (cublasGemmStridedBatchedEx_fp_)
+        {
+            // Use FP32 accumulation for better precision with FP16 I/O
+            cublasGemmStridedBatchedEx_fp_(handle_, get_trans(TransA), get_trans(TransB),
+                M, N, K,
+                &fa, A, CUDA_R_16F, lda, strideA,
+                B, CUDA_R_16F, ldb, strideB,
+                &fb, C, CUDA_R_16F, ldc, strideC,
+                batchCount, CUBLAS_COMPUTE_32F, CUBLAS_GEMM_DEFAULT_TENSOR_OP);
+        }
+        else
+        {
+            cublasHgemmStridedBatched(handle_, get_trans(TransA), get_trans(TransB),
+                M, N, K, (__half*)&alpha, (__half*)A, lda, strideA,
+                (__half*)B, ldb, strideB, (__half*)&beta, (__half*)C, ldc, strideC, batchCount);
+        }
+    }
+    //bfloat16 precision
+    CUBLAS_FUNCTION float dot(const int N, const bfloat16* X, const int incX, const bfloat16* Y, const int incY)
+    {
+        float* bufferX = nullptr;
+        float* bufferY = nullptr;
+        cudaMalloc((void**)&bufferX, N * incX * sizeof(float));
+        cudaMalloc((void**)&bufferY, N * incY * sizeof(float));
+        cuda_bf162float((void*)X, bufferX, (unsigned int)(N * incX));
+        cuda_bf162float((void*)Y, bufferY, (unsigned int)(N * incY));
+        float r = dot(N, bufferX, incX, bufferY, incY);
+        cudaFree(bufferX);
+        cudaFree(bufferY);
+        return r;
+    }
+    CUBLAS_FUNCTION float asum(const int N, const bfloat16* X, const int incX)
+    {
+        float r = 0;
+        float* buffer = nullptr;
+        cudaMalloc((void**)&buffer, N * incX * sizeof(float));
+        cuda_bf162float((void*)X, buffer, (unsigned int)(N * incX));
+        cublasSasum(handle_, N, buffer, incX, &r);
+        cudaFree(buffer);
+        return r;
+    }
+    CUBLAS_FUNCTION int iamax(const int N, const bfloat16* X, const int incX)
+    {
+        int r = 1;
+        float* buffer = nullptr;
+        cudaMalloc((void**)&buffer, N * incX * sizeof(float));
+        cuda_bf162float((void*)X, buffer, (unsigned int)(N * incX));
+        cublasIsamax(handle_, N, buffer, incX, &r);
+        cudaFree(buffer);
+        return r - 1;
+    }
+    CUBLAS_FUNCTION void scal(const int N, const bfloat16 alpha, bfloat16* X, const int incX)
+    {
+        float fa = (float)alpha;
+        cublasScalEx(handle_, N, &fa, CUDA_R_32F, X, CUDA_R_16BF, incX, CUDA_R_32F);
+    }
+    CUBLAS_FUNCTION void gemv(const MatrixTransType TransA, const int M, const int N, const bfloat16 alpha, const bfloat16* A, const int lda, const bfloat16* X, const int incX, const bfloat16 beta, bfloat16* Y, const int incY)
+    {
+        // BF16 gemv via float conversion: A(M×N) × X(N) → Y(M)
+        float fa = (float)alpha, fb = (float)beta;
+        int szA = lda * N;    // column-major: lda rows × N cols
+        int szX = N * incX;
+        int szY = M * incY;
+        float *fA = nullptr, *fX = nullptr, *fY = nullptr;
+        cudaMalloc((void**)&fA, szA * sizeof(float));
+        cudaMalloc((void**)&fX, szX * sizeof(float));
+        cudaMalloc((void**)&fY, szY * sizeof(float));
+        cuda_bf162float((void*)A, fA, (unsigned int)szA);
+        cuda_bf162float((void*)X, fX, (unsigned int)szX);
+        if (fb != 0.f)
+            cuda_bf162float((void*)Y, fY, (unsigned int)szY);
+        else
+            cudaMemset(fY, 0, szY * sizeof(float));
+        cublasSgemv(handle_, get_trans(TransA), M, N, &fa, fA, lda, fX, incX, &fb, fY, incY);
+        cuda_float2bf16(fY, (void*)Y, (unsigned int)szY);
+        cudaFree(fA); cudaFree(fX); cudaFree(fY);
+    }
+    CUBLAS_FUNCTION void gemm(const MatrixTransType TransA, const MatrixTransType TransB, const int M, const int N, const int K, const bfloat16 alpha, const bfloat16* A, const int lda, const bfloat16* B, const int ldb, const bfloat16 beta, bfloat16* C, const int ldc)
+    {
+        // BF16 gemm via float conversion
+        float fa = (float)alpha, fb = (float)beta;
+        int szA = lda * (TransA == MATRIX_NO_TRANS ? K : M);
+        int szB = ldb * (TransB == MATRIX_NO_TRANS ? N : K);
+        int szC = ldc * N;
+        float *fA = nullptr, *fB = nullptr, *fC = nullptr;
+        cudaMalloc((void**)&fA, szA * sizeof(float));
+        cudaMalloc((void**)&fB, szB * sizeof(float));
+        cudaMalloc((void**)&fC, szC * sizeof(float));
+        cuda_bf162float((void*)A, fA, (unsigned int)szA);
+        cuda_bf162float((void*)B, fB, (unsigned int)szB);
+        if (fb != 0.f)
+            cuda_bf162float((void*)C, fC, (unsigned int)szC);
+        else
+            cudaMemset(fC, 0, szC * sizeof(float));
+        cublasSgemm(handle_, get_trans(TransA), get_trans(TransB), M, N, K,
+            &fa, fA, lda, fB, ldb, &fb, fC, ldc);
+        cuda_float2bf16(fC, (void*)C, (unsigned int)szC);
+        cudaFree(fA); cudaFree(fB); cudaFree(fC);
+    }
+    CUBLAS_FUNCTION void gemmStridedBatched(const MatrixTransType TransA, const MatrixTransType TransB,
+        const int M, const int N, const int K,
+        const bfloat16 alpha, const bfloat16* A, const int lda, long long strideA,
+        const bfloat16* B, const int ldb, long long strideB,
+        const bfloat16 beta, bfloat16* C, const int ldc, long long strideC,
+        const int batchCount)
+    {
+        // BF16 gemmStridedBatched via float conversion
+        float fa = (float)alpha, fb = (float)beta;
+        long long szA = strideA > 0 ? strideA : (long long)lda * (TransA == MATRIX_NO_TRANS ? K : M);
+        long long szB = strideB > 0 ? strideB : (long long)ldb * (TransB == MATRIX_NO_TRANS ? N : K);
+        long long szC = strideC > 0 ? strideC : (long long)ldc * N;
+        long long totalA = szA * batchCount;
+        long long totalB = szB * batchCount;
+        long long totalC = szC * batchCount;
+        float *fA = nullptr, *fB = nullptr, *fC = nullptr;
+        cudaMalloc((void**)&fA, totalA * sizeof(float));
+        cudaMalloc((void**)&fB, totalB * sizeof(float));
+        cudaMalloc((void**)&fC, totalC * sizeof(float));
+        cuda_bf162float((void*)A, fA, (unsigned int)totalA);
+        cuda_bf162float((void*)B, fB, (unsigned int)totalB);
+        if (fb != 0.f)
+            cuda_bf162float((void*)C, fC, (unsigned int)totalC);
+        else
+            cudaMemset(fC, 0, totalC * sizeof(float));
+        cublasSgemmStridedBatched(handle_, get_trans(TransA), get_trans(TransB),
+            M, N, K, &fa, fA, lda, szA, fB, ldb, szB, &fb, fC, ldc, szC, batchCount);
+        cuda_float2bf16(fC, (void*)C, (unsigned int)totalC);
+        cudaFree(fA); cudaFree(fB); cudaFree(fC);
     }
 
 protected:
     cublasHandle_t handle_ = nullptr;
+
+    using cublasGemmEx_t = cublasStatus_t(CUBLASWINAPI*)(
+        cublasHandle_t, cublasOperation_t, cublasOperation_t,
+        int, int, int,
+        const void*, const void*, cudaDataType, int,
+        const void*, cudaDataType, int,
+        const void*, void*, cudaDataType, int,
+        cublasComputeType_t, cublasGemmAlgo_t);
+    cublasGemmEx_t cublasGemmEx_fp_ = nullptr;
+
+    // cublasGemmStridedBatchedEx with cublasComputeType_t is not in the project's cublas_v2.h
+    // and not exported by older cublas.lib; must be loaded at runtime via GetProcAddress.
+    using cublasGemmStridedBatchedEx_t = cublasStatus_t(CUBLASWINAPI*)(
+        cublasHandle_t, cublasOperation_t, cublasOperation_t,
+        int, int, int,
+        const void*, const void*, cudaDataType, int, long long,
+        const void*, cudaDataType, int, long long,
+        const void*, void*, cudaDataType, int, long long,
+        int, cublasComputeType_t, cublasGemmAlgo_t);
+    cublasGemmStridedBatchedEx_t cublasGemmStridedBatchedEx_fp_ = nullptr;
 };
 
 }    // namespace cccc

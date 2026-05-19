@@ -178,6 +178,7 @@ int Solver::adjustLearnRate(int epoch, int total_epoch)
     }
     case ADJUST_LEARN_RATE_STEPS_WARM:
     {
+        //前1/5 epoch做warm-up（学习率从小到大），后4/5做step衰减
         if (epoch <= total_epoch / 5)
         {
             learn_rate_ = learn_rate_base_ * pow(lr_step_decay_, -(epoch - 1) / ((total_epoch / 5 + lr_steps_ - 1) / lr_steps_) + lr_steps_ - 1);
@@ -190,6 +191,8 @@ int Solver::adjustLearnRate(int epoch, int total_epoch)
     }
     case ADJUST_LEARN_RATE_STEPS_WARM2:
     {
+        //前1/4 epoch分两段：先以decay学习率运行(前66%)，再线性插值过渡到基础学习率(后34%)
+        //后3/4 epoch做step衰减
         if (epoch <= total_epoch / 4 * 0.66)
         {
             learn_rate_ = learn_rate_base_ * lr_step_decay_;
@@ -217,6 +220,55 @@ int Solver::adjustLearnRate(int epoch, int total_epoch)
 
 int Solver::adjustLearnRate2(int epoch, int total_epoch, const std::vector<std::vector<TestInfo>>& test_info)
 {
+    if (lr_adjust_method_ == ADJUST_LEARN_RATE_STEPS_AUTO)
+    {
+        if (test_info.empty()) { return 0; }
+        lr_keep_count_++;
+        if (lr_keep_count_ < lr_test_stable_time_) { return 0; }
+        auto pre_lr = learn_rate_;
+        auto size = test_info.size();
+        size_t total = std::min(size_t(lr_test_stable_time_), size);
+        bool stable = true;
+        for (int i = 0; i < test_info[0].size(); i++)
+        {
+            double sum = 0;
+            for (int e = size - total; e < size; e++)
+            {
+                sum += test_info[e][i].accuracy;
+            }
+            double avg = sum / total;
+            double sum_square = 0;
+            for (int e = size - total; e < size; e++)
+            {
+                sum_square += (test_info[e][i].accuracy - avg) * (test_info[e][i].accuracy - avg);
+            }
+            double std = sqrt(sum_square / total);
+            //LOG("Accuracy avg for {} = {}, std = {}\n", i, avg, std);
+            if (avg < 0.5 || std > lr_test_std_limit_)    //如果准确率低于0.5或者标准差过大，则认为不稳定
+            {
+                stable = false;
+            }
+        }
+        if (stable)
+        {
+            learn_rate_ *= lr_step_decay_;
+        }
+        float learn_rate = learn_rate_base_ * pow(lr_step_decay_, (epoch - 1) / ((total_epoch + lr_steps_ - 1) / lr_steps_));
+        if (learn_rate_ > learn_rate)
+        {
+            learn_rate_ = learn_rate;
+        }
+        if (pre_lr != learn_rate_)
+        {
+            lr_keep_count_ = 0;
+            //LOG("Learn rate is changed from {} to {}\n", pre_lr, learn_rate_);
+            lr_change_count_++;
+            if (lr_change_count_ >= lr_steps_)
+            {
+                return 1;
+            }
+        }
+    }
     return 0;
 }
 
@@ -281,6 +333,8 @@ void Solver::updateWeights(Matrix& W, int batch)
         Matrix::add(W, dW_, W, 1 - weight_decay_ * learn_rate_, -1.0);
         break;
     case SOLVER_ADAM:
+        //注意：ADAM更新不除以batch，因为adamUpdate内部已通过一阶/二阶矩估计自适应缩放梯度
+        //与SGD不同（SGD显式除以batch），ADAM的learn_rate本身就控制了步长
         MatrixEx::adamUpdate(W_vector_[0], W_vector_[1], W.d(), dW_, real_vector_[2], real_vector_[3], real_vector_[0], time_step_);
         Matrix::add(W, dW_, W, 1 - weight_decay_ * learn_rate_, -learn_rate_ * lr_weight_scale_);
         break;

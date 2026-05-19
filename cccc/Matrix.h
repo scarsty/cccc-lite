@@ -26,6 +26,8 @@ class CCCC_EXPORT Matrix
 {
 public:
     friend class MatrixEx;
+    friend class CudnnGraphOps;
+    friend class CudnnOpQueueGraph;
 
 protected:
     //矩阵所使用的常数
@@ -70,6 +72,9 @@ protected:
 
     bool is_weight_ = false;
     bool is_input_ = true;
+    std::string weight_name_;
+
+    TensorForm tensor_form_ = TensorForm::NCHW;    // physical memory layout; affects setDim and cudnn descriptor
 
     mutable std::vector<Matrix> workspace_;
     std::any user_data_;
@@ -91,7 +96,10 @@ public:
     Matrix createSharedCol(int col = 0, int count = 1) const;
     Matrix autoShareClone(UnitType device_type) const;
     Matrix transDataType(DataType data_type) const;
-    void release();    //会释放所有共享的数据，除非特别需要，一般不要使用
+    void release();    //会释放所有共享的数据，除非特别注意，一般不要使用
+    // 为激活复用预释放显存：释放 GPU 显存、保留尺寸规划信息并同步裸指针。
+    // 非懒分配时供 optimizeActivationMemory 的预释放阶段使用；懒分配时（data_==null）为空操作。
+    void releaseForReuse();
     void releaseWorkSpace()
     {
         workspace_.clear();
@@ -102,6 +110,7 @@ private:
     float* dataf() const { return (float*)data_; }
     double* datad() const { return (double*)data_; }
     half* datah() const { return (half*)data_; }
+    bfloat16* databf() const { return (bfloat16*)data_; }
     template <typename T>
     T* data() const { return (T*)data_; }
     //bool haveD() const { return d_this_ != nullptr; }
@@ -121,6 +130,13 @@ public:
     static void setCurrentDataType(DataType dt) { current_data_type() = dt; }
     static DataType getCurrentDataType() { return current_data_type(); }
 
+    TensorForm getTensorForm() const { return tensor_form_; }
+    // Set tensor_form and re-run setDim so logical dims and cudnn descriptor are updated.
+    // The actual data must already be in the new physical layout before calling this.
+    void setTensorForm(TensorForm form);
+    // Replace data/layout fields from src (preserves metadata: weight_name_, is_weight_, etc.)
+    void moveFrom(Matrix& src);
+
 public:
     Matrix& d() const;
     void setNeedBack(bool b) { need_back_ = b; }    //会生成反向矩阵，需慎用
@@ -131,6 +147,8 @@ public:
     bool isInput() const { return is_input_; }
     void setNeedLoad(bool l) { need_load_ = l; }
     bool needLoad() const { return need_load_; }
+    void setWeightName(const std::string& n) { weight_name_ = n; }
+    const std::string& getWeightName() const { return weight_name_; }
     void setKeepWeight(float kw) { keep_weight_ = kw; }
     float keepWeight() const { return keep_weight_; }
 
@@ -143,6 +161,9 @@ public:
         }
         return std::any_cast<T&>(user_data_);
     }
+
+    //目前仅 batchNorm 使用，用于访问辅助矩阵
+    Matrix& getWorkspace(int i) const { return workspace_[i]; }
 
 private:
     void setDim(const std::vector<int>& dim);
@@ -175,6 +196,7 @@ public:
     void* getDataPtr(int i) const { return (char*)data() + i * getDataTypeSize(); }
     void* getDataPtr(int m, int n) const { return getDataPtr(mn2i(m, n)); }
     void* getDataPtr(int w, int h, int c, int n) const { return getDataPtr(whcn2i(w, h, c, n)); }
+    const void* getStorageKey() const { return shared_data_.get(); }
 
     //以下3个函数，注意如果数据在显存中，一般x来说是无法赋值和输出的
     //注意只返回float
@@ -195,7 +217,15 @@ public:
     float getData(int w, int h, int c, int n) const { return getData(whcn2i(w, h, c, n)); }
 
     template <typename T>
-    void setData(int i, T v) { shared_data_->setData(i, v); }
+    void setData(int i, T v)
+    {
+        if (!data() && getDataSize() > 0)
+        {
+            // Lazy-build tensors materialize on first explicit write.
+            resize(getDim(), false, true);
+        }
+        shared_data_->setData(i, v);
+    }
     template <typename T>
     void setData(int m, int n, T v) { setData(mn2i(m, n), v); }
     template <typename T>
@@ -221,9 +251,6 @@ public:
     //int load(SaveBuffer& buffer);
     int64_t save(void* buffer, int64_t size) const;
     int64_t load(const void* buffer, int64_t size);
-
-    //目前仅 batchNorm 使用，用于访问辅助矩阵
-    Matrix& getWorkspace(int i) const { return workspace_[i]; }
 
 private:
     void copyDataInFromHost(void* src, int64_t size);
@@ -278,6 +305,12 @@ public:
 
     //为使功能完整，所有正向运算均应有这个返回矩阵的形式
     static void mul(const Matrix& A, const Matrix& B, Matrix& R, float a = 1, float r = 0, MatrixTransType ta = MATRIX_NO_TRANS, MatrixTransType tb = MATRIX_NO_TRANS);
+    //简化版: M/N/K/batch 从矩阵维度自动推导
+    //  ta=NO_TRANS: M=A.width_, K=A.height_; ta=TRANS: M=A.height_, K=A.width_
+    //  tb=NO_TRANS: N=B.height_;             tb=TRANS: N=B.width_
+    //  batch = A.number_
+    static void mulBatched(const Matrix& A, const Matrix& B, Matrix& R,
+        MatrixTransType ta = MATRIX_NO_TRANS, MatrixTransType tb = MATRIX_NO_TRANS, float a = 1, float r = 0);
     static void mulVector(Matrix& A, Matrix& B, Matrix& R, float a = 1, float r = 0, MatrixTransType ta = MATRIX_NO_TRANS);
     static void mulVector2(Matrix& A, Matrix& B, Matrix& R, float a = 1, float r = 0, MatrixTransType ta = MATRIX_NO_TRANS);
     static void elementMul(const Matrix& A, const Matrix& B, Matrix& R, float a = 1, float r = 0);

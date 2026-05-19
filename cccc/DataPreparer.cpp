@@ -148,7 +148,7 @@ void DataPreparer::prepareData(int epoch, const std::string& info)
     //Y_gpu.resize(Y.getDim());
     //Matrix::copyData(X, X_gpu);
     //Matrix::copyData(Y, Y_gpu);
-    LOG("Data for epoch {} prepared in {} s\n", epoch + 1, timer.getElapsedTime());
+    LOG("Data for epoch {} {} prepared in {} s\n", epoch + 1, info, timer.getElapsedTime());
 }
 
 //依据网络的输入和输出创建一个，避免可能的失败

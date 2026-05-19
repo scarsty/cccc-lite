@@ -1,20 +1,11 @@
-#pragma once
+﻿#pragma once
 
 #ifndef CCCC_EXPORT
 #ifdef _WIN32
-#ifdef _WINDLL
 #define CCCC_EXPORT __declspec(dllexport)
-#else
-#define CCCC_EXPORT
-#endif
 #else
 #define CCCC_EXPORT __attribute__((visibility("default")))
 #endif
-#endif
-
-// Legacy alias
-#ifndef DLL_EXPORT
-#define DLL_EXPORT CCCC_EXPORT
 #endif
 
 #ifdef __cplusplus

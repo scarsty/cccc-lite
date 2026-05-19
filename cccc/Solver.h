@@ -6,7 +6,7 @@ namespace cccc
 {
 
 //更新参数的策略
-class DLL_EXPORT Solver
+class CCCC_EXPORT Solver
 {
 public:
     Solver();
@@ -98,8 +98,7 @@ public:
     void outputState() const;
 
 private:
-    static int findInter(int x, std::vector<int>& xv);
-
-};    // class Solver
+    int findInter(int x, std::vector<int>& xv);
+};
 
 }    // namespace cccc

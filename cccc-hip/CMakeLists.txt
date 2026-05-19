@@ -1,4 +1,4 @@
-project(cccc-hip)
+﻿project(cccc-hip)
 cmake_minimum_required(VERSION 2.6)
 
 
@@ -17,7 +17,7 @@ endif()
 
 list(APPEND CMAKE_PREFIX_PATH "${ROCM_ROOT}")
 
-add_library(cccc-hip SHARED hip_functions.hip)
+add_library(cccc-hip SHARED hip_functions.cpp)
 # Make example runnable using ctest
 set(include_dirs "../../Common")
 if(GPU_RUNTIME STREQUAL "CUDA")
@@ -25,7 +25,7 @@ if(GPU_RUNTIME STREQUAL "CUDA")
 endif()
 
 #target_include_directories(${project_name} PRIVATE ${include_dirs})
-set_source_files_properties(hip_functions.hip PROPERTIES LANGUAGE ${GPU_RUNTIME})
+set_source_files_properties(hip_functions.cpp PROPERTIES LANGUAGE ${GPU_RUNTIME})
 
 install(TARGETS cccc-hip)
 

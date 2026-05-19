@@ -6,7 +6,7 @@
 namespace cccc
 {
 
-class DLL_EXPORT DataPreparer
+class CCCC_EXPORT DataPreparer
 {
 public:
     Matrix X;    //数据变换后的形态，例如随机顺序，亮度对比度，增加噪声等

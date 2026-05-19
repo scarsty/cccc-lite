@@ -5,7 +5,7 @@
 namespace cccc
 {
 
-class DLL_EXPORT Net
+class CCCC_EXPORT Net
 {
 public:
     Net();
@@ -30,6 +30,17 @@ protected:
     std::vector<MatrixOp> op_queue_;
     std::vector<MatrixOp> loss_;
 
+    // ---- 图模式（整网前向一张图） ----
+    // 训练前尝试把整个 op_queue_ 组装成单一 cuDNN backend operation graph，
+    // 由 cuDNN 自动决定融合方式，不做任何手动 pattern 检测。
+    // 若含不支持算子或存在 conv->FC 隐式 reshape 边界，fwd_graph_ 为 null，
+    // 运行时回退到逐算子 plain 路径。ini: [train] use_cudnn_graph=1 开启。
+    bool use_graph_ = false;
+    std::unique_ptr<CudnnOpQueueGraph> fwd_graph_;    // null = 不支持或未开启
+    void buildForwardGraph();
+    void runForwardWithGraph();
+    void optimizeActivationMemory();    // 推理专用：跨层激活张量显存复用，显著降低显存峰值
+
     std::vector<Matrix*> weights_;
     std::vector<Solver> solvers_for_weight_;
 
@@ -37,6 +48,7 @@ protected:
     MatrixSP Y_ = makeMatrixSP();
 
     std::map<std::string, MatrixSP> extra_matrixsp_;    //以备不时之需
+    std::string structure_script_;                      //若非空，覆盖从option读取的structure
 
     Matrix M_error_;
 
@@ -59,12 +71,33 @@ public:
     void setEpoch(int epoch) { epoch_ = epoch; }
     const TestInfo& getTestInfo() { return test_info_; }
     const std::vector<TestInfo>& getGroupTestInfo() { return group_test_info_; }
+    TensorForm getTensorForm() const { return TensorForm::NCHW; }
 
 public:
     Matrix& getX() { return *X_; }
     Matrix& getY() { return *Y_; }
     Matrix& getA() { return *A_; }
     MatrixSP& getMatrixByName(const std::string& name);
+    bool haveExtraMatrix(const std::string& name) const { return extra_matrixsp_.count(name) > 0; }
+    int getExtraMatrixCount(const std::string& prefix) const
+    {
+        int n = 0;
+        while (extra_matrixsp_.count(prefix + std::to_string(n)) > 0)
+        {
+            n++;
+        }
+        return n;
+    }
+    const std::map<std::string, MatrixSP>& getAllExtraMatrices() const { return extra_matrixsp_; }
+    // 从另一组网络预加载已有矩阵（用于多组网络间共享权重/KV cache，不覆盖已有条目）
+    void preloadMatrices(const std::map<std::string, MatrixSP>& mats)
+    {
+        for (auto& [k, v] : mats)
+        {
+            extra_matrixsp_.emplace(k, v);
+        }
+    }
+    void setStructureScript(const std::string& s) { structure_script_ = s; }
     void addExtraMatrix(const std::string& name, const std::vector<int>& dim);
 
 public:
@@ -96,6 +129,45 @@ protected:
 
 public:
     void attack(Matrix* X, Matrix* Y);
+
+    //重置网络中所有 KV cache 算子的写入位置, 用于开始新一段自回归推理
+    void resetKVCache() { MatrixOp::resetKVCache(op_queue_); }
+
+    // Set rope position offset for all ROPE / ROPE_INTERLEAVED ops (for KV-cache decode)
+    void setRopeOffset(int pos)
+    {
+        for (auto& op : op_queue_)
+        {
+            if (op.getType() == MatrixOpType::ROPE || op.getType() == MatrixOpType::ROPE_INTERLEAVED)
+            {
+                op.setWindow(0, pos);
+            }
+        }
+    }
+
+    // Set attention position offset for all ATTENTION ops (causal mask with absolute position)
+    void setAttentionOffset(int pos)
+    {
+        for (auto& op : op_queue_)
+        {
+            if (op.getType() == MatrixOpType::ATTENTION)
+            {
+                op.setWindow(0, pos);
+            }
+        }
+    }
+
+    // Override KV cache write position for all KV_CACHE ops (to restart decode after prefill)
+    void setKVCachePos(int pos)
+    {
+        for (auto& op : op_queue_)
+        {
+            if (op.getType() == MatrixOpType::KV_CACHE)
+            {
+                op.setWindow(0, pos);
+            }
+        }
+    }
 
 public:
     Solver& getSolver() { return solver_; }
@@ -135,7 +207,7 @@ public:
     void outputTime() const;
 
     //Net* clone(int clone_data = 0);
-    void test_only(Matrix& X, Matrix& A);
+    void inference(Matrix& X, Matrix& A);
 };
 
 }    // namespace cccc

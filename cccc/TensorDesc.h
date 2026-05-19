@@ -22,8 +22,8 @@ public:
 
     cudnnTensorStruct* cudnnDesc() { return cudnn_tensor_desc_; }
     miopenTensorDescriptor* miopenDesc() { return miopen_tensor_desc_; }
-    void setDesc4D(DataType data_type, int w, int h, int c, int n);
-    void setDescND(DataType data_type, std::vector<int> dim);
+    void setDesc4D(DataType data_type, int w, int h, int c, int n, TensorForm form = TensorForm::NCHW);
+    void setDescND(DataType data_type, std::vector<int> dim, TensorForm form = TensorForm::NCHW);
 };
 
 class OtherDesc

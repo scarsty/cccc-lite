@@ -1,9 +1,11 @@
 ﻿#pragma once
 
 #include "cccc_export.h"
+#include "half.hpp"
 #include <cfloat>
 #include <climits>
 #include <cstdint>
+#include <cstring>
 
 #define VAR_NAME(a) #a
 
@@ -15,7 +17,30 @@
 
 namespace cccc
 {
-using half = float;
+using half = half_float::half;
+
+// BF16 host type: upper 16 bits of IEEE 754 float32
+struct bfloat16
+{
+    uint16_t bits = 0;
+    bfloat16() = default;
+    bfloat16(float f)
+    {
+        uint32_t u;
+        std::memcpy(&u, &f, 4);
+        bits = static_cast<uint16_t>(u >> 16);
+    }
+    template <typename T>
+    bfloat16(T v) :
+        bfloat16(static_cast<float>(v)) {}
+    operator float() const
+    {
+        uint32_t u = static_cast<uint32_t>(bits) << 16;
+        float f;
+        std::memcpy(&f, &u, 4);
+        return f;
+    }
+};
 
 //数据类型，因常用于Matrix，为避免重载冲突，使用严格的枚举类型
 enum class DataType
@@ -23,7 +48,14 @@ enum class DataType
     FLOAT = 0,
     DOUBLE = 1,
     HALF = 2,
+    BFLOAT16 = 3,
     CURRENT = 65535,
+};
+
+// 张量内存布局形式（影响cuDNN卷积descriptor和矩阵物理存储顺序）
+enum class TensorForm
+{
+    NCHW = 0,    // W最快，cccc默认，dim[]={W,H,C,N}
 };
 
 //使用设备的类型，主要决定数据位置，同上使用严格的枚举类型
@@ -69,8 +101,14 @@ enum ActiveFunctionType
     ACTIVE_FUNCTION_ABS,
     ACTIVE_FUNCTION_SIN_PLUS,
     ACTIVE_FUNCTION_SILU,
+    ACTIVE_FUNCTION_COS,
     ACTIVE_FUNCTION_SIGMOID3,    //CE为交叉熵，表示反向时误差原样回传，用于多出口网络，下同
     ACTIVE_FUNCTION_SOFTMAX3,
+    //axis-aware softmax: 沿 row_/channel 划分的"通道"维度做 softmax (对应 cuDNN MODE_CHANNEL)
+    //用于 attention 中对每行 (key 维度) 单独归一化的场景
+    ACTIVE_FUNCTION_SOFTMAX_CHANNEL,    //语言模型 per-position CE 专用: 前向同 SOFTMAX_CHANNEL (沿 width_ 维归一化)
+    //反向直接将上游梯度 Y.d() 透传到 X.d() (与 SOFTMAX_CE 相同), 配合 crossEntropy 使用
+    ACTIVE_FUNCTION_SOFTMAX_CHANNEL_CE,
 };
 
 enum ActivePhaseType

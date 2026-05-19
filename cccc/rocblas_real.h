@@ -2,7 +2,11 @@
 #include "blas_types.h"
 
 #if ENABLE_HIP
+#include "hip_functions.h"
 #include "rocblas/rocblas.h"
+#include <vector>
+#include <cstdio>
+#include <cmath>
 
 namespace cccc
 {
@@ -108,6 +112,16 @@ public:
     {
         int r;
         rocblas_idamax(handle_, N, X, incX, &r);
+        return r - 1;
+    }
+    ROCBLAS_FUNCTION int iamax(const int N, const half* X, const int incX)
+    {
+        int r = 1;
+        float* buffer = nullptr;
+        hipMalloc((void**)&buffer, N * incX * sizeof(float));
+        hip_half2float((void*)X, buffer, N * incX);
+        rocblas_isamax(handle_, N, buffer, incX, &r);
+        hipFree(buffer);
         return r - 1;
     }
     ROCBLAS_FUNCTION void swap(const int N, float* X, const int incX, float* Y, const int incY)
@@ -349,6 +363,118 @@ public:
     ROCBLAS_FUNCTION void trsm(const MatrixSideType Side, const MatrixFillType Uplo, const MatrixTransType TransA, const MatrixDiagType Diag, const int M, const int N, const double alpha, const double* A, const int lda, double* B, const int ldb)
     {
         rocblas_dtrsm(handle_, get_side(Side), get_uplo(Uplo), get_trans(TransA), get_diag(Diag), M, N, &alpha, A, lda, B, ldb);
+    }
+
+    // fp16 gemm: uses rocblas_gemm_ex with float32 accumulation
+    ROCBLAS_FUNCTION void gemm(const MatrixTransType TransA, const MatrixTransType TransB, const int M, const int N, const int K, const float alpha, const half* A, const int lda, const half* B, const int ldb, const float beta, half* C, const int ldc)
+    {
+        rocblas_gemm_ex(handle_, get_trans(TransA), get_trans(TransB), M, N, K,
+            &alpha, A, rocblas_datatype_f16_r, lda,
+            B, rocblas_datatype_f16_r, ldb,
+            &beta, C, rocblas_datatype_f16_r, ldc,
+            C, rocblas_datatype_f16_r, ldc,
+            rocblas_datatype_f32_r,
+            rocblas_gemm_algo_standard, 0, 0);
+    }
+
+    // fp16 strided-batched gemm: uses rocblas_gemm_strided_batched_ex with float32 accumulation
+    ROCBLAS_FUNCTION void gemmStridedBatched(const MatrixTransType TransA, const MatrixTransType TransB, const int M, const int N, const int K, const float alpha, const half* A, const int lda, const long long strideA, const half* B, const int ldb, const long long strideB, const float beta, half* C, const int ldc, const long long strideC, const int batch)
+    {
+        // Use loop of gemm_ex calls as fallback for fp16 (avoids strided_batched_ex compatibility issues)
+        for (int b = 0; b < batch; b++)
+        {
+            auto status = rocblas_gemm_ex(handle_, get_trans(TransA), get_trans(TransB), M, N, K,
+                &alpha, A + b * strideA, rocblas_datatype_f16_r, lda,
+                B + b * strideB, rocblas_datatype_f16_r, ldb,
+                &beta, C + b * strideC, rocblas_datatype_f16_r, ldc,
+                C + b * strideC, rocblas_datatype_f16_r, ldc,
+                rocblas_datatype_f32_r,
+                rocblas_gemm_algo_standard, 0, 0);
+            if (status != rocblas_status_success)
+            {
+                static int err_count = 0;
+                if (err_count < 3)
+                {
+                    fprintf(stderr, "[ERR] rocblas_gemm_ex failed: status=%d M=%d N=%d K=%d b=%d/%d\n", (int)status, M, N, K, b, batch);
+                    err_count++;
+                }
+            }
+        }
+    }
+
+    // bf16 iamax: convert bf16->float, then find maximum-absolute-value index
+    ROCBLAS_FUNCTION int iamax(const int N, const bfloat16* X, const int incX)
+    {
+        int r = 1;
+        float* buffer = nullptr;
+        hipMalloc((void**)&buffer, N * incX * sizeof(float));
+        hip_bf162float((void*)X, buffer, N * incX);
+        rocblas_isamax(handle_, N, buffer, incX, &r);
+        hipFree(buffer);
+        return r - 1;
+    }
+
+    // half asum: convert half->float, then sum absolute values
+    ROCBLAS_FUNCTION float asum(const int N, const half* X, const int incX)
+    {
+        float* buffer = nullptr;
+        hipMalloc((void**)&buffer, N * incX * sizeof(float));
+        hip_half2float((void*)X, buffer, N * incX);
+        float r = 0;
+        rocblas_sasum(handle_, N, buffer, incX, &r);
+        hipFree(buffer);
+        return r;
+    }
+
+    // bf16 asum: convert bf16->float, then sum absolute values
+    ROCBLAS_FUNCTION float asum(const int N, const bfloat16* X, const int incX)
+    {
+        float* buffer = nullptr;
+        hipMalloc((void**)&buffer, N * incX * sizeof(float));
+        hip_bf162float((void*)X, buffer, N * incX);
+        float r = 0;
+        rocblas_sasum(handle_, N, buffer, incX, &r);
+        hipFree(buffer);
+        return r;
+    }
+
+    // half scal: R = alpha * X  (via hip_addnumber: R = 0 + X * alpha)
+    ROCBLAS_FUNCTION void scal(const int N, const half alpha, half* X, const int incX)
+    {
+        hip_addnumber(2, X, X, (unsigned int)(N * incX), 0.0f, (float)alpha);
+    }
+
+    // bf16 scal: R = alpha * X  (via hip_addnumber)
+    ROCBLAS_FUNCTION void scal(const int N, const bfloat16 alpha, bfloat16* X, const int incX)
+    {
+        hip_addnumber(3, X, X, (unsigned int)(N * incX), 0.0f, (float)alpha);
+    }
+
+    // bf16 gemm: rocblas_gemm_ex with bf16 data / f32 accumulation
+    ROCBLAS_FUNCTION void gemm(const MatrixTransType TransA, const MatrixTransType TransB, const int M, const int N, const int K, const float alpha, const bfloat16* A, const int lda, const bfloat16* B, const int ldb, const float beta, bfloat16* C, const int ldc)
+    {
+        rocblas_gemm_ex(handle_, get_trans(TransA), get_trans(TransB), M, N, K,
+            &alpha, A, rocblas_datatype_bf16_r, lda,
+            B, rocblas_datatype_bf16_r, ldb,
+            &beta, C, rocblas_datatype_bf16_r, ldc,
+            C, rocblas_datatype_bf16_r, ldc,
+            rocblas_datatype_f32_r,
+            rocblas_gemm_algo_standard, 0, 0);
+    }
+
+    // bf16 strided-batched gemm: loop over batches using rocblas_gemm_ex
+    ROCBLAS_FUNCTION void gemmStridedBatched(const MatrixTransType TransA, const MatrixTransType TransB, const int M, const int N, const int K, const float alpha, const bfloat16* A, const int lda, const long long strideA, const bfloat16* B, const int ldb, const long long strideB, const float beta, bfloat16* C, const int ldc, const long long strideC, const int batch)
+    {
+        for (int b = 0; b < batch; b++)
+        {
+            rocblas_gemm_ex(handle_, get_trans(TransA), get_trans(TransB), M, N, K,
+                &alpha, A + b * strideA, rocblas_datatype_bf16_r, lda,
+                B + b * strideB, rocblas_datatype_bf16_r, ldb,
+                &beta, C + b * strideC, rocblas_datatype_bf16_r, ldc,
+                C + b * strideC, rocblas_datatype_bf16_r, ldc,
+                rocblas_datatype_f32_r,
+                rocblas_gemm_algo_standard, 0, 0);
+        }
     }
 
     //extensions of rocblas

@@ -9,7 +9,7 @@ namespace cccc
 {
 
 //总调度
-class DLL_EXPORT MainProcess
+class CCCC_EXPORT MainProcess
 {
 public:
     MainProcess();
@@ -26,9 +26,13 @@ protected:
     Option option_;
     Timer timer_total_;
     int MP_count_ = 1;
+    int net_group_count_ = 1;    //多组网络（不同结构，如prefill/decode）
     std::string train_filename_;
     std::vector<GpuControl> gpus_;    //需要在网络后面析构，即GpuControl必须在所有矩阵析构之后析构
-    std::vector<std::unique_ptr<Net>> nets_;
+    // nets_[group][mp_parallel_copy]
+    // group 0: 主网络（训练/prefill）；group 1+: 副网络（decode等）
+    // 同一 group 内的多个副本共享相同结构，不同 group 之间可共享权重显存
+    std::vector<std::vector<std::unique_ptr<Net>>> nets_;
 
     WorkModeType work_mode_ = WORK_MODE_NORMAL;
 
@@ -106,24 +110,26 @@ private:
 
 public:
     //获取网络的时候，应注意当前的gpu
-    Net* getNet(int i = 0) const
+    Net* getNet(int i = 0, int group = 0) const
     {
-        if (nets_.size() > i)
+        if ((int)nets_.size() > group && (int)nets_[group].size() > i)
         {
-            return nets_[i].get();
+            return nets_[group][i].get();
         }
         return nullptr;
     }
 
-    const std::vector<std::unique_ptr<Net>>& getNets() { return nets_; }
+    const std::vector<std::unique_ptr<Net>>& getNets(int group = 0) { return nets_[group]; }
 
 public:
     void run();
     void testData(Net* net, int epoch = 0, int total_epochs = 0, int* max_accuracy_epoch = nullptr, float* max_accuracy = nullptr, std::vector<std::vector<TestInfo>>* collect_test_info = nullptr, Matrix* X = nullptr, Matrix* Y = nullptr);
     void extraTest(Net* net, const std::string& section, int force_output = 0, int test_type = 0);
+    // 重新填充指定 group 的 KV cache：通常用于 prefill group + decode group 共享场景
+    int rebuildKVCache(int prefill_group, int decode_group, const float* x, int n, float* y);
 
 public:
-    int testExternalData(void* x, void* y, void* a, int n, int attack_times = 0, double* error = nullptr);
+    int testExternalData(void* x, void* y, void* a, int n, int attack_times = 0, double* error = nullptr, int group = 0);
 };
 
 }    // namespace cccc

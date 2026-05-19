@@ -45,6 +45,13 @@ void Option::initEnums()
             { "float", DataType::FLOAT },
             { "double", DataType::DOUBLE },
             { "half", DataType::HALF },
+            { "bfloat16", DataType::BFLOAT16 },
+            { "bf16", DataType::BFLOAT16 },
+        });
+
+    registerEnum<TensorForm>(
+        {
+            { "nchw", TensorForm::NCHW },
         });
 
     registerEnum<UnitType>(
@@ -88,8 +95,11 @@ void Option::initEnums()
             { "abs", ACTIVE_FUNCTION_ABS },
             { "sinp", ACTIVE_FUNCTION_SIN_PLUS },
             { "silu", ACTIVE_FUNCTION_SILU },
+            { "cos", ACTIVE_FUNCTION_COS },
             { "sigmoid3", ACTIVE_FUNCTION_SIGMOID3 },
             { "softmax3", ACTIVE_FUNCTION_SOFTMAX3 },
+            { "softmax_channel", ACTIVE_FUNCTION_SOFTMAX_CHANNEL },
+            { "softmax_channel_ce", ACTIVE_FUNCTION_SOFTMAX_CHANNEL_CE },
         });
 
     registerEnum<LayerConnectionType>(

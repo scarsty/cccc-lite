@@ -6,7 +6,7 @@
 namespace cccc
 {
 
-class DLL_EXPORT NetCifa : public Net
+class CCCC_EXPORT NetCifa : public Net
 {
 public:
     NetCifa();
@@ -14,7 +14,6 @@ public:
 
 private:
     cifa::Cifa cifa_;
-    std::unordered_map<std::string, cifa::Object> cifa_parameters_;
 
     using Loss = std::vector<MatrixOp>;
     using MatrixGroup = std::vector<MatrixSP>;

@@ -47,7 +47,7 @@ enum memcpyKind
 
 //该类包含一些cuda的基本参数，例如cublas和cudnn的handle
 //此类型不能被随机创建，而仅能从已知的对象中选择一个
-class DLL_EXPORT GpuControl
+class CCCC_EXPORT GpuControl
 {
 public:
     GpuControl();
@@ -117,6 +117,7 @@ public:
 
     Rocblas* rocblas_ = nullptr;
     miopenHandle* miopen_handle_ = nullptr;
+
 
 public:
     OtherDesc other_desc_;
