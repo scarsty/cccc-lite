@@ -99,11 +99,7 @@ int MainProcess::testGPUDevice()
         return 1;
     }
 
-    MP_count_ = option_.getInt("train", "mp", 1);
-    if (MP_count_ <= 0)
-    {
-        MP_count_ = 1;
-    }
+    MP_count_ = 1;
     MP_count_ = 1;    // lite版仅支持单卡
     return 0;
 }

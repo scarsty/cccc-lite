@@ -149,7 +149,6 @@
     <ClCompile Include="NetLayer.cpp" />
     <ClCompile Include="Option.cpp" />
     <ClCompile Include="MainProcess.cpp" />
-    <ClCompile Include="predict.cpp" />
     <ClCompile Include="Solver.cpp" />
     <ClCompile Include="TensorDesc.cpp" />
   </ItemGroup>

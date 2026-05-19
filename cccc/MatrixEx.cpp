@@ -166,18 +166,7 @@ void MatrixEx::concatByChannel(const std::vector<MatrixSP>& X_vector, Matrix& Y)
 }
 
 void MatrixEx::concatByChannelBackward(std::vector<MatrixSP>& X_vector, Matrix& Y)
-{
-    auto& v = Y.user_data<std::vector<Matrix>>();
-    for (int i = 0; i < X_vector.size(); i++)
-    {
-        auto& x = X_vector[i];
-        auto& tmp = v[i];
-        if (x->number_ == Y.number_)
-        {
-            Matrix::mul(tmp, Y.d(), x->d(), 1, x->keepWeight(), MATRIX_TRANS, MATRIX_NO_TRANS);
-        }
-    }
-}
+{}
 
 void MatrixEx::splitByChannel(const Matrix& X, std::vector<Matrix>& Y_vector)
 {
@@ -1618,36 +1607,7 @@ void MatrixEx::dropoutForward(const Matrix& X, Matrix& Y, float v, int seed)
 }
 
 void MatrixEx::dropoutBackward(Matrix& X, const Matrix& Y, float v, int seed)
-{
-    assert(checkMatrixDevice({ &X, &Y }));
-    auto gpu = Y.gpu();
-    //int op_desc_buf[64] = { 0 };
-    //auto op_desc = (cudnnDropoutDescriptor_t)op_desc_buf;
-    cudnnDropoutDesc op_desc;
-    if (Y.isCuda())
-    {
-        auto& rg_stat = Y.workspace_[0];
-        auto& reverse_space = Y.workspace_[1];
-        //这里的seed应该是没关系，待查
-        cudnnSetDropoutDescriptor(op_desc(), gpu->cudnn_handle_, v, rg_stat.data(), rg_stat.getDataSizeInByte(), seed);
-        cudnnDropoutBackward(gpu->cudnn_handle_, op_desc(), Y.cudnn_desc(), Y.d().data(),
-            X.cudnn_desc(), X.d().data(), reverse_space.data(), reverse_space.getDataSizeInByte());
-    }
-    else
-    {
-        for (int i = 0; i < X.data_size_; i++)
-        {
-            if (Y.getData(i) == 0)
-            {
-                X.d().setData(i, 0);
-            }
-            else
-            {
-                X.d().setData(i, Y.d().getData(i) / (1 - v));
-            }
-        }
-    }
-}
+{}
 
 //批归一化
 void MatrixEx::batchNormalizationForward(const Matrix& X, Matrix& Y, BatchNormalizationType bn_type,
@@ -1716,26 +1676,7 @@ void MatrixEx::batchNormalizationForward(const Matrix& X, Matrix& Y, BatchNormal
 
 void MatrixEx::batchNormalizationBackward(Matrix& X, const Matrix& Y, BatchNormalizationType bn_type,
     float epsilon, Matrix& scale, Matrix& bias)
-{
-    assert(checkMatrixDevice({ &X, &Y }));
-    auto gpu = Y.gpu();
-    auto work_phase = gpu ? gpu->active_phase_ : ACTIVE_PHASE_TRAIN;
-    auto& ws = Y.workspace_;
-    if (X.isCuda())
-    {
-        cudnnBatchNormalizationBackward(gpu->cudnn_handle_, cudnnBatchNormMode_t(bn_type),
-            &const_real_1, &const_real_0, &const_real_1, &const_real_0, X.cudnn_desc(), X.data(), Y.cudnn_desc(), Y.d().data(), X.cudnn_desc(), X.d().data(),
-            scale.cudnn_desc(), scale.data(), ws[4].data(), ws[5].data(),
-            std::max(epsilon * 1.0, CUDNN_BN_MIN_EPSILON), ws[2].data(), ws[3].data());
-    }
-    else if (X.isHip())
-    {
-        miopenBatchNormalizationBackward(gpu->miopen_handle_, miopenBatchNormMode_t(bn_type),
-            (void*)&const_real_1, (void*)&const_real_0, (void*)&const_real_1, (void*)&const_real_0, X.miopen_desc(), X.data(), Y.miopen_desc(), Y.d().data(), X.miopen_desc(), X.d().data(),
-            scale.miopen_desc(), scale.data(), ws[4].data(), ws[5].data(),
-            std::max(epsilon * 1.0, CUDNN_BN_MIN_EPSILON), ws[2].data(), ws[3].data());
-    }
-}
+{}
 
 //ada_d表示ada方法计算得到的参数的改变量，应在下一步加到原参数上，下同
 void MatrixEx::adaDeltaUpdate(Matrix& mean_d2, Matrix& mean_ada_d2, Matrix& d, Matrix& ada_d, float rou, float epsilon)
@@ -2102,44 +2043,7 @@ void MatrixEx::correlationForward(const Matrix& X, const Matrix& W, Matrix& Y, c
 }
 
 void MatrixEx::correlationBackward(Matrix& X, Matrix& W, const Matrix& Y, std::vector<int>& methods, const std::vector<int>& stride, const std::vector<int>& padding, float a /*= 1*/, float rx /*= 0*/, float rw /*= 0*/)
-{
-    //注意仅有W的反向，即只能为首层
-    auto& workspaces = X.d().workspace_;
-    auto& Y_den_square = workspaces[3];
-    auto& Y_den = workspaces[4];
-    auto& Y_aver = workspaces[5];
-    auto& Y_conv_aver = workspaces[6];
-
-    auto& W_den_square = workspaces[7];
-    auto& W_den = workspaces[8];
-    auto& W_aver = workspaces[9];
-    auto& W_minus_aver = workspaces[10];
-    auto& W_norm = workspaces[11];
-
-    auto& W_1 = workspaces[12];    //与W同维，但是所有值为1
-    auto& as_W_aver = workspaces[13];
-
-    auto& X1 = workspaces[14];    //与X同维，但是所有值为1
-    auto& X_square = workspaces[15];
-
-    if (W.needBack())
-    {
-        Matrix::elementDiv(Y.d(), Y_den, Y_den.d());
-        X.setNeedBack(false);
-        //MatrixEx::convolutionBackward(X, W, Y_den, methods, workspaces, stride, padding, 1 - 1.0 / W.getRow(), 0, 0);
-        Matrix::elementMul(Y_den.d(), Y_aver, Y_aver.d());
-        X1.setNeedBack(false);
-        //MatrixEx::convolutionBackward(X1, W, Y_aver, methods, workspaces, stride, padding, -(1 - 1.0 / W.getRow()), 0, 1);
-        Matrix::elementDiv(W.d(), W_den, W.d());
-
-        Matrix::elementMul(Y.d(), Y, Y_den.d());
-        //应是反向卷积再元素乘
-        //MatrixEx::convolutionBackward(X1, W_norm, Y_den, methods, workspaces, stride, padding);
-        Matrix::elementMul(W_norm.d(), W_minus_aver, W_norm.d());
-        Matrix::elementDiv(W_norm.d(), W_den_square, W_norm.d());
-        Matrix::add(W.d(), W_norm.d(), W.d(), a, -a);
-    }
-}
+{}
 
 void MatrixEx::matrix_max(const Matrix& X1, const Matrix& X2, Matrix& Y)
 {
