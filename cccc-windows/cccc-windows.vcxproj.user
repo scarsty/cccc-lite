@@ -8,9 +8,9 @@
     <LocalDebuggerCommandArgumentsHistory>-c mnist-lenet.ini|</LocalDebuggerCommandArgumentsHistory>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <LocalDebuggerCommandArguments>--sd -c . </LocalDebuggerCommandArguments>
-    <LocalDebuggerWorkingDirectory>..\..\cccc-models\cccc-sd\z-image-turbo</LocalDebuggerWorkingDirectory>
+    <LocalDebuggerCommandArguments>--llm -c qwen3_8b_fp16.ini</LocalDebuggerCommandArguments>
+    <LocalDebuggerWorkingDirectory>C:\project\cccc-models\cccc-llm\qwen3</LocalDebuggerWorkingDirectory>
     <DebuggerFlavor>WindowsLocalDebugger</DebuggerFlavor>
-    <LocalDebuggerCommandArgumentsHistory>--sd -c .|--llm -c qwen3_8b_fp16.ini|--sd -c . -p "orange cat"|--sd -c . -p "a cat"|--sd -c . |</LocalDebuggerCommandArgumentsHistory>
+    <LocalDebuggerCommandArgumentsHistory>--sd -c .|--sd -c . -p "orange cat"|--sd -c . -p "a cat"|--sd -c . |--llm -c qwen3_8b_fp16.ini|</LocalDebuggerCommandArgumentsHistory>
   </PropertyGroup>
 </Project>
