@@ -134,3 +134,59 @@
 | LoRA 加载 | 微调模型部署 | 中 |
 | PAD token / label mask（训练） | padding 位置计入 loss，影响训练稳定性 | 低 |
 | BOS token 注入（训练） | 部分模型要求显式 BOS | 低 |
+
+---
+
+## 5. HuggingFace 权重转换要点
+
+### 5.1 矩阵内存布局（最重要）
+
+cccc 使用**列主序 BLAS 约定**，`Matrix` 的维度设置为 `(width=in, height=out, 1, 1)`，元素 `(i, o)` 在内存中的偏移为：
+
+```
+offset = i + o * in
+```
+
+HuggingFace 的 2D 权重形状为 `[out_features, in_features]`（C 行主序），元素 `(o, i)` 的偏移同为：
+
+```
+offset = o * in + i  =  i + o * in
+```
+
+**两者完全相同**（加法交换律），因此 HF 权重的字节序列可以**直接写入 cccc 矩阵，无需任何转置**。
+
+> ⚠️ 错误地对 2D 权重做转置（`needs_transpose=True`）会导致所有投影和嵌入查找产生错误结果，模型输出退化为反复重复同一个 token。
+
+### 5.2 convert_weights.py 规范
+
+| 权重类型 | `needs_transpose` | 说明 |
+|---------|-------------------|------|
+| 1D（bias、norm weight/bias、lm_head bias） | `False` | 直接写入，长度不变 |
+| 2D（所有投影矩阵：q/k/v/o/gate/up/down，embedding） | `False` | HF `[out, in]` C-order 与 cccc 列主序等价，无需转置 |
+
+### 5.3 Hy-MT2-7B（HunYuanDenseV1）关键参数
+
+| 参数 | 值 |
+|-----|----|
+| 架构 | HunYuanDenseV1（Tencent） |
+| 精度 | BF16 |
+| 隐藏维度 D | 4096 |
+| 注意力头数 H / KV头数 Hkv | 32 / 8（GQA，扩展因子=4） |
+| 词表大小 V | 128167 |
+| FFN 中间维度 I | 14336 |
+| RoPE theta | 10000.0 |
+| use_qk_norm | true |
+| tie_word_embeddings | true |
+| 最大上下文 T_kv | 1024（当前 ini 配置） |
+
+### 5.4 decode 循环必须调用的接口
+
+```cpp
+// 每个 decode step（pos 从 prefill_len 开始递增）
+net1->setKVCachePos(pos);
+net1->setRopeOffset(pos);
+net1->setAttentionOffset(pos);
+net1->testExternalData(...);
+```
+
+缺少任意一个调用均会导致 decode 输出错误（位置编码错误或写入错误的 KV cache 位置）。
