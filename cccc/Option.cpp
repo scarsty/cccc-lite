@@ -42,11 +42,20 @@ void Option::initEnums()
 {
     registerEnum<DataType>(
         {
+            { "auto",     DataType::CURRENT },
             { "float", DataType::FLOAT },
             { "double", DataType::DOUBLE },
             { "half", DataType::HALF },
             { "bfloat16", DataType::BFLOAT16 },
             { "bf16", DataType::BFLOAT16 },
+            { "fp8_e4m3", DataType::FP8_E4M3 },
+            { "fp8e4m3",  DataType::FP8_E4M3 },
+            { "fp8",      DataType::FP8_E4M3 },
+            { "fp8_e5m2", DataType::FP8_E5M2 },
+            { "fp8e5m2",  DataType::FP8_E5M2 },
+            { "fp4_e2m1", DataType::FP4_E2M1 },
+            { "fp4e2m1",  DataType::FP4_E2M1 },
+            { "fp4",      DataType::FP4_E2M1 },
         });
 
     registerEnum<TensorForm>(
@@ -100,6 +109,7 @@ void Option::initEnums()
             { "softmax3", ACTIVE_FUNCTION_SOFTMAX3 },
             { "softmax_channel", ACTIVE_FUNCTION_SOFTMAX_CHANNEL },
             { "softmax_channel_ce", ACTIVE_FUNCTION_SOFTMAX_CHANNEL_CE },
+            { "gelu", ACTIVE_FUNCTION_GELU },
         });
 
     registerEnum<LayerConnectionType>(

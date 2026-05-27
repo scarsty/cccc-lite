@@ -4,8 +4,10 @@
 #include "half.hpp"
 #include <cfloat>
 #include <climits>
+#include <cmath>
 #include <cstdint>
 #include <cstring>
+#include <limits>
 
 #define VAR_NAME(a) #a
 
@@ -17,6 +19,20 @@
 
 namespace cccc
 {
+
+// 数据类型，C 风格枚举，与 int 可互转，方便作为函数参数传递
+enum DataType
+{
+    FLOAT = 0,
+    DOUBLE = 1,
+    HALF = 2,
+    BFLOAT16 = 3,
+    FP8_E4M3 = 4,    // 1 byte/element; OCP FP8 E4M3 (max=448)
+    FP8_E5M2 = 5,    // 1 byte/element; FP8 E5M2 (max=57344)
+    FP4_E2M1 = 6,    // 0.5 byte/element packed nibble
+    CURRENT = 65535,
+};
+
 using half = half_float::half;
 
 // BF16 host type: upper 16 bits of IEEE 754 float32
@@ -28,28 +44,233 @@ struct bfloat16
     {
         uint32_t u;
         std::memcpy(&u, &f, 4);
-        bits = static_cast<uint16_t>(u >> 16);
+        bits = (uint16_t)(u >> 16);
     }
     template <typename T>
     bfloat16(T v) :
-        bfloat16(static_cast<float>(v)) {}
+        bfloat16((float)(v)) {}
     operator float() const
     {
-        uint32_t u = static_cast<uint32_t>(bits) << 16;
+        uint32_t u = (uint32_t)(bits) << 16;
         float f;
         std::memcpy(&f, &u, 4);
         return f;
     }
 };
 
-//数据类型，因常用于Matrix，为避免重载冲突，使用严格的枚举类型
-enum class DataType
+// FP8 E4M3 (OCP FP8 / NVIDIA __nv_fp8_e4m3)
+// bias=7; E=15,M=7 is NaN; E=15,M=0..6 are normal (max=448); no Inf
+struct fp8_e4m3
 {
-    FLOAT = 0,
-    DOUBLE = 1,
-    HALF = 2,
-    BFLOAT16 = 3,
-    CURRENT = 65535,
+    uint8_t bits = 0;
+    fp8_e4m3() = default;
+    explicit fp8_e4m3(float f) :
+        bits(from_float(f)) {}
+    explicit operator float() const { return to_float(bits); }
+
+private:
+    static float to_float(uint8_t b)
+    {
+        const uint8_t s = (b >> 7) & 1u;
+        const int e = (b >> 3) & 0xF;
+        const int m = b & 7;
+        if (e == 15 && m == 7)
+        {
+            uint32_t nan = 0x7FC00000u;
+            float r;
+            std::memcpy(&r, &nan, 4);
+            return r;
+        }
+        if (e == 0) { return (s ? -1.f : 1.f) * m * (1.f / 512.f); }    // subnormal: M/8 * 2^-6 = M * 2^-9
+        // normal: reconstruct float32 bits directly
+        uint32_t f32 = ((uint32_t)s << 31) | ((uint32_t)(e + 120) << 23) | ((uint32_t)m << 20);
+        float r;
+        std::memcpy(&r, &f32, 4);
+        return r;
+    }
+
+    static uint8_t from_float(float f)
+    {
+        uint32_t u;
+        std::memcpy(&u, &f, 4);
+        if ((u & 0x7FFFFFFFu) > 0x7F800000u)
+        {
+            return 0x7Fu;    // NaN → NaN
+        }
+        const uint32_t s = u >> 31;
+        const int fe = (int)((u >> 23) & 0xFFu) - 127;    // unbiased float exp
+        const uint32_t fm = u & 0x7FFFFFu;
+        if (fe > 8 || (fe == 8 && fm >= 0xC00000u))
+        {
+            return (uint8_t)((s << 7) | 0x7Eu);    // saturate to 448
+        }
+        const int e8 = fe + 7;
+        if (e8 <= 0)
+        {
+            const int shift = 14 - fe;    // = 21 - e8
+            if (shift >= 32)
+            {
+                return (uint8_t)(s << 7);
+            }
+            return (uint8_t)((s << 7) | (((fm | 0x800000u) >> shift) & 0x7u));
+        }
+        uint8_t m8 = (uint8_t)(fm >> 20);
+        if (e8 == 15 && m8 == 7)
+        {
+            m8 = 6;    // avoid NaN code-point
+        }
+        return (uint8_t)((s << 7) | ((uint8_t)(e8 & 0xFu) << 3) | m8);
+    }
+
+public:
+};
+
+// FP8 E5M2 (standard / NVIDIA __nv_fp8_e5m2)
+// bias=15; E=31,M=0: ±Inf; E=31,M≠0: NaN; max=57344
+struct fp8_e5m2
+{
+    uint8_t bits = 0;
+    fp8_e5m2() = default;
+    explicit fp8_e5m2(float f) :
+        bits(from_float(f)) {}
+    explicit operator float() const { return to_float(bits); }
+
+private:
+    static float to_float(uint8_t b)
+    {
+        const uint8_t s = (b >> 7) & 1u;
+        const int e = (b >> 2) & 0x1F;
+        const int m = b & 3;
+        if (e == 31)
+        {
+            if (m == 0)
+            {
+                uint32_t inf = ((uint32_t)s << 31) | 0x7F800000u;
+                float r;
+                std::memcpy(&r, &inf, 4);
+                return r;
+            }
+            uint32_t nan = 0x7FC00000u;
+            float r;
+            std::memcpy(&r, &nan, 4);
+            return r;
+        }
+        if (e == 0)
+        {
+            return (s ? -1.f : 1.f) * m * (1.f / 65536.f);    // subnormal: M/4 * 2^-14 = M * 2^-16
+        }
+        uint32_t f32 = ((uint32_t)s << 31) | ((uint32_t)(e + 112) << 23) | ((uint32_t)m << 21);
+        float r;
+        std::memcpy(&r, &f32, 4);
+        return r;
+    }
+
+    static uint8_t from_float(float f)
+    {
+        uint32_t u;
+        std::memcpy(&u, &f, 4);
+        if ((u & 0x7FFFFFFFu) > 0x7F800000u)
+        {
+            return 0x7Cu;    // NaN
+        }
+        const uint32_t s = u >> 31;
+        if ((u & 0x7FFFFFFFu) == 0x7F800000u)
+        {
+            return (uint8_t)((s << 7) | 0x7Cu);    // ±Inf
+        }
+        const int fe = (int)((u >> 23) & 0xFFu) - 127;
+        const uint32_t fm = u & 0x7FFFFFu;
+        if (fe > 15 || (fe == 15 && fm >= 0xE00000u))
+        {
+            return (uint8_t)((s << 7) | 0x7Bu);    // saturate to 57344
+        }
+        const int e8 = fe + 15;
+        if (e8 <= 0)
+        {
+            const int shift = 7 - fe;    // = 22 - e8 approx
+            if (shift >= 32)
+            {
+                return (uint8_t)(s << 7);
+            }
+            return (uint8_t)((s << 7) | (((fm | 0x800000u) >> shift) & 0x3u));
+        }
+        const uint8_t m8 = (uint8_t)(fm >> 21);
+        return (uint8_t)((s << 7) | ((uint8_t)(e8 & 0x1Fu) << 2) | m8);
+    }
+
+public:
+};
+
+// FP4 E2M1 (NVIDIA Blackwell NVFP4)
+// bias=1; E=0: subnormal (0, ±0.5); E=1..3: normal; no NaN/Inf
+// Values: 0, ±0.5, ±1, ±1.5, ±2, ±3, ±4, ±6
+// Storage: two nibbles packed per byte (low nibble = even element, high nibble = odd element)
+struct fp4_e2m1
+{
+    static constexpr float kTable[16] = { 0.f, 0.5f, 1.f, 1.5f, 2.f, 3.f, 4.f, 6.f,
+        0.f, -0.5f, -1.f, -1.5f, -2.f, -3.f, -4.f, -6.f };
+
+    static float to_float(uint8_t nibble)
+    {
+        return kTable[nibble & 0xFu];
+    }
+
+    static uint8_t from_float(float f)    // returns 4-bit nibble in lower 4 bits
+    {
+        const uint8_t s = (f < 0.f) ? 8u : 0u;
+        if (f < 0.f)
+        {
+            f = -f;
+        }
+        if (f < 0.25f)
+        {
+            return s;
+        }
+        if (f < 0.75f)
+        {
+            return s | 1u;
+        }
+        if (f < 1.25f)
+        {
+            return s | 2u;
+        }
+        if (f < 1.75f)
+        {
+            return s | 3u;
+        }
+        if (f < 2.5f)
+        {
+            return s | 4u;
+        }
+        if (f < 3.5f)
+        {
+            return s | 5u;
+        }
+        if (f < 5.0f)
+        {
+            return s | 6u;
+        }
+        return s | 7u;
+    }
+
+    // Pack/unpack helpers for byte-packed buffers
+    static float get(const uint8_t* bytes, int i)
+    {
+        const uint8_t nibble = (i & 1) ? (bytes[i >> 1] >> 4) : (bytes[i >> 1] & 0xFu);
+        return to_float(nibble);
+    }
+    static void set(uint8_t* bytes, int i, float v)
+    {
+        const uint8_t n = from_float(v);
+        if (i & 1)
+        {
+            bytes[i >> 1] = (uint8_t)((bytes[i >> 1] & 0x0Fu) | (n << 4));
+        }
+        else
+        {
+            bytes[i >> 1] = (uint8_t)((bytes[i >> 1] & 0xF0u) | n);
+        }
+    }
 };
 
 // 张量内存布局形式（影响cuDNN卷积descriptor和矩阵物理存储顺序）
@@ -109,6 +330,8 @@ enum ActiveFunctionType
     ACTIVE_FUNCTION_SOFTMAX_CHANNEL,    //语言模型 per-position CE 专用: 前向同 SOFTMAX_CHANNEL (沿 width_ 维归一化)
     //反向直接将上游梯度 Y.d() 透传到 X.d() (与 SOFTMAX_CE 相同), 配合 crossEntropy 使用
     ACTIVE_FUNCTION_SOFTMAX_CHANNEL_CE,
+    // Gaussian Error Linear Unit: gelu(x) = 0.5*x*(1+tanh(sqrt(2/pi)*(x+0.044715*x^3)))
+    ACTIVE_FUNCTION_GELU,
 };
 
 enum ActivePhaseType

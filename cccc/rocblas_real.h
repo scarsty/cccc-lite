@@ -4,9 +4,9 @@
 #if ENABLE_HIP
 #include "hip_functions.h"
 #include "rocblas/rocblas.h"
-#include <vector>
-#include <cstdio>
 #include <cmath>
+#include <cstdio>
+#include <vector>
 
 namespace cccc
 {
@@ -119,7 +119,7 @@ public:
         int r = 1;
         float* buffer = nullptr;
         hipMalloc((void**)&buffer, N * incX * sizeof(float));
-        hip_half2float((void*)X, buffer, N * incX);
+        hip_convert((void*)X, HALF, buffer, FLOAT, (unsigned int)(N * incX), 1.0f);
         rocblas_isamax(handle_, N, buffer, incX, &r);
         hipFree(buffer);
         return r - 1;
@@ -408,7 +408,7 @@ public:
         int r = 1;
         float* buffer = nullptr;
         hipMalloc((void**)&buffer, N * incX * sizeof(float));
-        hip_bf162float((void*)X, buffer, N * incX);
+        hip_convert((void*)X, BFLOAT16, buffer, FLOAT, (unsigned int)(N * incX), 1.0f);
         rocblas_isamax(handle_, N, buffer, incX, &r);
         hipFree(buffer);
         return r - 1;
@@ -419,7 +419,7 @@ public:
     {
         float* buffer = nullptr;
         hipMalloc((void**)&buffer, N * incX * sizeof(float));
-        hip_half2float((void*)X, buffer, N * incX);
+        hip_convert((void*)X, HALF, buffer, FLOAT, (unsigned int)(N * incX), 1.0f);
         float r = 0;
         rocblas_sasum(handle_, N, buffer, incX, &r);
         hipFree(buffer);
@@ -431,7 +431,7 @@ public:
     {
         float* buffer = nullptr;
         hipMalloc((void**)&buffer, N * incX * sizeof(float));
-        hip_bf162float((void*)X, buffer, N * incX);
+        hip_convert((void*)X, BFLOAT16, buffer, FLOAT, (unsigned int)(N * incX), 1.0f);
         float r = 0;
         rocblas_sasum(handle_, N, buffer, incX, &r);
         hipFree(buffer);

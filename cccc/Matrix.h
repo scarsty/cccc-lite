@@ -191,6 +191,30 @@ public:
 
     int64_t getDataSize() const { return data_size_; }
     int64_t getDataSizeInByte() const { return getDataSize() * getDataTypeSize(); }
+    float getQuantScale() const { return shared_data_->quant_scale_; }
+    void setQuantScale(float s) { shared_data_->quant_scale_ = s; }
+    // Block-scale FP4: GPU FP8 E4M3 array of dequant scales, one per group of fp4_block_size_ elements.
+    const void* getBlockScaleData() const { return shared_data_->block_scale_data_; }
+    int64_t getBlockScaleCount() const { return shared_data_->block_scale_count_; }
+    void setBlockScaleData(void* ptr, int64_t count)
+    {
+        if (shared_data_->block_scale_data_ && shared_data_->block_scale_data_ != ptr)
+            GpuControl::free(shared_data_->block_scale_data_);
+        shared_data_->block_scale_data_ = ptr;
+        shared_data_->block_scale_count_ = count;
+    }
+    // Platform-agnostic block-scale upload/download (FP8 E4M3, 1 byte per scale).
+    void setBlockScaleFromHost(const void* src, int64_t n_scales) { shared_data_->setBlockScaleFromHost(src, n_scales); }
+    void getBlockScaleToHost(void* dst) const { shared_data_->getBlockScaleToHost(dst); }
+    static unsigned int fp4BlockSize() { return MatrixData::fp4_block_size_; }
+    float getInputScale() const { return shared_data_ ? shared_data_->input_scale_ : 0.0f; }
+    void setInputScale(float s)
+    {
+        if (shared_data_)
+        {
+            shared_data_->input_scale_ = s;
+        }
+    }
 
     void* getDataPtr() const { return data(); }
     void* getDataPtr(int i) const { return (char*)data() + i * getDataTypeSize(); }
@@ -242,6 +266,19 @@ public:
     int resizeNumber(int n, bool reserve_data = true, bool force = false);
     int resizeAndNumber(const std::vector<int>& dim, int n, bool reserve_data = true, bool force = false);
     int resizeKeepNumber(const std::vector<int>& dim, bool reserve_data = true, bool force = false);    //注意此处参数dim的最后一个值是无用的
+
+    // W8A16: convert this CUDA BF16 weight matrix in-place to FP8 E4M3 (saves ~50% GPU memory)
+    void toFp8E4m3();
+    // W8A16: convert this CUDA BF16 weight matrix in-place to FP8 E5M2 (saves ~50% GPU memory)
+    void toFp8E5m2();
+    // W4A16: convert this CUDA BF16 weight matrix in-place to packed FP4 E2M1 (saves ~75% GPU memory)
+    void toFp4();
+    // Unified BF16 → quantized conversion; the three methods above are thin wrappers around this.
+    void quantizeWeights(DataType target_dt);
+    // Load pre-built FP8 data (host memory) directly into GPU storage.
+    // fp8_dt selects the stored sub-type (FP8_E4M3 or FP8_E5M2); default is E4M3 for backward compat.
+    // Resizes storage from BF16 to the requested FP8 type on first call.
+    void loadQuantizedDirect(const uint8_t* host_data, int64_t n, float scale, DataType fp8_dt = DataType::FP8_E4M3);
 
     void print() const;
     void printAsVector() const;

@@ -95,8 +95,12 @@ void MatrixOp::forwardData()
         break;
     }
     case MatrixOpType::MUL:
-        Matrix::mul(X, *in_[1], Y, a_[0]);
+    {
+        auto ta = anys_.size() >= 2 ? anys_[0].to<MatrixTransType>() : MATRIX_NO_TRANS;
+        auto tb = anys_.size() >= 2 ? anys_[1].to<MatrixTransType>() : MATRIX_NO_TRANS;
+        Matrix::mul(X, *in_[1], Y, a_[0], 0, ta, tb);
         break;
+    }
     case MatrixOpType::BATCHED_MUL:
     {
         auto ta = anys_[0].to<MatrixTransType>();
@@ -127,7 +131,20 @@ void MatrixOp::forwardData()
         MatrixEx::correlationForward(X, *in_[1], Y, stride_, padding_, a_[0], b_[0]);
         break;
     case MatrixOpType::RESHAPE:
-        Matrix::copyData(X, Y);
+        // RESHAPE 理论上是零拷贝视图。但权重加载时若替换了 X 的 shared_data_
+        // （例如 W8A8 模式下 W_emb 被重新分配为 BF16，而 W_lm_head 仍持有旧的 FP8 缓冲区），
+        // 需将 Y 重新绑定到 X 的当前缓冲区。
+        // 同 dtype 的激活保持原来的 copyData 路径，避免破坏 ActMem 的别名分析。
+        if (X.getDataType() != Y.getDataType())
+        {
+            out_[0]->shareData(*in_[0]);
+        }
+        else
+        {
+            Matrix::copyData(X, Y);
+        }
+        // 透传 FP8 量化尺度（copyData 只复制字节，不复制 quant_scale_）
+        out_[0]->setQuantScale(in_[0]->getQuantScale());
         break;
     case MatrixOpType::MAX:
         MatrixEx::matrix_max(*in_[0], *in_[1], Y);
@@ -189,6 +206,8 @@ void MatrixOp::forwardData()
     {
         auto& perm = anys_[0].to<std::vector<int>>();
         MatrixEx::permute4dForward(X, Y, perm);
+        // 透传 FP8 量化尺度（permute 只重排字节，不改变量化范围）
+        out_[0]->setQuantScale(in_[0]->getQuantScale());
         break;
     }
     case MatrixOpType::ROPE:
@@ -197,6 +216,7 @@ void MatrixOp::forwardData()
         auto& sin_tab = *in_[2];
         int pos_offset = window_.size() > 0 ? window_[0] : 0;
         MatrixEx::ropeForward(X, Y, cos_tab, sin_tab, pos_offset);
+        // FP8 ROPE kernel re-encodes with scale=1.0 -> quant_scale_ stays 1.0 (default); no propagation.
         break;
     }
     case MatrixOpType::ROPE_INTERLEAVED:
@@ -205,6 +225,7 @@ void MatrixOp::forwardData()
         auto& sin_tab = *in_[2];
         int pos_offset = window_.size() > 0 ? window_[0] : 0;
         MatrixEx::ropeInterleavedForward(X, Y, cos_tab, sin_tab, pos_offset);
+        // FP8 ROPE kernel re-encodes with scale=1.0 -> quant_scale_ stays 1.0 (default); no propagation.
         break;
     }
     case MatrixOpType::PIXEL_SHUFFLE:
@@ -217,6 +238,18 @@ void MatrixOp::forwardData()
     {
         //in_[0]=X_new (D, T_new, H, B), in_[1]=cache (D, T_max, H, B); Y 已共享 cache 数据
         auto& cache = *in_[1];
+        // Safety sync: post-init processing (e.g., loadNamedWeights BF16 path) can
+        // reallocate cache.data_ without updating out_[0] (V_cached) which still holds the
+        // old address. Re-align here so that the subsequent RESHAPE copyData reads correct data.
+        // Only sync when types match to avoid cascading type issues.
+        {
+            auto& out_mat = *out_[0];
+            if (out_mat.getDataPtr() != cache.getDataPtr()
+                && out_mat.getDataType() == cache.getDataType())
+            {
+                out_mat.shareData(cache);
+            }
+        }
         int D = X.getWidth();
         int T_new = X.getHeight();
         int H_heads = X.getChannel();
@@ -240,6 +273,8 @@ void MatrixOp::forwardData()
                 }
             }
             window_[0] = pos + T_new;
+            // 透传 FP8 量化尺度：cache 与 X_new 共用同一量化范围
+            cache.setQuantScale(X.getQuantScale());
         }
         break;
     }
@@ -270,7 +305,22 @@ void MatrixOp::forwardData()
         float dk = anys_[0].to<float>();
         int causal = (anys_.size() > 1) ? anys_[1].to<int>() : 0;
         int pos_offset = window_.size() > 0 ? window_[0] : 0;
-        MatrixEx::attentionForward(*in_[0], *in_[1], *in_[2], Y, dk, causal, pos_offset);
+        const Matrix* bias_ptr = (in_.size() >= 4) ? in_[3].get() : nullptr;
+        if (bias_ptr)
+        {
+            MatrixEx::attentionForward(*in_[0], *in_[1], *in_[2], Y, *bias_ptr, dk, causal, pos_offset);
+        }
+        else
+        {
+            MatrixEx::attentionForward(*in_[0], *in_[1], *in_[2], Y, dk, causal, pos_offset);
+        }
+        break;
+    }
+    case MatrixOpType::ROI_ALIGN:
+    {
+        int roi_size = anys_[0].to<int>();
+        float spatial_scale = anys_[1].to<float>();
+        MatrixEx::roiAlignForward(*in_[0], *in_[1], Y, roi_size, spatial_scale);
         break;
     }
     case MatrixOpType::EMBED:
@@ -283,6 +333,8 @@ void MatrixOp::forwardData()
     {
         // in_[0]=X, out_[0]=Y; repeats 存于 window_
         MatrixEx::tileForward(*in_[0], Y, window_);
+        // 透传 FP8 量化尺度（tile 只复制字节，不改变量化范围）
+        out_[0]->setQuantScale(in_[0]->getQuantScale());
         break;
     }
     case MatrixOpType::DECONV:
@@ -380,7 +432,7 @@ void MatrixOp::forwardData()
         std::ofstream dbg_f(filename, std::ios::binary);
         if (dbg_f)
         {
-            dbg_f.write(reinterpret_cast<const char*>(buf.data()), (std::streamsize)(n * sizeof(float)));
+            dbg_f.write((const char*)(buf.data()), (std::streamsize)(n * sizeof(float)));
         }
         LOG("DEBUG_SAVE: saved {} elements to {}\n", n, filename);
         break;
@@ -674,6 +726,22 @@ void MatrixOp::backwardDataWeight()
         float dk = anys_[0].to<float>();
         int causal = (anys_.size() > 1) ? anys_[1].to<int>() : 0;
         MatrixEx::attentionBackward(*in_[0], *in_[1], *in_[2], Y, dk, causal);
+        // bias gradient: d_bias = dScores (workspace[2] after attentionBackward)
+        if (in_.size() >= 4 && in_[3]->needBack())
+        {
+            Matrix& dScores = Y.getWorkspace(2);
+            Matrix::add(dScores, in_[3]->d(), in_[3]->d(), 1.0f, in_[3]->keepWeight());
+        }
+        break;
+    }
+    case MatrixOpType::ROI_ALIGN:
+    {
+        if (in_[0]->needBack())
+        {
+            int roi_size = anys_[0].to<int>();
+            float spatial_scale = anys_[1].to<float>();
+            MatrixEx::roiAlignBackward(*in_[0], *in_[1], Y, roi_size, spatial_scale);
+        }
         break;
     }
     case MatrixOpType::EMBED:
@@ -881,9 +949,12 @@ std::string MatrixOp::print() const
         line = std::format("{} = add({}, {});", out_[0], in_, a_);
         break;
     case MatrixOpType::MUL:
-        line = std::format("{} = mul({}, {}, [{}, {}, {}, batch]);", out_[0], in_[0], in_[1],
-            out_[0]->getWidth(), out_[0]->getHeight(), out_[0]->getChannel());
+    {
+        int ta_i = (anys_.size() >= 2 && anys_[0].to<MatrixTransType>() == MATRIX_TRANS) ? 1 : 0;
+        int tb_i = (anys_.size() >= 2 && anys_[1].to<MatrixTransType>() == MATRIX_TRANS) ? 1 : 0;
+        line = std::format("{} = mul({}, {}, {}, {});", out_[0], in_[0], in_[1], ta_i, tb_i);
         break;
+    }
     case MatrixOpType::BATCHED_MUL:
     {
         int ta = (anys_[0].to<MatrixTransType>() == MATRIX_TRANS) ? 1 : 0;
@@ -966,7 +1037,14 @@ std::string MatrixOp::print() const
         break;
     }
     case MatrixOpType::ATTENTION:
-        line = std::format("{} = attention({}, {}, {}, {});", out_[0], in_[0], in_[1], in_[2], anys_[0].to<float>());
+        if (in_.size() >= 4)
+        {
+            line = std::format("{} = attention({}, {}, {}, {}, {}, {});", out_[0], in_[0], in_[1], in_[2], anys_[0].to<float>(), (anys_.size() > 1 ? anys_[1].to<int>() : 0), in_[3]);
+        }
+        else
+        {
+            line = std::format("{} = attention({}, {}, {}, {});", out_[0], in_[0], in_[1], in_[2], anys_[0].to<float>());
+        }
         break;
     case MatrixOpType::LOSS:
         line = std::format("addloss(commonloss({}, {}, {}));", int(type_), in_, a_);
@@ -1136,17 +1214,27 @@ void MatrixOp::as_scale(const MatrixSP& X, const MatrixSP& Y, float r)
     set(MatrixOpType::SCALE, { X }, { Y }, { r }, { 0 });
 }
 
-void MatrixOp::as_mul(const MatrixSP& X1, const MatrixSP& X2, const MatrixSP& Y, float a, std::vector<int> dim)
+void MatrixOp::as_mul(const MatrixSP& X1, const MatrixSP& X2, const MatrixSP& Y, float a, std::vector<int> dim, MatrixTransType ta, MatrixTransType tb)
 {
-    //此处可强制reshape，返回可以直接卷积的维度
     if (dim.empty())
     {
-        dim = X1->getDim();
-        dim.back() = X2->getNumber();
+        if (ta == MATRIX_TRANS)
+        {
+            dim = { X1->getNumber(), 1, 1, X2->getNumber() };
+        }
+        else
+        {
+            dim = X1->getDim();
+            dim.back() = X2->getNumber();
+        }
     }
     Y->resize(dim);
-    set(MatrixOpType::MUL, { X1, X2 }, { Y }, { a });    //这里注意顺序
-    if (X1->getNumber() != X2->getRow())
+    VectorAny pv;
+    pv.push_back(ta);
+    pv.push_back(tb);
+    set(MatrixOpType::MUL, { X1, X2 }, { Y }, { a }, {}, std::move(pv));    //这里注意顺序
+    int k1 = (ta == MATRIX_TRANS) ? X1->getRow() : X1->getNumber();
+    if (k1 != X2->getRow())
     {
         LOG_ERR("Error: cannot product!\n");
     }
@@ -1502,7 +1590,7 @@ void MatrixOp::as_save_binary(const MatrixSP& X, const MatrixSP& dummy, const st
     set(MatrixOpType::DEBUG_SAVE, { X }, { dummy }, {}, {}, VectorAny{ filename });
 }
 
-void MatrixOp::as_attention(const MatrixSP& Q, const MatrixSP& K, const MatrixSP& V, const MatrixSP& Y, float dk, int causal)
+void MatrixOp::as_attention(const MatrixSP& Q, const MatrixSP& K, const MatrixSP& V, const MatrixSP& Y, float dk, int causal, const MatrixSP& bias)
 {
     // Scaled Dot-Product Attention: Y = softmax_channel(K^T @ Q / sqrt(dk)) @ V
     // Q/K/V/Y 形状均为 (D, T, 1, B); causal=1 时应用因果掩码
@@ -1511,7 +1599,23 @@ void MatrixOp::as_attention(const MatrixSP& Q, const MatrixSP& K, const MatrixSP
     VectorAny pv;
     pv.push_back(dk);
     pv.push_back(causal);
-    set(MatrixOpType::ATTENTION, { Q, K, V }, { Y }, {}, {}, std::move(pv));
+    std::vector<MatrixSP> ins = { Q, K, V };
+    if (bias != nullptr) { ins.push_back(bias); }
+    set(MatrixOpType::ATTENTION, ins, { Y }, {}, {}, std::move(pv));
+}
+
+void MatrixOp::as_roi_align(const MatrixSP& feat, const MatrixSP& boxes, const MatrixSP& Y,
+    int roi_size, float spatial_scale)
+{
+    // feat: (W,H,C,B); boxes: (4,N,1,B); Y: (roi_size,roi_size,C,N*B)
+    int C = feat->getChannel();
+    int B = feat->getNumber();
+    int N_boxes = boxes->getHeight();    // height of boxes matrix = num boxes per batch
+    Y->resize({ roi_size, roi_size, C, N_boxes * B });
+    VectorAny pv;
+    pv.push_back(roi_size);
+    pv.push_back(spatial_scale);
+    set(MatrixOpType::ROI_ALIGN, { feat, boxes }, { Y }, {}, {}, std::move(pv));
 }
 
 void MatrixOp::as_embed(const MatrixSP& ids, const MatrixSP& W, const MatrixSP& Y)

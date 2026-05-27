@@ -115,6 +115,8 @@ public:
     Cublas* cublas_ = nullptr;
     cudnnContext* cudnn_handle_ = nullptr;
 
+    void setActDataType(DataType dt);
+
     Rocblas* rocblas_ = nullptr;
     miopenHandle* miopen_handle_ = nullptr;
 

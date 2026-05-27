@@ -67,7 +67,15 @@ void* MatrixData::resize(int64_t size, DataType data_type, bool reserve_data, bo
     }
     if (reserve_data)
     {
-        copy(getApiType(), data_, getApiType(), new_data, std::min(size, occupy_data_size_), data_type_);
+        int64_t copy_elems = std::min(size, occupy_data_size_);
+        int64_t copy_bytes = copy_elems * getDataTypeSize(data_type_);
+        if (getApiType() == API_CUDA && copy_bytes >= 100LL * 1024 * 1024)
+        {
+            LOG("Large D2D MatrixData::resize: copy_elems={} copy_bytes={:g} MB dt={} src={} dst={}\n",
+                copy_elems, copy_bytes / 1024.0 / 1024.0, int(data_type_),
+                (uintptr_t)(data_), (uintptr_t)(new_data));
+        }
+        copy(getApiType(), data_, getApiType(), new_data, copy_elems, data_type_);
         release();
     }
     occupy_data_size_ = alloc_size;
@@ -102,6 +110,14 @@ void MatrixData::release()
     occupy_data_size_ = 0;
     //LOG("memory used {:g}!\n", 1.0 * memory_used_);
     data_ = nullptr;
+
+    // Release block-scale GPU buffer if present
+    if (block_scale_data_)
+    {
+        GpuControl::free(block_scale_data_);
+        block_scale_data_ = nullptr;
+        block_scale_count_ = 0;
+    }
 }
 
 int64_t MatrixData::copy(ApiType dt_src, const void* src, ApiType dt_dst, void* dst, int64_t size, DataType dt)
@@ -119,6 +135,12 @@ int64_t MatrixData::copyByByte(ApiType dt_src, const void* src, ApiType dt_dst, 
     //cuda
     if (dt_dst == API_CUDA && dt_src == API_CUDA)
     {
+        if (size_in_byte >= 100 * 1024 * 1024)  // 打印 100 MB 以上的 D2D 大拷贝
+        {
+            LOG("D2D copy: src={} dst={} size={:g} MB\n",
+                (uintptr_t)(src), (uintptr_t)(dst),
+                size_in_byte / 1024.0 / 1024.0);
+        }
         state = cudaMemcpy(dst, src, size_in_byte, cudaMemcpyDeviceToDevice);
     }
     else if (dt_dst == API_CUDA && dt_src == API_UNKNOWN)
@@ -162,7 +184,15 @@ int64_t MatrixData::copyByByte(ApiType dt_src, const void* src, ApiType dt_dst, 
     }
     if (state != 0)
     {
-        LOG_ERR("Memcpy error: {}, size in byte {:g}\n", state, 1.0 * size_in_byte);
+        const char* dir = "?to?";
+        if (dt_dst == API_CUDA && dt_src == API_CUDA) dir = "D2D";
+        else if (dt_dst == API_CUDA && dt_src == API_UNKNOWN) dir = "H2D";
+        else if (dt_dst == API_UNKNOWN && dt_src == API_CUDA) dir = "D2H";
+        LOG_ERR("Memcpy error: {} ({}) src={} dst={} size in byte {:g}\n",
+            state, dir,
+            (uintptr_t)(src),
+            (uintptr_t)(dst),
+            1.0 * size_in_byte);
     }
     return size_in_byte;
 }
@@ -177,7 +207,7 @@ int64_t MatrixData::copyByByteAsync(ApiType dt_src, const void* src, ApiType dt_
         return 0;
     }
 #ifdef ENABLE_CUDA
-    cudaStream_t cs = static_cast<cudaStream_t>(stream);
+    cudaStream_t cs = (cudaStream_t)(stream);
     int state = 0;
     if (dt_dst == API_CUDA && dt_src == API_CUDA)
     {
@@ -206,4 +236,42 @@ int64_t MatrixData::copyByByteAsync(ApiType dt_src, const void* src, ApiType dt_
     return copyByByte(dt_src, src, dt_dst, dst, size_in_byte);
 #endif
 }
+
+// Block-scale GPU buffer management (FP8 E4M3: 1 byte per scale).
+
+void MatrixData::setBlockScaleFromHost(const void* src, int64_t n_scales)
+{
+    if (block_scale_data_)
+    {
+        GpuControl::free(block_scale_data_);
+        block_scale_data_ = nullptr;
+    }
+    block_scale_count_ = n_scales;
+    if (n_scales > 0 && gpu_ && src)
+    {
+        gpu_->malloc(block_scale_data_, (size_t)n_scales);  // FP8 E4M3: 1 byte per scale
+        copyByByte(API_UNKNOWN, src, gpu_->getApiType(), block_scale_data_, (size_t)n_scales);
+    }
+}
+
+void MatrixData::getBlockScaleToHost(void* dst) const
+{
+    if (block_scale_data_ && block_scale_count_ > 0 && dst)
+        copyByByte(gpu_ ? gpu_->getApiType() : API_UNKNOWN,
+                   block_scale_data_, API_UNKNOWN, dst, (size_t)block_scale_count_);
+}
+
+void* MatrixData::allocBlockScaleGpu(int64_t n_scales)
+{
+    if (block_scale_data_)
+    {
+        GpuControl::free(block_scale_data_);
+        block_scale_data_ = nullptr;
+    }
+    block_scale_count_ = n_scales;
+    if (n_scales > 0 && gpu_)
+        gpu_->malloc(block_scale_data_, (size_t)n_scales);  // FP8 E4M3: 1 byte per scale
+    return block_scale_data_;
+}
+
 }    // namespace cccc

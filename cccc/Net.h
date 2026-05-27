@@ -72,6 +72,19 @@ public:
     const TestInfo& getTestInfo() { return test_info_; }
     const std::vector<TestInfo>& getGroupTestInfo() { return group_test_info_; }
     TensorForm getTensorForm() const { return TensorForm::NCHW; }
+    // W8A16: convert all weight matrices in-place from BF16 to a quantized type (FP8_E4M3 / FP8_E5M2 / FP4_E2M1)
+    void quantizeWeights(DataType target_dt = DataType::FP8_E4M3);
+    // Save all named weights to a binary cache, recording dtype in every key ("weight_<dtype>_<name>").
+    // Per-tensor scale ("scale_<name>") is saved for quantized types.  Handles any weight type.
+    int saveNamedWeights(const std::string& filename);
+    // Load pre-built named weights directly into GPU (avoids on-the-fly conversion at runtime).
+    int loadNamedWeights(const std::string& filename);
+    // Load activation input_scales for W8A8 from a sidecar bin file (optional).
+    // Keys: "input_scale_<cccc_name>" = 4 bytes float32.
+    int loadInputScales(const std::string& filename);
+    void syncReshapeViews();
+    // Set activation data type for GEMM dispatch (controls W8A8 vs W8A16 path).
+    void setActDataType(DataType dt);
 
 public:
     Matrix& getX() { return *X_; }

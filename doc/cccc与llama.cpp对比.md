@@ -107,9 +107,9 @@
 | Causal mask 位置偏移 | ✅ `setAttentionOffset(pos)` | ✅ 按 `n_past` 偏移 |
 | 流式输出 | ✅ `llm_chat_stream` 回调 | ✅ `llama_decode` 逐步调用 |
 | 贪心解码 | ✅ argmax | ✅ |
-| Top-k / Top-p 采样 | ❌ 未实现 | ✅ `llama_sampler_chain` |
-| 温度采样 | ❌ 未实现 | ✅ |
-| Repetition penalty | ❌ 未实现 | ✅ |
+| Top-k / Top-p 采样 | ✅ `top_k` / `top_p` 参数（ini `[llm]`） | ✅ `llama_sampler_chain` |
+| 温度采样 | ✅ `temperature` 参数（0=greedy） | ✅ |
+| Repetition penalty | ✅ `repetition_penalty` 参数 | ✅ |
 | Beam search | ❌ 未实现 | ❌（官方也未提供） |
 | 量化推理（GGUF） | ❌ 仅 fp32/fp16/bf16 | ✅ 2/3/4/5/6/8 bit |
 | Flash Attention | ❌ 自实现 SDPA | ✅ 可选 Flash Attention 2 |
@@ -126,14 +126,56 @@
 
 | 缺口 | 影响 | 优先级 |
 |------|------|--------|
-| Top-k / Top-p / 温度采样 | 推理输出多样性差（目前仅 greedy） | 高 |
-| Repetition penalty | 重复输出问题 | 高 |
 | 量化（INT4/INT8） | 大模型显存占用高，无法在消费级 GPU 上运行大参数模型 | 高 |
-| RoPE 动态 scaling（YaRN / Dynamic NTK） | 超过训练上下文长度时质量下降 | 中 |
+| RoPE 动态 scaling（YaRN） | ✅ `ropeCosTblYaRN`/`ropeSinTblYaRN` 已实现；在 cifa 脚本中替换 `ropeCosTbl` 即可开启长上下文推理 | 中 |
 | Flash Attention | 长序列显存和速度 | 中 |
-| LoRA 加载 | 微调模型部署 | 中 |
+| LoRA 适配器加载 | 微调模型部署 | 中 |
 | PAD token / label mask（训练） | padding 位置计入 loss，影响训练稳定性 | 低 |
 | BOS token 注入（训练） | 部分模型要求显式 BOS | 低 |
+
+---
+
+## 5. 低精度格式可行性分析（FP8 / FP4 / FP2）
+
+### FP8
+
+| 层面 | 可行性 | 说明 |
+|------|--------|------|
+| 存储 | ✅ 可行 | cccc `DataType` 枚举可扩充 `FP8_E4M3` / `FP8_E5M2`；权重 blob 按字节存储，只需在 `MatrixData` 新增类型 |
+| GPU 计算（CUDA） | ⚠️ 有条件 | NVIDIA H100/H200/B100 通过 cuBLAS `cublasGemmEx` 支持 FP8 GEMM；A100 及以下**不支持**，只能先 dequant 到 FP16 再计算 |
+| 反量化路径 | ✅ 可实现 | 在 `Matrix::mul` 中增加 dequant kernel，权重 FP8 × 激活 FP16/BF16 → 输出 FP16/BF16 |
+| 精度损失 | 可接受 | 业界（vLLM、TensorRT-LLM）已验证 7B/14B 模型 FP8 精度与 BF16 差距 < 1% |
+
+**结论**：FP8 **可以实现**，主要工作量在 CUDA kernel 适配，对 A100 以下退化为 dequant 路径。
+
+### FP4
+
+| 层面 | 可行性 | 说明 |
+|------|--------|------|
+| 存储 | ✅ 可行 | 两个 FP4 打包进一字节，`MatrixData` 支持需额外 pack/unpack 接口 |
+| GPU 计算（Blackwell） | ✅ 原生支持 | RTX 5090（GB202）及 B100/B200 的 Tensor Core 原生支持 FP4×FP4 → FP16/BF16 累加；**计算时无需先反量化到 FP8** |
+| GPU 计算（Hopper/Ada 及以下） | ⚠️ 降级 | 4090 等无 FP4 算力，需先 dequant 到 FP8/FP16 再计算，仅有存储收益 |
+| 精度损失 | 较大 | FP4 仅 3 位有效数字，通常需要 per-group scaling（如 GPTQ-4bit），实现复杂 |
+
+**结论**：FP4 在 RTX 5090 / Blackwell 上**算力和存储均有收益**，值得考虑；4090 及以下仅省显存、无速度提升。
+
+### FP2
+
+| 层面 | 可行性 | 说明 |
+|------|--------|------|
+| 存储 | ⚠️ 理论可存 | 4 个 FP2 打包进一字节，但 FP2 仅 1 位尾数（相当于 `±1.0` / `±0.5` / `±1.5` / `0`），表示范围极度有限 |
+| GPU 计算 | ❌ 无硬件支持 | 当前及近期所有 GPU 均无 FP2 GEMM 硬件；只能 dequant 到 FP16 后计算，GEMM 速度无任何提升 |
+| 精度损失 | 极大 | 业界极少数实验（如 QuIP#）在特定结构下勉强维持可用质量，但需要复杂旋转量化，远超 cccc 当前架构复杂度 |
+
+**结论**：FP2 **不建议实现**，在 cccc 上存储节省有限（相对 FP4 减半）而精度损失和工程复杂度均不可接受。
+
+### 小结
+
+| 格式 | 推荐 | 前提 |
+|------|------|------|
+| FP8 | ✅ 值得实现 | H100+ 原生；A100 以下 dequant 路径 |
+| FP4 | ⚠️ 可选 | Blackwell（RTX 5090 / B100+）原生 FP4 算力；旧 GPU 仅省存储 |
+| FP2 | ❌ 不推荐 | 无硬件支持，精度不可接受 |
 
 ---
 

@@ -1,16 +1,16 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="14.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <LocalDebuggerCommandArguments>-c mnist-lenet.ini</LocalDebuggerCommandArguments>
-    <LocalDebuggerWorkingDirectory>$(SolutionDir)work</LocalDebuggerWorkingDirectory>
+    <LocalDebuggerCommandArguments>--sd -c . -p "a cat"</LocalDebuggerCommandArguments>
+    <LocalDebuggerWorkingDirectory>..\..\cccc-sd\z-image-turbo</LocalDebuggerWorkingDirectory>
     <DebuggerFlavor>WindowsLocalDebugger</DebuggerFlavor>
     <LocalDebuggerCommand>$(TargetPath)</LocalDebuggerCommand>
-    <LocalDebuggerCommandArgumentsHistory>-c mnist-lenet.ini|</LocalDebuggerCommandArgumentsHistory>
+    <LocalDebuggerCommandArgumentsHistory>-c mnist-lenet.ini|--sd -c . -p "a cat"|</LocalDebuggerCommandArgumentsHistory>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <LocalDebuggerCommandArguments>--llm -c qwen3_8b_fp16.ini</LocalDebuggerCommandArguments>
-    <LocalDebuggerWorkingDirectory>C:\project\cccc-models\cccc-llm\qwen3</LocalDebuggerWorkingDirectory>
+    <LocalDebuggerCommandArguments>--llm -c C:\project\cccc-models\cccc-llm\Hy-MT2\hy_mt2_7b_fp16.ini</LocalDebuggerCommandArguments>
+    <LocalDebuggerWorkingDirectory>..\..\cccc-models\cccc-sd\z-image-turbo</LocalDebuggerWorkingDirectory>
     <DebuggerFlavor>WindowsLocalDebugger</DebuggerFlavor>
-    <LocalDebuggerCommandArgumentsHistory>--sd -c .|--sd -c . -p "orange cat"|--sd -c . -p "a cat"|--sd -c . |--llm -c qwen3_8b_fp16.ini|</LocalDebuggerCommandArgumentsHistory>
+    <LocalDebuggerCommandArgumentsHistory>--sd -c .|--llm -c qwen3_8b_fp16.ini|--sd -c . -p "orange cat"|--sd -c . |--llm -c C:\project\cccc-models\cccc-llm\Hy-MT2\hy_mt2_7b_fp16.ini|</LocalDebuggerCommandArgumentsHistory>
   </PropertyGroup>
 </Project>

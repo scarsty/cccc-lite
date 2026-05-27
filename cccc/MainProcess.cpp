@@ -2,12 +2,14 @@
 #include "ConsoleControl.h"
 #include "CudnnGraph.h"
 #include "DynamicLibrary.h"
+#include "INIReaderBin.h"
 #include "NetCifa.h"
 #include "NetLayer.h"
 #include "filefunc.h"
 #include "gpu_lib.h"
 #include "strfunc.h"
 #include <algorithm>
+#include <filesystem>
 #include <cmath>
 #include <thread>
 
@@ -82,6 +84,7 @@ int MainProcess::loadIni(const std::string& ini)
         {
             option_.loadFile(ini);
             train_filename_ = filefunc::getFileMainNameWithoutPath(ini);
+            ini_dir_ = std::filesystem::path(ini).parent_path().string();
         }
         else
         {
@@ -212,18 +215,21 @@ int MainProcess::initNets()
     auto creator = (MYFUNC)DynamicLibrary::getFunction(option_.getString("net", "library"), option_.getString("net", "function"));
 
     // 决定每个 group 使用的 structure 脚本
-    // net_group_count_=1 时 "structure" 和 "structure0" 等价（向后兼容 [cifa] 段）
+    // net_group_count_=1 时 "structure" 和 "structure0" 等价
     auto get_structure = [this](int g) -> std::string
     {
         std::string key0 = "structure" + std::to_string(g);
         std::string s = option_.getString("net", key0);
         if (s.empty() && g == 0)
         {
-            // 兼容旧格式：[net] structure 或 [cifa] structure
-            s = option_.getString("net", "structure", option_.getString("cifa", "structure"));
+            //[net] structure
+            s = option_.getString("net", "structure");
         }
         return s;
     };
+
+    // 累积共享池：每个 net init 后将自身命名矩阵加入，后续 net 从中预加载（零拷贝、先到先得）
+    std::map<std::string, MatrixSP> shared_matrices;
 
     for (int g = 0; g < net_group_count_; g++)
     {
@@ -253,15 +259,20 @@ int MainProcess::initNets()
             {
                 net->setStructureScript(struct_str);
             }
-            // group 1+ 在 init 前预载 group 0 的矩阵（权重+KV cache 共享，零拷贝）
-            if (g > 0 && !nets_[0].empty())
+            // 从累积共享池预加载已有命名矩阵（权重+KV cache 零拷贝，先到先得，不覆盖）
+            if (!shared_matrices.empty())
             {
-                net->preloadMatrices(nets_[0][0]->getAllExtraMatrices());
+                net->preloadMatrices(shared_matrices);
             }
 
             if (net->init() != 0)
             {
                 return 1;
+            }
+            // 将本 net 的命名矩阵加入共享池，供后续所有 net 使用
+            for (auto& [k, v] : net->getAllExtraMatrices())
+            {
+                shared_matrices.emplace(k, v);
             }
             int dev_id = net->getGpu()->getDeviceID();
             nets_[g][i] = std::move(net);
@@ -277,21 +288,126 @@ int MainProcess::initNets()
     }
 
     //0号group、0号网络加载权值（group 1+ 通过共享 MatrixSP 自动获得相同权重）
+    // 先解析 load_file 路径（auto 检测权重类型时也需要）
+    std::string load_file_path;
     if (option_.getInt("train", "load_net") != 0 && !nets_.empty() && !nets_[0].empty())
     {
-        if (nets_[0][0]->loadWeight(option_.getString("train", "load_file")) < 0)
+        load_file_path = option_.getString("train", "load_file");
+        if (!load_file_path.empty() && !ini_dir_.empty()
+            && !std::filesystem::path(load_file_path).is_absolute()
+            && !std::filesystem::exists(load_file_path))
         {
-            fatalError("Error: Load net weight failed!!\n");
-            return 1;
+            auto candidate = std::filesystem::path(ini_dir_) / load_file_path;
+            if (std::filesystem::exists(candidate))
+                load_file_path = candidate.lexically_normal().string();
         }
     }
-    // 主组内多个 MP 副本同步权重
-    for (int i = 1; i < (int)nets_[0].size(); i++)
+
+    // weight_data_type: "auto" (DataType::CURRENT) → 从缓存文件头部检测保存时的类型
+    auto wdt = option_.getEnum<DataType>("train", "weight_data_type", DataType::CURRENT);
+    // Also detect the file's stored type (to choose the right loader).
+    DataType file_dt = DataType::BFLOAT16;
+    if (!load_file_path.empty())
     {
-        Matrix::copyDataAcrossDevice(nets_[0][0]->getAllWeights(), nets_[0][i]->getAllWeights());
+        INIReaderBin peek;
+        if (peek.parseFile(load_file_path) == 0 && peek.has_value("data_type"))
+            file_dt = option_.getEnumFromString<DataType>(std::string(peek.get_value("data_type")));
+    }
+    if (wdt == DataType::CURRENT)
+    {
+        // "auto" → use the stored type as the target type
+        wdt = (file_dt != DataType::CURRENT) ? file_dt : DataType::BFLOAT16;
+    }
+    bool weight_fp8 = (wdt == DataType::FP8_E4M3 || wdt == DataType::FP8_E5M2 || wdt == DataType::FP4_E2M1);
+    // Only use the FP8 E4M3 cache loader when the file on disk is actually a FP8 E4M3 cache.
+    bool use_fp8_cache = (file_dt == DataType::FP8_E4M3 || file_dt == DataType::FP8_E5M2 || file_dt == DataType::FP4_E2M1);
+    // 向后兼容：旧版 saveNamedWeights 可能将文件头 data_type 写成 HALF/BF16（取了第一个小权重的类型），
+    // 但 ini 已显式指定 named_weights=1 且 weight_data_type 为量化类型 → 仍应走 loadNamedWeights 路径
+    if (!use_fp8_cache
+        && option_.getInt("train", "named_weights", 0) != 0
+        && weight_fp8
+        && option_.getString("train", "save_fp8_file", "").empty())
+    {
+        use_fp8_cache = true;
+    }
+
+    if (option_.getInt("train", "load_net") != 0 && !nets_.empty() && !nets_[0].empty())
+    {
+        if (!load_file_path.empty())
+        {
+            if (use_fp8_cache)
+            {
+                // preloadMatrices（约264-266行）已在 init() 前把 nets_[0][0] 的权重 MatrixSP 共享给
+                // 所有其他组，故只需加载 nets_[0][0] 的权重，其余组自动继承。
+                nets_[0][0]->loadNamedWeights(load_file_path);
+                // 可选：从独立 sidecar 文件加载静态激活量化 scale（W8A8）
+                auto iscale_file = option_.getString("train", "input_scale_file", "");
+                if (!iscale_file.empty())
+                {
+                    // 相对路径以 load_file 所在目录为基准
+                    std::string dir;
+                    auto sep = load_file_path.find_last_of("/\\");
+                    if (sep != std::string::npos)
+                        dir = load_file_path.substr(0, sep + 1);
+                    if (iscale_file.find('/') == std::string::npos && iscale_file.find('\\') == std::string::npos)
+                        iscale_file = dir + iscale_file;
+                    nets_[0][0]->loadInputScales(iscale_file);
+                }
+            }
+            else if (nets_[0][0]->loadWeight(load_file_path) < 0)
+            {
+                fatalError("Error: Load net weight failed!!\n");
+                return 1;
+            }
+            // On-the-fly quantization: loaded BF16 → target quantized type
+            if (weight_fp8 && !use_fp8_cache)
+            {
+                for (auto& net : nets_[0]) net->quantizeWeights(wdt);
+                // Optionally save the quantized weights for faster subsequent loads.
+                auto save_fp8 = option_.getString("train", "save_fp8_file", "");
+                if (!save_fp8.empty())
+                {
+                    // 相对路径以 load_file 所在目录为基准
+                    if (save_fp8.find('/') == std::string::npos && save_fp8.find('\\') == std::string::npos)
+                    {
+                        auto sep = load_file_path.find_last_of("/\\");
+                        if (sep != std::string::npos)
+                            save_fp8 = load_file_path.substr(0, sep + 1) + save_fp8;
+                    }
+                    nets_[0][0]->saveNamedWeights(save_fp8);
+                }
+            }
+        }
+        else if (weight_fp8)
+        {
+            // 无缓存文件时：将已加载的 BF16 权重原地量化为目标类型
+            for (auto& net : nets_[0]) net->quantizeWeights(wdt);
+        }
+    }
+    // 所有 MP 副本已通过 preloadMatrices 共享 MatrixSP，无需复制权重数据
+    for (auto& gnets : nets_)
+    {
+        for (auto& net : gnets)
+        {
+            if (net) net->syncReshapeViews();
+        }
     }
     //主线程使用0号group 0号网络
     nets_[0][0]->setDeviceSelf();
+
+    // GEMM 路径由 weight_data_type 决定：FP8 权重 → W8A8；否则 W8A16
+    // For W8A16 modes (E5M2/FP4), activations remain BF16; only E4M3 uses act quantization.
+    auto act_dt = (wdt == DataType::FP8_E4M3) ? wdt : DataType::BFLOAT16;
+    for (auto& gnets : nets_)
+        for (auto& net : gnets)
+            if (net) net->setActDataType(act_dt);
+    if (weight_fp8)
+    {
+        bool is_w8a8 = (wdt == DataType::FP8_E4M3);
+        LOG("[train] weight_data_type={} ({} GEMM)\n",
+            option_.getStringFromEnum(wdt), is_w8a8 ? "W8A8" : "W8A16");
+    }
+
     return 0;
 }
 

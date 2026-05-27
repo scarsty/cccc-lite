@@ -20,7 +20,7 @@ extern "C" __attribute__((weak)) unsigned short __truncsfbf2(float f)
 {
     unsigned int u;
     std::memcpy(&u, &f, sizeof(u));
-    return static_cast<unsigned short>(u >> 16);
+    return (unsigned short)(u >> 16);
 }
 
 #define blockMax 1024    // 每个 block 的最大线程数
@@ -1177,6 +1177,49 @@ int hip_conv2db_w(float* x, float* dw, float* dy, int w0, int h0, int c0, int n,
 {
     conv2db_wkernel<<<blockNum(winw * winh * c0 * c1), blockMax>>>(x, dw, dy, w0, h0, c0, n, w1, h1, c1, winw, winh, stride, padding, a1, a2);
     return getError("conv2db_w");
+}
+
+// im2col: 将输入 X (WHCN布局) 展开为列矩阵 col，用于 im2col+GEMM 快速卷积
+// X布局: x[in*C0*W0*H0 + ic0*W0*H0 + ih0*W0 + iw0]
+// col布局(列主序): col[in*L*K + l + k*L]
+//   l = iw1 + ih1*W1  (输出空间位置, 作为 GEMM 的行)
+//   k = iwinw + iwinh*KW + ic0*KW*KH  (卷积核元素, 作为 GEMM 的列)
+//   L = W1*H1, K = C0*KW*KH
+static __global__ void im2col_kernel(const float* x, float* col,
+    int W0, int H0, int C0, int N,
+    int W1, int H1, int KW, int KH,
+    int stride, int padding)
+{
+    int L = W1 * H1;
+    int K = C0 * KW * KH;
+    int i = cal_i();
+    if (i >= N * L * K) return;
+    int in = i / (L * K);
+    int rem = i % (L * K);
+    int l = rem % L;   // GEMM 行: 输出空间位置
+    int k = rem / L;   // GEMM 列: 卷积核元素
+    int iw1 = l % W1;
+    int ih1 = l / W1;
+    int iwinw = k % KW;
+    int iwinh = (k / KW) % KH;
+    int ic0 = k / (KW * KH);
+    int iw0 = iw1 * stride + iwinw - padding;
+    int ih0 = ih1 * stride + iwinh - padding;
+    float v = 0.0f;
+    if (iw0 >= 0 && iw0 < W0 && ih0 >= 0 && ih0 < H0)
+        v = x[in * C0 * W0 * H0 + ic0 * W0 * H0 + ih0 * W0 + iw0];
+    col[in * L * K + l + k * L] = v;
+}
+
+int hip_im2col(const float* x, float* col,
+    int W0, int H0, int C0, int N,
+    int W1, int H1, int KW, int KH,
+    int stride, int padding)
+{
+    int L = W1 * H1;
+    int K = C0 * KW * KH;
+    im2col_kernel<<<blockNum(N * L * K), blockMax>>>(x, col, W0, H0, C0, N, W1, H1, KW, KH, stride, padding);
+    return getError("im2col");
 }
 
 // ===========================================================================
@@ -2633,4 +2676,15 @@ int hip_upsample_bilinear_bwd(int type,
     unsigned int C, unsigned int N, float alpha)
 {
     return 0;
+}
+
+// Unified conversion dispatcher (HIP; no FP8/FP4 support)
+// src_type/dst_type values: 0=float, 2=half, 3=bfloat16
+int hip_convert(const void* src, int src_type, void* dst, int dst_type, unsigned int n, float /*scale*/)
+{
+    if (src_type == 3 && dst_type == 0) return hip_bf162float((void*)src, dst, n);
+    if (src_type == 0 && dst_type == 3) return hip_float2bf16((void*)src, dst, n);
+    if (src_type == 2 && dst_type == 0) return hip_half2float((void*)src, dst, n);
+    if (src_type == dst_type) { hipMemcpy(dst, src, (size_t)n, hipMemcpyDeviceToDevice); return 0; }
+    return -1;  // unsupported combination
 }

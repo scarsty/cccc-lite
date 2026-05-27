@@ -23,6 +23,8 @@ int main(int argc, char* argv[])
     cmd.add("version", 'v', "version information");
     cmd.add("llm", 'l', "LLM interactive chat mode");
     cmd.add("sd", 's', "Stable Diffusion image generation mode");
+    cmd.add("agent", '\0', "Agent mode: LLM with tool use (read/write files, run commands)");
+    cmd.add<std::string>("task", '\0', "Initial task for --agent mode", false, "");
 
 #ifdef _MSC_VER
     cmd.parse_check(GetCommandLineA());
@@ -30,7 +32,14 @@ int main(int argc, char* argv[])
     cmd.parse_check(argc, argv);
 #endif
 
-    if (cmd.exist("llm"))
+    if (cmd.exist("agent"))
+    {
+        cccc::Application app;
+        app.ini_file_ = cmd.get<std::string>("config");
+        app.agent_task_ = cmd.get<std::string>("task");
+        app.run_agent();
+    }
+    else if (cmd.exist("llm"))
     {
         cccc::Application app;
         app.ini_file_ = cmd.get<std::string>("config");

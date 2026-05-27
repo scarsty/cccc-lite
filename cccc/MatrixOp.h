@@ -75,10 +75,11 @@ enum class MatrixOpType
     L1_LOSS,
     KL_LOSS,
     UPSAMPLE,
-    CHUNK,          // 沿 width(axis=0) 取第 chunk_i 块: as_chunk(X, Y, chunk_i, n_total)
-    SIN_TIME_EMBED, // 正弦时间步嵌入: sinTimeEmbed(t_scalar, d [, base])
-    ROPE_INTERLEAVED, // interleaved RoPE (ncnn mode=1): y[2i]=x[2i]*c-x[2i+1]*s
-    DEBUG_SAVE,     // 调试用: 将矩阵保存为 float32 binary 文件
+    CHUNK,               // 沿 width(axis=0) 取第 chunk_i 块: as_chunk(X, Y, chunk_i, n_total)
+    SIN_TIME_EMBED,      // 正弦时间步嵌入: sinTimeEmbed(t_scalar, d [, base])
+    ROPE_INTERLEAVED,    // interleaved RoPE (ncnn mode=1): y[2i]=x[2i]*c-x[2i+1]*s
+    DEBUG_SAVE,          // 调试用: 将矩阵保存为 float32 binary 文件
+    ROI_ALIGN,           // ROI Align bilinear sampling: roiAlign(feat, boxes, roi_size, spatial_scale)
 };
 
 class CCCC_EXPORT MatrixOp
@@ -131,6 +132,7 @@ public:
             { MatrixOpType::CHUNK, "chunk" },
             { MatrixOpType::SIN_TIME_EMBED, "sin_time_embed" },
             { MatrixOpType::DEBUG_SAVE, "debug_save" },
+            { MatrixOpType::ROI_ALIGN, "roi_align" },
         };
         return m[type];
     }
@@ -210,8 +212,8 @@ public:
         if (idx >= (int)window_.size()) { window_.resize(idx + 1, 0); }
         window_[idx] = val;
     }
-    const std::vector<float>& getA() const { return a_; }              // 图模式用：读取算子标量参数 a
-    const std::vector<float>& getB() const { return b_; }              // 图模式用：读取算子标量参数 b
+    const std::vector<float>& getA() const { return a_; }    // 图模式用：读取算子标量参数 a
+    const std::vector<float>& getB() const { return b_; }    // 图模式用：读取算子标量参数 b
 
     ActiveFunctionType getActiveType() const;
     PoolingType getPoolingType() const;                     // 图模式用：获取 POOL op 的池化类型
@@ -244,7 +246,7 @@ public:
 public:
     //下面这些函数会设置这个op的参数，并自动计算Y的尺寸返回
     void as_scale(const MatrixSP& X, const MatrixSP& Y, float r);
-    void as_mul(const MatrixSP& X1, const MatrixSP& X2, const MatrixSP& Y, float a = 1, std::vector<int> dim = {});
+    void as_mul(const MatrixSP& X1, const MatrixSP& X2, const MatrixSP& Y, float a = 1, std::vector<int> dim = {}, MatrixTransType ta = MATRIX_NO_TRANS, MatrixTransType tb = MATRIX_NO_TRANS);
     //批量矩阵乘 (用于 self-attention).
     //每个 batch 切片 A: (M,K) col-major, B: (K,N) col-major, Y: (M,N) col-major.
     //M/N/K/batch 自动从矩阵维度推导:
@@ -311,7 +313,15 @@ public:
     //Scaled Dot-Product Attention: Y = softmax(K^T @ Q / sqrt(dk)) @ V
     //Q/K/V/Y 形状均为 (D, T, 1, B); dk 通常取 D (Head Dim).
     //causal=1 时启用因果掩码（下三角注意力），用于自回归语言模型.
-    void as_attention(const MatrixSP& Q, const MatrixSP& K, const MatrixSP& V, const MatrixSP& Y, float dk, int causal = 0);
+    //bias (可选): (T_k, T_q, 1, B) additive bias 在 softmax 之前加到 scores 上（用于 Box RPB 等）.
+    void as_attention(const MatrixSP& Q, const MatrixSP& K, const MatrixSP& V, const MatrixSP& Y, float dk, int causal = 0, const MatrixSP& bias = nullptr);
+
+    //ROI Align bilinear sampling (float only, aligned=True convention).
+    //feat: (W,H,C,B) feature map; boxes: (4,N,1,B) [x1,y1,x2,y2] in pixel coords;
+    //roi_size: output spatial size; spatial_scale: multiplier to convert box coords to feat coords.
+    //output Y: (roi_size, roi_size, C, N*B)
+    void as_roi_align(const MatrixSP& feat, const MatrixSP& boxes, const MatrixSP& Y,
+        int roi_size, float spatial_scale = 1.0f);
 
     //Embedding lookup: ids (T,1,1,B) 整数 token id 以 float 存储, W (D,1,1,V) 词表矩阵 -> Y (D,T,1,B)
     //前向: Y[d,t,b] = W[d, (int)ids[t,b]]

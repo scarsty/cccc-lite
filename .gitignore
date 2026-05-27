@@ -61,3 +61,4 @@ cccc-hip/Debug/
 cccc-hip/Release/
 *.patch
 *.bat
+*.trim_backup

@@ -9,6 +9,8 @@ class CCCC_EXPORT MatrixEx : public Matrix
 {
 private:
     MatrixEx() = delete;
+    static void attentionForwardImpl(const Matrix& Q, const Matrix& K, const Matrix& V,
+        Matrix& Y, const Matrix* bias, float dk, int causal, int pos_offset);
 
 public:
     struct ConvMethod
@@ -123,7 +125,14 @@ public:
     //pos_offset: absolute position of first Q token (for KV-cache decode causal mask)
     //workspace: Y.workspace_[0] = attn (T_k,T_q,1,B), [1] = dAttn, [2] = dScores
     static void attentionForward(const Matrix& Q, const Matrix& K, const Matrix& V, Matrix& Y, float dk, int causal = 0, int pos_offset = 0);
+    static void attentionForward(const Matrix& Q, const Matrix& K, const Matrix& V, Matrix& Y, const Matrix& bias, float dk, int causal = 0, int pos_offset = 0);
     static void attentionBackward(Matrix& Q, Matrix& K, Matrix& V, const Matrix& Y, float dk, int causal = 0);
+    // ROI Align forward/backward (float only, aligned=True convention)
+    // feat: (W,H,C,B); boxes: (4,N,1,B) [x1,y1,x2,y2]; Y: (roi_size,roi_size,C,N*B)
+    static void roiAlignForward(const Matrix& feat, const Matrix& boxes, Matrix& Y,
+        int roi_size, float spatial_scale = 1.0f);
+    static void roiAlignBackward(const Matrix& feat, const Matrix& boxes, Matrix& Y,
+        int roi_size, float spatial_scale = 1.0f);
 
     //Embedding lookup: ids (T,1,1,B) float-as-int, W (D,1,1,V) -> Y (D,T,1,B)
     //前向为查表 (gather), 反向为 scatter-add 到 W.d()
@@ -205,7 +214,6 @@ public:
     static void matrix_maxb(Matrix& X1, Matrix& X2, const Matrix& Y, float a1, float a2, float r);
 
     static void zero_limit(const Matrix& A, const Matrix& B, Matrix& R, float beta_a, float beta_b);
-
 };
 
 }    // namespace cccc

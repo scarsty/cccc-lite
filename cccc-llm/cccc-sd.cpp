@@ -1,11 +1,11 @@
-// cccc-sd.cpp  — z-image-turbo text-to-image pipeline using cccc framework
+﻿// cccc-sd.cpp  — z-image-turbo text-to-image pipeline using cccc framework
 // First-pass implementation: simplified (no adaLN) to confirm pipeline structure.
 // Models: text_encoder(35-layer), cap_embedder, t_embedder, x_embedder,
 //         context_refiner(2-block), noise_refiner(2-block), unified(30-block),
 //         final_layer, vae.
 
-#define CCCC_SD_BUILDING
-#include "cccc-sd.h"
+#define CCCC_LLM_BUILDING
+#include "cccc-llm.h"
 #include "GpuControl.h"
 #include "Log.h"
 #include "MainProcess.h"
@@ -141,7 +141,7 @@ static bool run_model(MainProcess& mp, std::vector<float>& x, std::vector<float>
             std::vector<cccc::half> xh(x.size());
             for (size_t i = 0; i < x.size(); i++)
             {
-                xh[i] = static_cast<cccc::half>(x[i]);
+                xh[i] = (cccc::half)(x[i]);
             }
             mp.testExternalData(xh.data(), nullptr, yh.data(), 1, 0, nullptr);
         }
@@ -152,7 +152,7 @@ static bool run_model(MainProcess& mp, std::vector<float>& x, std::vector<float>
         }
         for (int64_t i = 0; i < n_out; i++)
         {
-            float fv = static_cast<float>(yh[i]);
+            float fv = (float)(yh[i]);
             // FP16 can legitimately saturate to ±inf; preserve sign direction
             y[i] = std::isfinite(fv) ? fv : std::copysign(65504.f, fv);
         }
@@ -185,13 +185,13 @@ static bool run_model(MainProcess& mp, std::vector<float>& x, std::vector<float>
             LOG("[run_model] BF16 raw yb[0:{}]:", show);
             for (int i = 0; i < show; i++)
             {
-                float fv = static_cast<float>(yb[i]);
+                float fv = (float)(yb[i]);
                 LOG(" {:.5g}", fv);
             }
             LOG("\n");
             for (int64_t i = 0; i < n_out; i++)
             {
-                float fv = static_cast<float>(yb[i]);
+                float fv = (float)(yb[i]);
                 if (std::isnan(fv))
                 {
                     n_nan++;
@@ -213,7 +213,7 @@ static bool run_model(MainProcess& mp, std::vector<float>& x, std::vector<float>
         }
         for (int64_t i = 0; i < n_out; i++)
         {
-            float fv = static_cast<float>(yb[i]);
+            float fv = (float)(yb[i]);
             // BF16 inf only occurs from div-by-zero or sqrt(negative); replace with 0
             y[i] = std::isfinite(fv) ? fv : 0.f;
         }
@@ -638,34 +638,6 @@ public:
                 .count();
         };
 
-        const bool dump_intermediates = false;
-
-        auto save_dbg = [&](int stage, const std::string& name, const float* data, size_t count)
-        {
-            if (!dump_intermediates)
-            {
-                return;
-            }
-            const std::string legacy = model_dir + "/dbg_" + name + ".bin";
-            std::ofstream f0(legacy, std::ios::binary);
-            if (f0)
-            {
-                f0.write(reinterpret_cast<const char*>(data), (std::streamsize)(count * sizeof(float)));
-            }
-
-            if (stage < 0)
-            {
-                return;
-            }
-
-            const std::string numbered = model_dir + "/dbg_" + std::to_string(stage) + "_" + name + ".bin";
-            std::ofstream f1(numbered, std::ios::binary);
-            if (f1)
-            {
-                f1.write(reinterpret_cast<const char*>(data), (std::streamsize)(count * sizeof(float)));
-            }
-        };
-
         int lH = height / 8, lW = width / 8, ph = lH / 2, pw = lW / 2, P = ph * pw;
         constexpr int DD = 3968;
 
@@ -699,21 +671,13 @@ public:
                 std::vector<float> ids_f(T);
                 for (int i = 0; i < T; i++)
                 {
-                    ids_f[i] = static_cast<float>(ids[i]);
+                    ids_f[i] = (float)(ids[i]);
                 }
                 run_model(m, ids_f, cap);
                 log_vram(m.getNet()->getGpu());
                 LOG("    cap range=[{:.4f},{:.4f}]  t={:.1f}s\n",
                     *std::min_element(cap.begin(), cap.end()),
                     *std::max_element(cap.begin(), cap.end()), elapsed());
-                if (dump_intermediates)
-                {
-                    // DBG: print first 10 elements
-                    LOG("    DBG cap[0:10]:");
-                    for (int i = 0; i < 10; i++) { LOG(" {:.5f}", cap[i]); }
-                    LOG("\n");
-                    save_dbg(2, "cap", cap.data(), cap.size());
-                }
             }
 
             // [3] Cap embedder
@@ -732,14 +696,6 @@ public:
                     return -3;
                 }
                 run_model(m, cap, cap_emb);
-            }
-            if (dump_intermediates)
-            {
-                // DBG cap_emb[0:10]
-                LOG("    DBG cap_emb[0:10]:");
-                for (int i = 0; i < 10; i++) { LOG(" {:.5f}", cap_emb[i]); }
-                LOG("\n");
-                save_dbg(3, "cap_emb", cap_emb.data(), cap_emb.size());
             }
 
             // [4] Context refiner
@@ -766,37 +722,12 @@ public:
                 }
                 run_model(m, ctx_in, cap_ref);
             }
-            if (dump_intermediates)
-            {
-                float mn = cap_ref[0], mx = cap_ref[0], sm = 0;
-                for (auto v : cap_ref)
-                {
-                    if (v < mn) { mn = v; }
-                    if (v > mx) { mx = v; }
-                    sm += v;
-                }
-                LOG("    DBG cap_ref: min={:.4f} max={:.4f} mean={:.5f}\n", mn, mx, sm / cap_ref.size());
-                LOG("    DBG cap_ref[0:10]:");
-                for (int i = 0; i < 10; i++) { LOG(" {:.5f}", cap_ref[i]); }
-                LOG("\n");
-                save_dbg(4, "cap_ref", cap_ref.data(), cap_ref.size());
-            }
         }
 
         // [5] T-embedder (all steps)
         LOG("[5] T-embedder...\n");
         Scheduler sched;
         sched.init(steps, 3.0f);
-        if (dump_intermediates)
-        {
-            // DBG: print sigma/timestep schedule
-            LOG("    DBG sigmas:");
-            for (int i = 0; i <= steps; i++) { LOG(" {:.4f}", sched.sigmas[i]); }
-            LOG("\n");
-            LOG("    DBG timesteps:");
-            for (int i = 0; i < steps; i++) { LOG(" {:.4f}", sched.timesteps[i]); }
-            LOG("\n");
-        }
         std::vector<std::vector<float>> t_embs(steps, std::vector<float>(256, 0.0f));
         {
             MainProcess m;
@@ -815,24 +746,6 @@ public:
                 std::vector<float> tin = { sched.t_val(i) };
                 run_model(m, tin, t_embs[i]);
             }
-            if (dump_intermediates)
-            {
-                // DBG: save t_emb[step=0]
-                save_dbg(5, "t_emb", t_embs[0].data(), t_embs[0].size());
-                for (int i = 0; i < steps; i++)
-                {
-                    float mn = t_embs[i][0], mx = t_embs[i][0], sm = 0;
-                    for (auto v : t_embs[i])
-                    {
-                        if (v < mn) { mn = v; }
-                        if (v > mx) { mx = v; }
-                        sm += v;
-                    }
-                    LOG("    DBG t_emb[s{}] t={:.1f}: min={:.5f} max={:.5f} mean={:.5f} [0:5]:", i, sched.t_val(i), mn, mx, sm / 256.0f);
-                    for (int j = 0; j < 5; j++) { LOG(" {:.5f}", t_embs[i][j]); }
-                    LOG("\n");
-                }
-            }
         }
 
         // Init latent & patches
@@ -848,13 +761,6 @@ public:
         }
         std::vector<float> x_px;
         patchify(lat_hwc, lH, lW, x_px);    // (P,64)
-        if (dump_intermediates)
-        {
-            LOG("    DBG x_px_initial[0:10]:");
-            for (int i = 0; i < 10; i++) { LOG(" {:.5f}", x_px[i]); }
-            LOG("\n");
-            save_dbg(6, "xpx", x_px.data(), x_px.size());
-        }
 
         LOG("Loading denoising model configs...\n");
         const std::string xemb_ini = require_ini_file(model_dir + "/net_xemb.ini", "x-embedder");
@@ -899,12 +805,6 @@ public:
         // Precompute image RoPE (text RoPE already computed at step [1])
         std::vector<float> cos_img, sin_img;
         gen_img_rope(P, T, pw, ph, cos_img, sin_img);
-        if (dump_intermediates)
-        {
-            LOG("    DBG cos_img[0:10]:");
-            for (int i = 0; i < 10; i++) { LOG(" {:.5f}", cos_img[i]); }
-            LOG("\n");
-        }
         // noise_in: DD*(P+1): [emb(3840)|cos(64)|sin(64)] per img token + t_emb slot
         // seq: DD*(SEQ+1): same layout; final_in: D*(SEQ+1)
         std::vector<float> noise_in((size_t)DD * (P + 1), 0.0f);
@@ -921,12 +821,6 @@ public:
             {
                 LOG_ERR("x_emb run failed at step {}\n", step);
                 return -7;
-            }
-
-            // step=0: save x_emb to bin
-            if (step == 0 && dump_intermediates)
-            {
-                save_dbg(6, "x_emb", x_emb.data(), x_emb.size());
             }
 
             // Pack noise_in as DD*(P+1): [emb|cos|sin] per token + t_emb slot
@@ -970,11 +864,6 @@ public:
                 return -7;
             }
 
-            if (step == 0 && dump_intermediates)
-            {
-                save_dbg(7, "uni_out", uni_out.data(), uni_out.size());
-            }
-
             // Build final_in: unified output (P+T tokens) + t_emb in last slot
             std::memcpy(final_in.data(), uni_out.data(), (size_t)3840 * (P + T) * 4);
             std::memset(final_in.data() + (size_t)3840 * (P + T), 0, (size_t)3840 * 4);    // zero pad
@@ -986,13 +875,7 @@ public:
                 LOG_ERR("final run failed at step {}\n", step);
                 return -7;
             }
-            // Save velocity for per-step comparison against ncnn.
-            save_dbg(8, "vel_s" + std::to_string(step), vel.data(), vel.size());
-            // Keep legacy step-0 name for existing scripts.
-            if (step == 0)
-            {
-                save_dbg(8, "vel", vel.data(), vel.size());
-            }
+            // Report per-step tensor statistics.
             {
                 auto stat = [](const std::vector<float>& v, const char* name, int step)
                 {
@@ -1005,36 +888,13 @@ public:
                     }
                     LOG("    s{} {}: min={:.4f} max={:.4f} mean={:.4f}\n", step, name, mn, mx, sm / v.size());
                 };
-                auto dump10 = [](const std::vector<float>& v, const char* name, int step)
-                {
-                    LOG("    s{} {}[0:10]:", step, name);
-                    for (int i = 0; i < 10 && i < (int)v.size(); i++) { LOG(" {:.5f}", v[i]); }
-                    LOG("\n");
-                };
-                if (step == 0 && dump_intermediates)
-                {
-                    stat(x_emb, "x_emb", step);
-                    dump10(x_emb, "x_emb", step);
-                    stat(x_ref, "x_ref", step);
-                    dump10(x_ref, "x_ref", step);
-                    save_dbg(6, "x_ref", x_ref.data(), x_ref.size());
-                    stat(t_embs[step], "t_emb", step);
-                    dump10(t_embs[step], "t_emb", step);
-                    stat(uni_out, "uni_out", step);
-                    dump10(uni_out, "uni_out", step);
-                }
                 stat(vel, "vel  ", step);
-                if (step == 0 && dump_intermediates)
-                {
-                    dump10(vel, "vel  ", step);
-                }
             }
             float dt = sched.dt(step);
             for (int i = 0; i < P * 64; i++)
             {
                 x_px[i] -= dt * vel[i];
             }
-            save_dbg(6, "xpx_s" + std::to_string(step + 1), x_px.data(), x_px.size());
             // print x_px stats every step
             {
                 float mn = x_px[0], mx = x_px[0], sm = 0;
@@ -1095,8 +955,6 @@ public:
             }
         }
 
-        save_dbg(-1, "lat_nchw", lat_nchw.data(), lat_nchw.size());
-
         std::vector<float> rgb((size_t)3 * height * width, 0.0f);
         {
             MainProcess m;
@@ -1111,7 +969,6 @@ public:
                 return -9;
             }
             run_model(m, lat_nchw, rgb);
-            save_dbg(-1, "rgb", rgb.data(), rgb.size());
             LOG("    VAE done t={:.1f}s rgb=[{:.3f},{:.3f}]\n", elapsed(),
                 *std::min_element(rgb.begin(), rgb.end()),
                 *std::max_element(rgb.begin(), rgb.end()));
@@ -1129,7 +986,7 @@ public:
 // ============================================================
 // C API
 // ============================================================
-CCCC_SD_API SdHandle sd_init(const std::string& model_dir)
+CCCC_LLM_API SdHandle sd_init(const std::string& model_dir)
 {
     auto* p = new ZImagePipeline();
     if (!p->init(model_dir))
@@ -1137,18 +994,18 @@ CCCC_SD_API SdHandle sd_init(const std::string& model_dir)
         delete p;
         return nullptr;
     }
-    return static_cast<SdHandle>(p);
+    return (SdHandle)(p);
 }
 
-CCCC_SD_API void sd_destroy(SdHandle handle)
+CCCC_LLM_API void sd_destroy(SdHandle handle)
 {
     if (handle)
     {
-        delete static_cast<ZImagePipeline*>(handle);
+        delete (ZImagePipeline*)(handle);
     }
 }
 
-CCCC_SD_API int sd_generate(SdHandle handle,
+CCCC_LLM_API int sd_generate(SdHandle handle,
     const std::string& prompt, const std::string& output_path,
     int steps, float /*guidance_scale*/,
     int width, int height, int seed,
@@ -1158,6 +1015,6 @@ CCCC_SD_API int sd_generate(SdHandle handle,
     {
         return -1;
     }
-    return static_cast<ZImagePipeline*>(handle)->generate(
+    return ((ZImagePipeline*)(handle))->generate(
         prompt, output_path, steps, width, height, seed, callback, userdata);
 }

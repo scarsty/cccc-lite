@@ -16,6 +16,7 @@
 #include "cuda_runtime_api.h"
 #define __CUDA_RUNTIME_H__
 #include "cublas_v2.h"
+#include "cublasLt.h"
 #include "cuda_functions.h"
 #include "cudnn.h"
 #endif
@@ -54,6 +55,9 @@ namespace cccc
 #define IMPORT(func, ...) \
     using func##_t = decltype(&func); \
     extern func##_t func;
+#define IMPORT_TYPED(func, type_expr, ...) \
+    using func##_t = type_expr; \
+    extern func##_t func;
 #define UNIMPORT_OR_BLANKTEMP(func)
 #if ENABLE_CUDA
 #include "cuda_libs.inc"
@@ -62,12 +66,14 @@ namespace cccc
 #include "hip_libs.inc"
 #endif
 #undef IMPORT
+#undef IMPORT_TYPED
 #undef UNIMPORT_OR_BLANKTEMP
 #endif
 
 #define IMPORT(func, ...) \
     template <typename... Args> \
     inline int func(Args&&... args) { return 0; }
+#define IMPORT_TYPED(func, type_expr, ...) IMPORT(func)
 #define UNIMPORT_OR_BLANKTEMP(func) IMPORT(func)
 #if !ENABLE_CUDA
 #include "cuda_libs.inc"
@@ -76,6 +82,7 @@ namespace cccc
 #include "hip_libs.inc"
 #endif
 #undef IMPORT
+#undef IMPORT_TYPED
 #undef UNIMPORT_OR_BLANKTEMP
 
 };    //namespace cccc

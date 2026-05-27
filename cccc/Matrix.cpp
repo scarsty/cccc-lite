@@ -5,6 +5,7 @@
 #include "cblas_real.h"
 #include "gpu_lib.h"
 #include <cassert>
+#include <cstdio>
 
 namespace cccc
 {
@@ -291,7 +292,88 @@ int Matrix::resizeKeepNumber(const std::vector<int>& dim, bool reserve_data, boo
     return resize(dim1, reserve_data, force);
 }
 
-//输出矩阵内容
+void Matrix::toFp8E4m3() { quantizeWeights(DataType::FP8_E4M3); }
+void Matrix::toFp8E5m2() { quantizeWeights(DataType::FP8_E5M2); }
+void Matrix::toFp4() { quantizeWeights(DataType::FP4_E2M1); }
+
+// Unified BF16/HALF→quantized in-place conversion using a scoped MatrixData float buffer.
+// Peak VRAM: original BF16/HALF + float intermediate (source buffer freed *before* quantized buffer is written).
+void Matrix::quantizeWeights(DataType target_dt)
+{
+#if ENABLE_CUDA
+    if (!isCuda() || (getDataType() != DataType::BFLOAT16 && getDataType() != DataType::HALF)) { return; }
+    if (getWidth() < 64 || getHeight() < 64) { return; }
+    int64_t n = getDataSize();
+    if (n <= 0) { return; }
+    gpu()->setAsCurrent();
+
+    // Step 1: BF16/HALF → float into a scoped temporary buffer (freed when float_buf leaves scope)
+    DataType src_dt = getDataType();
+    MatrixData float_buf;
+    float_buf.setGpu(gpu());
+    float_buf.resize(n, DataType::FLOAT, false, false);
+
+    cuda_convert(data_, src_dt, float_buf.data_, DataType::FLOAT, (unsigned int)n, 1.0f);
+
+    if (target_dt == DataType::FP4_E2M1)
+    {
+        // Block-scale FP4: one FP8 E4M3 dequant-scale per group of fp4_block_size_ elements.
+        const unsigned int block_size = MatrixData::fp4_block_size_;
+        int64_t n_blocks = ((int64_t)n + block_size - 1) / block_size;
+        int64_t out_elems = (n + 1) / 2;  // packed nibbles
+
+        // Resize storage for FP4 nibbles (frees old BF16 buffer, allocates new target buffer)
+        shared_data_->resize(out_elems, target_dt, false, true);
+
+        // Allocate GPU buffer for block scales (FP8 E4M3 = uint8_t, 1 byte per scale)
+        void* d_scales = shared_data_->allocBlockScaleGpu(n_blocks);
+
+        // Quantize: float → FP4 nibbles + per-block FP8 E4M3 dequant scales
+        cuda_float_to_fp4_blockscale(float_buf.data_, shared_data_->data_, d_scales, (unsigned int)n, block_size);
+
+        // quant_scale_ = 1.0f (block-scale mode; kept for compatibility with save/load path)
+        shared_data_->quant_scale_ = 1.0f;
+    }
+    else
+    {
+        // FP8 (and other future types): per-tensor abs-max single scale
+        int max_idx = gpu()->cublas_->iamax((int)n, (float*)(float_buf.data_), 1);
+        float max_abs = 0.0f;
+        cudaMemcpy(&max_abs, (float*)(float_buf.data_) + max_idx, sizeof(float), cudaMemcpyDeviceToHost);
+        max_abs = std::abs(max_abs);
+        static const float kMaxVal[] = { 0.f, 0.f, 0.f, 0.f, 448.f, 57344.f, 6.f };    // indexed by DataType
+        float fwd_scale = (max_abs > 1e-10f) ? (kMaxVal[target_dt] / max_abs) : 1.0f;
+        shared_data_->quant_scale_ = (max_abs > 1e-10f) ? (max_abs / kMaxVal[target_dt]) : 1.0f;
+
+        int64_t out_elems = n;
+        shared_data_->resize(out_elems, target_dt, false, true);
+        cuda_convert(float_buf.data_, DataType::FLOAT, shared_data_->data_, target_dt, (unsigned int)n, fwd_scale);
+    }
+    // float_buf destructor releases the float workspace
+    data_ = shared_data_->data_;
+#endif
+}
+
+void Matrix::loadQuantizedDirect(const uint8_t* host_data, int64_t n, float scale, DataType fp8_dt)
+{
+#if ENABLE_CUDA
+    if (!isCuda()) { return; }
+    gpu()->setAsCurrent();
+    if (getDataType() != fp8_dt)
+    {
+        // Change storage from BF16/other to the target FP8 type in-place (halves VRAM).
+        // force=true ensures reallocation even if occupy_data_size_ already equals n.
+        shared_data_->resize(n, fp8_dt, false, true);
+    }
+    // Always upload FP8 bytes — needed both for first-load and for matrices pre-allocated
+    // as FP8 (W8A8 mode where data_type=fp8_e4m3).  Aliased views are filtered upstream
+    // in loadFp8Weights via getStorageKey() tracking and never reach this function twice.
+    cudaMemcpy(shared_data_->data_, host_data, (size_t)n, cudaMemcpyHostToDevice);
+    shared_data_->quant_scale_ = scale;
+    data_ = shared_data_->data_;
+#endif
+}
+
 //注意这个实际上是按照内存顺序
 void Matrix::print() const
 {
@@ -381,6 +463,15 @@ int64_t Matrix::copyDataPtr(const Matrix& A, const void* A_ptr, Matrix& R, void*
     if (size < 0)
     {
         size = std::min(A.getDataSize(), R.getDataSize());
+    }
+    if (A.getApiType() == API_CUDA && R.getApiType() == API_CUDA)
+    {
+        int64_t byte_size = size * A.getDataTypeSize();
+        if (byte_size >= 100LL * 1024 * 1024)
+        {
+            LOG("Large D2D copyDataPtr: A.dim={} dt={} R.dim={} dt={} size_elem={} size_byte={:g} MB\n",
+                A.dim_, int(A.getDataType()), R.dim_, int(R.getDataType()), size, byte_size / 1024.0 / 1024.0);
+        }
     }
     return MatrixData::copy(A.getApiType(), A_ptr, R.getApiType(), R_ptr, size, A.getDataType());
 }
@@ -515,14 +606,14 @@ Matrix& Matrix::fillData(float v, float inc /*=0*/)
             // float 1.0f (0x3F800000, LE: 00 00 80 3F) gives BF16 0x0000=0.0, not 1.0.
             // Instead build a CPU BF16 buffer and hipMemcpy.
             bfloat16 bf16_v(v);
-            std::vector<bfloat16> cpu_buf(static_cast<size_t>(data_size_), bf16_v);
-            hipMemcpy(data(), cpu_buf.data(), static_cast<size_t>(data_size_) * sizeof(bfloat16), hipMemcpyHostToDevice);
+            std::vector<bfloat16> cpu_buf((size_t)(data_size_), bf16_v);
+            hipMemcpy(data(), cpu_buf.data(), (size_t)(data_size_) * sizeof(bfloat16), hipMemcpyHostToDevice);
         }
         else if (getDataType() == DataType::HALF)
         {
             half half_v(v);
-            std::vector<half> cpu_buf(static_cast<size_t>(data_size_), half_v);
-            hipMemcpy(data(), cpu_buf.data(), static_cast<size_t>(data_size_) * sizeof(half), hipMemcpyHostToDevice);
+            std::vector<half> cpu_buf((size_t)(data_size_), half_v);
+            hipMemcpy(data(), cpu_buf.data(), (size_t)(data_size_) * sizeof(half), hipMemcpyHostToDevice);
         }
     }
     else
@@ -1027,21 +1118,22 @@ void Matrix::mul(const Matrix& A, const Matrix& B, Matrix& R, float a, float r, 
     }
     if (R.isCuda())
     {
-        switch (R.getDataType())
-        {
-        case DataType::FLOAT:
-            R.gpu()->cublas_->gemm(ta, tb, m, n, k, a, A.dataf(), lda, B.dataf(), ldb, r, R.dataf(), m);
-            break;
-        case DataType::DOUBLE:
-            R.gpu()->cublas_->gemm(ta, tb, m, n, k, a, A.datad(), lda, B.datad(), ldb, r, R.datad(), m);
-            break;
-        case DataType::HALF:
-            R.gpu()->cublas_->gemm(ta, tb, m, n, k, (half)a, A.datah(), lda, B.datah(), ldb, (half)r, R.datah(), m);
-            break;
-        case DataType::BFLOAT16:
-            R.gpu()->cublas_->gemm(ta, tb, m, n, k, bfloat16(a), A.databf(), lda, B.databf(), ldb, bfloat16(r), R.databf(), m);
-            break;
-        }
+        // 静态 W8A8 激活量化 scale：取自 FP8 权重的 input_scale_（HF calibrated）
+        float act_scale = 0.0f;
+        if (Cublas::isQuantized(B.getDataType()) && !Cublas::isQuantized(A.getDataType()))
+            act_scale = B.getInputScale();
+        else if (Cublas::isQuantized(A.getDataType()) && !Cublas::isQuantized(B.getDataType()))
+            act_scale = A.getInputScale();
+        // Block-scale FP4: pass block scale GPU pointers (no per-batch offset — non-batched mul)
+        const uint8_t* blk_scA = (A.getDataType() == DataType::FP4_E2M1) ? (const uint8_t*)A.getBlockScaleData() : nullptr;
+        const uint8_t* blk_scB = (B.getDataType() == DataType::FP4_E2M1) ? (const uint8_t*)B.getBlockScaleData() : nullptr;
+        R.gpu()->cublas_->gemm(ta, tb, m, n, k, a,
+            A.data(), A.getDataType(), lda, A.getQuantScale(),
+            B.data(), B.getDataType(), ldb, B.getQuantScale(),
+            r, R.data(), R.getDataType(), m, act_scale, blk_scA, blk_scB);
+        // W8A8：FP8 输出矩阵的 quant_scale_ 由动态量化算出，需从 Cublas 回传到 Matrix
+        if (R.getDataType() == DataType::FP8_E4M3)
+            R.setQuantScale(R.gpu()->cublas_->getLastFp8OutScale());
     }
     else if (R.isHip())
     {
@@ -1083,33 +1175,59 @@ void Matrix::mulBatched(const Matrix& A, const Matrix& B, Matrix& R,
     long long strideC = (long long)M * N;
     if (R.isCuda())
     {
-        switch (R.getDataType())
+        if (Cublas::isQuantized(A.getDataType()) || Cublas::isQuantized(B.getDataType()))
         {
-        case DataType::FLOAT:
-            R.gpu()->cublas_->gemmStridedBatched(ta, tb, M, N, K, a,
-                A.dataf(), lda, strideA, B.dataf(), ldb, strideB,
-                r, R.dataf(), ldc, strideC, batch);
-            break;
-        case DataType::HALF:
-            R.gpu()->cublas_->gemmStridedBatched(ta, tb, M, N, K, (half)a,
-                A.datah(), lda, strideA, B.datah(), ldb, strideB,
-                (half)r, R.datah(), ldc, strideC, batch);
-            break;
-        case DataType::BFLOAT16:
-            R.gpu()->cublas_->gemmStridedBatched(ta, tb, M, N, K, bfloat16(a),
-                A.databf(), lda, strideA, B.databf(), ldb, strideB,
-                bfloat16(r), R.databf(), ldc, strideC, batch);
-            break;
-        default:
-            //其他精度暂未支持, 退化为逐 batch 调用 gemm
+            // 量化类型没有 strided-batched API，逐 batch slice 调用 gemm
             for (int b = 0; b < batch; b++)
             {
+                long long byteStrideA = (A.getDataType() == DataType::FP4_E2M1) ? strideA / 2 : strideA * (long long)Cublas::elemBytes(A.getDataType());
+                long long byteStrideB = (B.getDataType() == DataType::FP4_E2M1) ? strideB / 2 : strideB * (long long)Cublas::elemBytes(B.getDataType());
+                long long byteStrideC = strideC * (long long)Cublas::elemBytes(R.getDataType());
+                // 静态 W8A8 激活量化 scale：取自 FP8 权重的 input_scale_
+                float act_scale = 0.0f;
+                if (Cublas::isQuantized(B.getDataType()) && !Cublas::isQuantized(A.getDataType()))
+                    act_scale = B.getInputScale();
+                else if (Cublas::isQuantized(A.getDataType()) && !Cublas::isQuantized(B.getDataType()))
+                    act_scale = A.getInputScale();
+                // Block-scale FP4: compute per-batch offset into the scale array
+                const uint8_t* blk_scA = nullptr;
+                if (A.getDataType() == DataType::FP4_E2M1 && A.getBlockScaleData())
+                    blk_scA = (const uint8_t*)A.getBlockScaleData() + (long long)b * strideA / (long long)Matrix::fp4BlockSize();
+                const uint8_t* blk_scB = nullptr;
+                if (B.getDataType() == DataType::FP4_E2M1 && B.getBlockScaleData())
+                    blk_scB = (const uint8_t*)B.getBlockScaleData() + (long long)b * strideB / (long long)Matrix::fp4BlockSize();
                 R.gpu()->cublas_->gemm(ta, tb, M, N, K, a,
-                    A.dataf() + b * strideA, lda,
-                    B.dataf() + b * strideB, ldb,
-                    r, R.dataf() + b * strideC, ldc);
+                    (const char*)A.data() + b * byteStrideA, A.getDataType(), lda, A.getQuantScale(),
+                    (const char*)B.data() + b * byteStrideB, B.getDataType(), ldb, B.getQuantScale(),
+                    r, (char*)R.data() + b * byteStrideC, R.getDataType(), ldc, act_scale, blk_scA, blk_scB);
             }
-            break;
+            // W8A8：FP8 输出矩阵的 quant_scale_ 由动态量化算出，需从 Cublas 回传到 Matrix
+            // 注：多 batch 时使用最后一个 batch 的 scale（对同一张量各 batch 量纲相近时近似正确）
+            if (R.getDataType() == DataType::FP8_E4M3)
+                R.setQuantScale(R.gpu()->cublas_->getLastFp8OutScale());
+        }
+        else
+        {
+            switch (R.getDataType())
+            {
+            case DataType::FLOAT:
+                R.gpu()->cublas_->gemmStridedBatched(ta, tb, M, N, K, a,
+                    A.dataf(), lda, strideA, B.dataf(), ldb, strideB,
+                    r, R.dataf(), ldc, strideC, batch);
+                break;
+            case DataType::HALF:
+                R.gpu()->cublas_->gemmStridedBatched(ta, tb, M, N, K, (half)a,
+                    A.datah(), lda, strideA, B.datah(), ldb, strideB,
+                    (half)r, R.datah(), ldc, strideC, batch);
+                break;
+            case DataType::BFLOAT16:
+                R.gpu()->cublas_->gemmStridedBatched(ta, tb, M, N, K, bfloat16(a),
+                    A.databf(), lda, strideA, B.databf(), ldb, strideB,
+                    bfloat16(r), R.databf(), ldc, strideC, batch);
+                break;
+            default:
+                break;
+            }
         }
     }
     else if (R.isHip())
@@ -1244,6 +1362,15 @@ void Matrix::elementMul(const Matrix& A, const Matrix& B, Matrix& R, float a, fl
     assert(checkMatrixDevice({ &A, &B, &R }));
     if (R.isCuda())
     {
+#if ENABLE_CUDA
+        // cuDNN OpTensor treats FP8 as float (4× OOB); use native CUDA kernel
+        if (R.getDataType() == DataType::FP8_E4M3 || R.getDataType() == DataType::FP8_E5M2)
+        {
+            if (cuda_elementmul_fp8e4m3)
+                cuda_elementmul_fp8e4m3(A.data(), B.data(), R.data(), (unsigned int)R.getDataSize(), a, r);
+            return;
+        }
+#endif
         int op_desc[64] = { 0 };
         cudnnSetOpTensorDescriptor((cudnnOpTensorDescriptor_t)op_desc, CUDNN_OP_TENSOR_MUL, CUDNN_DATA_FLOAT, CUDNN_NOT_PROPAGATE_NAN);
         //好像B不能与R相同
@@ -1307,6 +1434,14 @@ void Matrix::add(const Matrix& A, const Matrix& B, Matrix& R, float a, float b, 
     //注意只使用R的tensor_desc
     if (R.isCuda())
     {
+#if ENABLE_CUDA
+        // cuDNN AddTensor/OpTensor 不支持 FP8，直接走 CUDA kernel
+        if (R.getDataType() == DataType::FP8_E4M3 || R.getDataType() == DataType::FP8_E5M2)
+        {
+            cuda_add_fp8e4m3(Ap->data(), Bp->data(), R.data(), (unsigned int)R.getDataSize(), a, b, r);
+            return;
+        }
+#endif
         if (Ap->data() == R.data())
         {
             r = r + a;
@@ -1744,18 +1879,6 @@ void Matrix::message(const std::string& info) const
     LOG(" Dtype({}),", int(getDataType()));
     LOG(" Dim{}({})\n", dim_, getDataSize());
     LOG("  L1 = {}, L2 = {}\n", sumAbs() / getDataSize(), dotSelf() / getDataSize());
-    return;
-    cudnnDataType_t t;
-    int n;
-    int d1[8];
-    int s1[8];
-    cudnnGetTensorNdDescriptor(cudnn_desc(), 8, &t, &n, d1, s1);
-    LOG(" cudnn desc: {} {}\n", int(t), n);
-    for (int i = 0; i < 8; i++)
-    {
-        LOG(" {} {}\n", d1[i], s1[i]);
-    }
-    //cudnnSetTensorNdDescriptor(tensor_desc_, t, n, d1, s1);
 }
 
 std::string Matrix::sizeMessage(int include_batch) const

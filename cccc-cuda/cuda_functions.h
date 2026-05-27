@@ -8,10 +8,6 @@
 #endif
 #endif
 
-C_EXPORT int cuda_half2float(void* p1, void* p2, unsigned int size);
-C_EXPORT int cuda_bf162float(void* p1, void* p2, unsigned int size);
-C_EXPORT int cuda_float2bf16(void* p1, void* p2, unsigned int size);
-
 C_EXPORT int cuda_reciprocal(int type, void* A, void* B, unsigned int size, float scale, float epsilon);
 C_EXPORT int cuda_addnumber(int type, void* A, void* R, unsigned int size, float number, float scale);
 C_EXPORT int cuda_pow(int type, void* A, void* R, unsigned int size, float e, float bias);
@@ -56,8 +52,8 @@ C_EXPORT int cuda_layer_norm_bwd(int type, void* X, void* dY, void* dX,
 //RMS Normalization (按 inner 维度做归一化, 不减均值, 无 bias)
 //y_i = x_i / sqrt(mean(x^2)+eps) * scale_i
 //forward 输出 invstd 给反向使用
-C_EXPORT int cuda_rms_norm_fwd(int type, void* X, void* Y, void* scale,
-    void* invstd_out, unsigned int outer, unsigned int inner, float epsilon);
+C_EXPORT int cuda_rms_norm_fwd(int type, void* X, void* Y, void* scale, int scale_type,
+    void* invstd_out, unsigned int outer, unsigned int inner, float epsilon, float inv_scale_x = 1.0f);
 C_EXPORT int cuda_rms_norm_bwd(int type, void* X, void* dY, void* dX,
     void* scale, void* invstd, void* dscale,
     unsigned int outer, unsigned int inner);
@@ -99,7 +95,7 @@ C_EXPORT int cuda_pixel_shuffle_bwd(int type, const void* dY, void* dX,
 //forward:  Y[d + t*D + b*D*T] = W[d + (int)ids[t + b*T] * D]
 //backward: atomicAdd(&dW[d + (int)ids[t+b*T]*D], dY[d + t*D + b*D*T])
 C_EXPORT int cuda_embed_fwd(int type, const void* ids, const void* W, void* Y,
-    int D, int T, int B);
+    int D, int T, int B, float inv_scale);
 C_EXPORT int cuda_embed_bwd(int type, const void* ids, const void* dY, void* dW,
     int D, int T, int B);
 
@@ -173,3 +169,65 @@ C_EXPORT int cuda_upsample_bilinear_bwd(int type,
     unsigned int W_in, unsigned int H_in,
     unsigned int W_out, unsigned int H_out,
     unsigned int C, unsigned int N, float alpha);
+
+// ─── FP8 / FP4 量化转换 ────────────────────────────────────────────────────────
+// scale   : 量化时乘以 scale（即 src_float * scale → fp8/fp4）
+// inv_scale: 反量化时乘以 inv_scale（即 fp8/fp4_float * inv_scale → float）
+// 传 scale=1.0 / inv_scale=1.0 即为无缩放版本（absmax 归一化时由调用方计算 scale）
+
+//BF16 → FP8 E4M3 dynamic: finds abs-max, writes inv_scale=abs_max/448 to d_inv_scale_out (device ptr), quantizes
+C_EXPORT int cuda_bf16_to_fp8e4m3_dynamic(const void* src, void* dst_fp8, unsigned int n, void* d_absmax_tmp, void* d_inv_scale_out);
+//FP8 E4M3 elementwise: R[i] = a*A[i] + b*B[i] + r*R[i] (compute in float)
+C_EXPORT int cuda_add_fp8e4m3(const void* A, const void* B, void* R, unsigned int n, float a, float b, float r);
+// FP8 E4M3 bias add: caller pre-copies X -> R, then this applies R[i] = a * bias[idx] + b * R[i].
+// size_mc matches the existing HIP/CPU path: CNN bias uses Y.row_/Y.channel_, FC bias uses 1.
+C_EXPORT int cuda_addbias_fp8e4m3(const void* X, const void* bias, void* R,
+    unsigned int n, unsigned int size_mc, unsigned int size_b, float a, float b);
+// FP8 activation + BF16 bias: caller pre-copies X -> R, then applies R[i] = a * bias[idx] + b * R[i].
+C_EXPORT int cuda_addbias_fp8e4m3_bf16bias(const void* X, const void* bias, void* R,
+    unsigned int n, unsigned int size_mc, unsigned int size_b, float a, float b);
+//FP8 E4M3 SiLU: R[i] = x * sigmoid(x), x = A[i]  (cuDNN cannot handle FP8 → uses native CUDA kernel)
+C_EXPORT int cuda_silu_fp8e4m3(const void* A, void* R, unsigned int n);
+//FP8 E4M3 element-wise multiply: R[i] = a * A[i] * B[i] + r * R[i]  (cuDNN cannot handle FP8)
+C_EXPORT int cuda_elementmul_fp8e4m3(const void* A, const void* B, void* R, unsigned int n, float a, float r);
+//FP8 E4M3 embedding forward: byte-copy lookup (W and Y both FP8, no decode/encode)
+C_EXPORT int cuda_embed_fwd_fp8_to_fp8(const void* ids, const void* W, void* Y, int D, int T, int B, float inv_scale_w);
+// BF16 weight → FP8 E4M3 activation embedding: convert BF16 row → float → FP8 scale=1.0
+C_EXPORT int cuda_embed_fwd_bf16_to_fp8(const void* ids, const void* W, void* Y, int D, int T, int B);
+// Clear the CUDA last error state (wrapper so MSVC-compiled code avoids CUDA header compat issues)
+C_EXPORT void cuda_clear_last_error(void);
+// Sync device and report any pending CUDA error; returns 0 on success, 1 on error.
+C_EXPORT int cuda_check_error(const char* label);
+
+// GELU forward: gelu(x)=0.5*x*(1+tanh(sqrt(2/pi)*(x+0.044715*x^3)))
+// p1=X, p2=Y, a=scale, r=keepWeight; supports float/half/bfloat16
+C_EXPORT int cuda_gelu(int type, void* X, void* Y, unsigned int size, float a, float r);
+// GELU backward: dX = a*gelu'(X)*dY + r*dX
+// p1=X, p2=dX (out), p3=Y (unused), p4=dY
+C_EXPORT int cuda_gelub(int type, void* X, void* dX, void* Y, void* dY, unsigned int size, float a, float r);
+
+// ROI Align forward (float only): bilinear interpolation sampling from feature map.
+// feat: (W,H,C,B) WHCN; boxes: (4,N_boxes,1,B) WHCN [x1,y1,x2,y2 per-box];
+// out: (roi_size,roi_size,C,N_boxes*B) WHCN; aligned=True convention.
+C_EXPORT int cuda_roi_align_fwd(const void* feat, int W, int H, int C, int B,
+    const void* boxes, int N_boxes, void* out, int roi_size, float spatial_scale);
+// ROI Align backward: atomicAdd scatter-add into grad_feat (pre-zero if keepWeight=0).
+C_EXPORT int cuda_roi_align_bwd(const void* grad_out, int W, int H, int C, int B,
+    const void* boxes, int N_boxes, void* grad_feat, int roi_size, float spatial_scale);
+
+// Unified type conversion: src_type → dst_type, n elements.
+// scale is multiplied into the result during conversion:
+//   quantization (float/bf16 → fp8/fp4): scale = absmax_scale (larger = more precise encoding)
+//   dequantization (fp8/fp4 → float/bf16): scale = inv_scale (= 1/absmax_scale)
+//   same-precision changes (half↔float, bf16↔float): pass scale=1.0f
+// src_type / dst_type values match cccc::DataType enum (0=float,2=half,3=bf16,4=fp8e4m3,5=fp8e5m2,6=fp4)
+C_EXPORT int cuda_convert(const void* src, int src_type, void* dst, int dst_type, unsigned int n, float scale);
+
+// FP4 block-scale quantization (group_size = block_size, typically 16):
+//   cuda_float_to_fp4_blockscale: float → packed nibbles + float32 dequant scales
+//     dst_nibbles: ceil(n_elems/2) bytes; dst_scales: ceil(n_elems/block_size) float32
+//   cuda_fp4_blockscale_to_bf16: packed nibbles + float32 dequant scales → BF16
+C_EXPORT int cuda_float_to_fp4_blockscale(const void* src, void* dst_nibbles, void* dst_scales,
+    unsigned int n_elems, unsigned int block_size);
+C_EXPORT int cuda_fp4_blockscale_to_bf16(const void* src_nibbles, const void* src_scales,
+    void* dst, unsigned int n_elems, unsigned int block_size);

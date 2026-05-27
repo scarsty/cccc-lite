@@ -11,6 +11,7 @@ namespace cccc
 #define UNIMPORT_OR_BLANKTEMP(func)
 
 #define IMPORT(func, ...) func##_t func = nullptr;
+#define IMPORT_TYPED(func, type_expr, ...) IMPORT(func, __VA_ARGS__)
 #if ENABLE_CUDA
 #include "cuda_libs.inc"
 #endif
@@ -18,6 +19,7 @@ namespace cccc
 #include "hip_libs.inc"
 #endif
 #undef IMPORT
+#undef IMPORT_TYPED
 
 class gpu_assist_class_t
 {
@@ -51,6 +53,7 @@ public:
         if (func) { break; } \
     } \
     IMPORT_2(func)
+#define IMPORT_TYPED(func, type_expr, ...) IMPORT(func, __VA_ARGS__)
 #define IMPORT_2(func) \
     if (func) { func_c.push_back(#func); } \
     else { func_c_failed.push_back(#func); }
@@ -105,6 +108,7 @@ private:
         "cublas64_12",
         "cublas64_11",
         "cublas64_100",
+        "cublasLt64_13",
         "cudnn_graph64_9",
         "cudnn_adv64_9",
         "cudnn_cnn64_9",

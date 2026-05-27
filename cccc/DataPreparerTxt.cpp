@@ -21,7 +21,7 @@ std::vector<uint32_t> DataPreparerTxt::decodeUtf8(const std::string& s)
 {
     std::vector<uint32_t> result;
     result.reserve(s.size());
-    const uint8_t* p = reinterpret_cast<const uint8_t*>(s.data());
+    const uint8_t* p = (const uint8_t*)(s.data());
     const uint8_t* end = p + s.size();
     while (p < end)
     {

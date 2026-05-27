@@ -28,6 +28,7 @@ protected:
     int MP_count_ = 1;
     int net_group_count_ = 1;    //多组网络（不同结构，如prefill/decode）
     std::string train_filename_;
+    std::string ini_dir_;
     std::vector<GpuControl> gpus_;    //需要在网络后面析构，即GpuControl必须在所有矩阵析构之后析构
     // nets_[group][mp_parallel_copy]
     // group 0: 主网络（训练/prefill）；group 1+: 副网络（decode等）
@@ -41,6 +42,7 @@ public:
 
     Option* getOption() { return &option_; }
     void setTrainFilename(const std::string& filename) { train_filename_ = filename; }    //训练集文件名，主要用于保存权重时的命名
+    void setIniDir(const std::string& dir) { ini_dir_ = dir; }
 
 protected:
     //epoch和iter的统计

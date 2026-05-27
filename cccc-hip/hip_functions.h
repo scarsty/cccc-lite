@@ -66,6 +66,7 @@ C_EXPORT int hip_poolb(float* x, float* dx, float* y, float* dy, unsigned int w0
 C_EXPORT int hip_conv2d(float* x, float* w, float* y, int w0, int h0, int c0, int n, int w1, int h1, int c1, int winw, int winh, int stride, int padding, float a1, float a2);
 C_EXPORT int hip_conv2db_d(float* dx, float* w, float* dy, int w0, int h0, int c0, int n, int w1, int h1, int c1, int winw, int winh, int stride, int padding, float a1, float a2);
 C_EXPORT int hip_conv2db_w(float* x, float* dw, float* dy, int w0, int h0, int c0, int n, int w1, int h1, int c1, int winw, int winh, int stride, int padding, float a1, float a2);
+C_EXPORT int hip_im2col(const float* x, float* col, int W0, int H0, int C0, int N, int W1, int H1, int KW, int KH, int stride, int padding);
 
 //Layer Normalization
 C_EXPORT int hip_layer_norm_fwd(int type, void* X, void* Y, void* scale, void* bias,
@@ -174,3 +175,8 @@ C_EXPORT int hip_upsample_bilinear_bwd(int type,
     unsigned int W_in, unsigned int H_in,
     unsigned int W_out, unsigned int H_out,
     unsigned int C, unsigned int N, float alpha);
+
+// Unified type conversion (HIP supports half/bf16/float only; no FP8/FP4)
+// src_type/dst_type: 0=float, 2=half, 3=bfloat16  (cccc::DataType enum values)
+C_EXPORT int hip_convert(const void* src, int src_type, void* dst, int dst_type, unsigned int n, float scale);
+

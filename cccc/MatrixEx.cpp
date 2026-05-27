@@ -1,5 +1,6 @@
 ﻿#include "MatrixEx.h"
 #include "Log.h"
+#include "MatrixData.h"
 #include "Random.h"
 #include "Timer.h"
 #include "VectorMath.h"
@@ -53,6 +54,24 @@ void MatrixEx::addBias(const Matrix& X, const Matrix& bias, Matrix& Y, float a /
     }
     if (X.isCuda())
     {
+#if ENABLE_CUDA
+        if (X.getDataType() == DataType::FP8_E4M3 || X.getDataType() == DataType::FP8_E5M2)
+        {
+            bool is_cnn_bias = ((unsigned int)bias.channel_ == bias.getDataSize());
+            unsigned int size_mc = is_cnn_bias ? (Y.row_ / Y.channel_) : 1u;
+            unsigned int size_b = bias.getDataSize();
+            if (bias.getDataType() == DataType::BFLOAT16)
+            {
+                cuda_addbias_fp8e4m3_bf16bias(X.data(), bias.data(), Y.data(), (unsigned int)X.getDataSize(), size_mc, size_b, a, b);
+            }
+            else
+            {
+                cuda_addbias_fp8e4m3(X.data(), bias.data(), Y.data(), (unsigned int)X.getDataSize(), size_mc, size_b, a, b);
+            }
+            Y.setQuantScale(1.0f);
+            return;
+        }
+#endif
         auto gpu = X.gpu();
         if (bias.getDimSize() <= 5)
         {
@@ -723,6 +742,17 @@ void MatrixEx::activeForward(const Matrix& X, Matrix& Y, ActiveFunctionType af,
         MatrixEx::leaky_relu(X, Y, real_vector[0]);
         break;
     case ACTIVE_FUNCTION_SILU:
+#if ENABLE_CUDA
+        // cuDNN ops treat FP8 as float (4× OOB); use native CUDA SiLU kernel
+        if (X.isCuda() && (X.getDataType() == DataType::FP8_E4M3 || X.getDataType() == DataType::FP8_E5M2))
+        {
+            if (cuda_silu_fp8e4m3)
+            {
+                cuda_silu_fp8e4m3(X.data(), Y.data(), (unsigned int)X.getDataSize());
+            }
+            break;
+        }
+#endif
         if (matrix_vector.empty() || matrix_vector[0].getDim() != X.getDim())
         {
             matrix_vector.resize(1);
@@ -730,6 +760,24 @@ void MatrixEx::activeForward(const Matrix& X, Matrix& Y, ActiveFunctionType af,
         }
         MatrixEx::activeForward(X, matrix_vector[0], ACTIVE_FUNCTION_SIGMOID, int_vector, real_vector, a, r);
         Matrix::elementMul(X, matrix_vector[0], Y);
+        break;
+    case ACTIVE_FUNCTION_GELU:
+        if (X.isCuda())
+        {
+            cuda_gelu(X.getDataTypeByInt(), X.data(), Y.data(), (unsigned int)X.getDataSize(), a, r);
+        }
+        else
+        {
+            // CPU precise GELU using erf: gelu(x) = 0.5*x*(1+erf(x/sqrt(2)))
+            int n = (int)X.getDataSize();
+            auto* xi = (const float*)X.data();
+            auto* yi = (float*)Y.data();
+            for (int i = 0; i < n; i++)
+            {
+                float v = xi[i];
+                yi[i] = 0.5f * v * (1.0f + erff(v * 0.70710678f));
+            }
+        }
         break;
     default:
         LOG_ERR("ACTIVE forward not right {}!\n", int(af));
@@ -1047,6 +1095,31 @@ void MatrixEx::activeBackward(Matrix& X, const Matrix& Y, ActiveFunctionType af,
         Matrix::elementMul(matrix_vector[0], Y, matrix_vector[0], -1, 1);
         Matrix::add(Y, matrix_vector[0], matrix_vector[0]);
         Matrix::elementMul(matrix_vector[0], Y.d(), X.d());
+        break;
+    case ACTIVE_FUNCTION_GELU:
+        if (X.isCuda())
+        {
+            cuda_gelub(X.getDataTypeByInt(), X.data(), X.d().data(), Y.data(), Y.d().data(),
+                (unsigned int)X.getDataSize(), a, X.keepWeight());
+        }
+        else
+        {
+            // CPU: dX = a * gelu'(x) * dY + keepWeight * dX
+            int n = (int)X.getDataSize();
+            const auto* xi = (const float*)X.data();
+            const auto* dyi = (const float*)Y.d().data();
+            auto* dxi = (float*)X.d().data();
+            float kw = X.keepWeight();
+            for (int i = 0; i < n; i++)
+            {
+                float v = xi[i];
+                float z = 0.7978845608f * (v + 0.044715f * v * v * v);
+                float t = tanhf(z);
+                float sech2 = 1.0f - t * t;
+                float grad = 0.5f * (1.0f + t) + 0.5f * v * sech2 * 0.7978845608f * (1.0f + 3.0f * 0.044715f * v * v);
+                dxi[i] = a * grad * dyi[i] + kw * dxi[i];
+            }
+        }
         break;
     case ACTIVE_FUNCTION_SIGMOID3:
         if (X.isCuda())
@@ -2708,8 +2781,9 @@ void MatrixEx::rmsNormForward(const Matrix& X, Matrix& Y, Matrix& scale, float e
     auto& ws = Y.workspace_;
     if (X.isCuda())
     {
-        cuda_rms_norm_fwd(X.getDataTypeByInt(), X.data(), Y.data(), scale.data(),
-            ws[0].data(), outer, inner, epsilon);
+        cuda_rms_norm_fwd(X.getDataTypeByInt(), X.data(), Y.data(), scale.data(), scale.getDataTypeByInt(),
+            ws[0].data(), outer, inner, epsilon,
+            (X.getDataType() == DataType::FP8_E4M3 || X.getDataType() == DataType::FP8_E5M2) ? X.getQuantScale() : 1.0f);
     }
     else if (X.isHip())
     {
@@ -2776,6 +2850,13 @@ void MatrixEx::permute4dForward(const Matrix& X, Matrix& Y, const std::vector<in
     assert(checkMatrixDevice({ &X, &Y }));
     if (X.isCuda())
     {
+        if (!X.data() || !Y.data())
+        {
+            fprintf(stderr, "permute4dForward: NULL ptr X=%p Y=%p type=%d dim=(%d,%d,%d,%d)\n",
+                X.data(), Y.data(), X.getDataTypeByInt(),
+                X.getWidth(), X.getHeight(), X.getChannel(), X.getNumber());
+            return;
+        }
         cuda_permute4d(X.getDataTypeByInt(), X.data(), Y.data(),
             X.getWidth(), X.getHeight(), X.getChannel(), X.getNumber(),
             perm[0], perm[1], perm[2], perm[3]);
@@ -2922,7 +3003,20 @@ void MatrixEx::pixelShuffleBackward(Matrix& X, const Matrix& Y, int r)
 //Scaled Dot-Product Attention: Y = softmax_channel(K^T @ Q * scale) @ V
 //Q/K/V/Y: (D, T, 1, B); scale = 1/sqrt(dk)
 //workspace 布局: [0]=attn (T,T,1,B) 正向 softmax 输出(反向用), [1]=dAttn (T,T,1,B) 临时梯度, [2]=dScores (T,T,1,B) 临时梯度
-void MatrixEx::attentionForward(const Matrix& Q, const Matrix& K, const Matrix& V, Matrix& Y, float dk, int causal, int pos_offset /*= 0*/)
+void MatrixEx::attentionForward(const Matrix& Q, const Matrix& K, const Matrix& V, Matrix& Y,
+    float dk, int causal, int pos_offset /*= 0*/)
+{
+    attentionForwardImpl(Q, K, V, Y, nullptr, dk, causal, pos_offset);
+}
+
+void MatrixEx::attentionForward(const Matrix& Q, const Matrix& K, const Matrix& V, Matrix& Y,
+    const Matrix& bias, float dk, int causal, int pos_offset /*= 0*/)
+{
+    attentionForwardImpl(Q, K, V, Y, &bias, dk, causal, pos_offset);
+}
+
+void MatrixEx::attentionForwardImpl(const Matrix& Q, const Matrix& K, const Matrix& V,
+    Matrix& Y, const Matrix* bias, float dk, int causal, int pos_offset)
 {
     assert(checkMatrixDevice({ &Q, &K, &V, &Y }));
     int D = Q.getWidth(), T_q = Q.getHeight(), B = Q.getNumber();
@@ -2930,17 +3024,26 @@ void MatrixEx::attentionForward(const Matrix& Q, const Matrix& K, const Matrix& 
     float scale = 1.0f / std::sqrt(dk);
     auto dt = Q.getDataType();
     auto dev = Q.getDeviceType();
-    // Re-allocate workspace if T_q or T_k changed
+    // In FP8 mode, use BF16 for attention score workspace so cuDNN softmax works correctly.
+    // (cuDNN maps FP8 → FLOAT internally, causing 4× OOB access on FP8 score buffers.)
+    bool fp8_mode = (dt == DataType::FP8_E4M3 || dt == DataType::FP8_E5M2);
+    DataType ws_dt = fp8_mode ? DataType::BFLOAT16 : dt;
+    // Re-allocate workspace if T_q or T_k changed, or if FP8 mode needs extra Y_bf16 slot
     bool need_alloc = Y.workspace_.empty()
         || Y.workspace_[0].getWidth() != T_k
         || Y.workspace_[0].getHeight() != T_q
-        || Y.workspace_[0].getNumber() != B;
+        || Y.workspace_[0].getNumber() != B
+        || (fp8_mode && (int)Y.workspace_.size() < 4);
     if (need_alloc)
     {
-        Y.workspace_.resize(3);
-        Y.workspace_[0] = Matrix({ T_k, T_q, 1, B }, dt, dev);    // attn: softmax 输出
-        Y.workspace_[1] = Matrix({ T_k, T_q, 1, B }, dt, dev);    // dAttn: 反向临时缓冲
-        Y.workspace_[2] = Matrix({ T_k, T_q, 1, B }, dt, dev);    // dScores: 反向临时缓冲
+        Y.workspace_.resize(fp8_mode ? 4 : 3);
+        Y.workspace_[0] = Matrix({ T_k, T_q, 1, B }, ws_dt, dev);    // attn: softmax 输出 (BF16 in FP8 mode)
+        Y.workspace_[1] = Matrix({ T_k, T_q, 1, B }, ws_dt, dev);    // dAttn: 反向临时缓冲
+        Y.workspace_[2] = Matrix({ T_k, T_q, 1, B }, ws_dt, dev);    // dScores: 反向临时缓冲
+        if (fp8_mode)
+        {
+            Y.workspace_[3] = Matrix({ D, T_q, 1, B }, DataType::BFLOAT16, dev);    // BF16 output buffer before FP8 quant
+        }
     }
     auto& attn = Y.workspace_[0];
     // scores = K^T @ Q * (1/sqrt(dk)) → attn: shape (T_k, T_q, 1, B)
@@ -2950,6 +3053,11 @@ void MatrixEx::attentionForward(const Matrix& Q, const Matrix& K, const Matrix& 
     if (dt == DataType::HALF && attn.isCuda())
     {
         cuda_clamp_scores_half(attn.data(), (unsigned int)attn.getDataSize(), 60000.0f);
+    }
+    // optional additive bias (e.g. Box RPB): added to scores before softmax
+    if (bias != nullptr)
+    {
+        Matrix::add(attn, *bias, attn);
     }
     // 因果掩码: 屏蔽未来位置 k > q + pos_offset
     if (causal)
@@ -2982,10 +3090,84 @@ void MatrixEx::attentionForward(const Matrix& Q, const Matrix& K, const Matrix& 
     std::vector<float> rv;
     MatrixEx::activeForward(attn, attn, ACTIVE_FUNCTION_SOFTMAX_CHANNEL, iv, rv);
     // Y = V @ attn: V(D, T_k, 1, B) x attn(T_k, T_q, 1, B) = Y(D, T_q, 1, B)
-    Matrix::mulBatched(V, attn, Y);
+    if (fp8_mode && Y.isCuda())
+    {
+        // V(FP8) × attn(BF16) → Y_bf16 via W8A16 path, then quantize to FP8 with scale=1.0
+        auto& Y_bf16 = Y.workspace_[3];
+        Matrix::mulBatched(V, attn, Y_bf16);
+        cuda_convert(Y_bf16.data(), BFLOAT16, Y.data(), FP8_E4M3, (unsigned int)Y.getDataSize(), 1.0f);
+    }
+    else
+    {
+        Matrix::mulBatched(V, attn, Y);
+    }
 }
 
 void MatrixEx::attentionBackward(Matrix& Q, Matrix& K, Matrix& V, const Matrix& Y, float dk, int causal)
+{}
+
+// ============================================================
+// ROI Align forward
+// feat: (W,H,C,B) WHCN; boxes: (4,N,1,B) WHCN [x1,y1,x2,y2];
+// Y: (roi_size,roi_size,C,N*B)  aligned=True convention.
+// ============================================================
+void MatrixEx::roiAlignForward(const Matrix& feat, const Matrix& boxes, Matrix& Y,
+    int roi_size, float spatial_scale)
+{
+    int W = feat.getWidth(), H = feat.getHeight(), C = feat.getChannel(), B = feat.getNumber();
+    int N_boxes = boxes.getHeight();
+    Y.resize({ roi_size, roi_size, C, N_boxes * B });
+    if (feat.isCuda())
+    {
+        cuda_roi_align_fwd(feat.data(), W, H, C, B,
+            boxes.data(), N_boxes, Y.data(), roi_size, spatial_scale);
+    }
+    else
+    {
+        // CPU bilinear interpolation fallback
+        int total = roi_size * roi_size * C * N_boxes * B;
+        for (int idx = 0; idx < total; idx++)
+        {
+            int RSRSC = roi_size * roi_size * C;
+            int roi_idx = idx / RSRSC, rem = idx % RSRSC;
+            int c = rem / (roi_size * roi_size), sp = rem % (roi_size * roi_size);
+            int oy = sp / roi_size, ox = sp % roi_size;
+            int box_n = roi_idx % N_boxes, batch_b = roi_idx / N_boxes;
+            int box_off = box_n * 4 + batch_b * 4 * N_boxes;
+            float x1 = boxes.getData(box_off + 0) * spatial_scale;
+            float y1 = boxes.getData(box_off + 1) * spatial_scale;
+            float x2 = boxes.getData(box_off + 2) * spatial_scale;
+            float y2 = boxes.getData(box_off + 3) * spatial_scale;
+            float bin_w = (x2 - x1) / roi_size, bin_h = (y2 - y1) / roi_size;
+            float xs = x1 + (ox + 0.5f) * bin_w - 0.5f;
+            float ys = y1 + (oy + 0.5f) * bin_h - 0.5f;
+            if (xs < -1.f || xs > W || ys < -1.f || ys > H)
+            {
+                Y.setData(idx, 0.f);
+                continue;
+            }
+            xs = std::max(xs, 0.f);
+            ys = std::max(ys, 0.f);
+            int ix0 = (int)xs, ix1 = std::min(ix0 + 1, W - 1);
+            int iy0 = (int)ys, iy1 = std::min(iy0 + 1, H - 1);
+            ix0 = std::min(ix0, W - 1);
+            iy0 = std::min(iy0, H - 1);
+            float dx = xs - ix0, dy = ys - iy0;
+            int fb = c * W * H + batch_b * W * H * C;
+            float v = (1 - dx) * (1 - dy) * feat.getData(ix0 + iy0 * W + fb) + dx * (1 - dy) * feat.getData(ix1 + iy0 * W + fb)
+                + (1 - dx) * dy * feat.getData(ix0 + iy1 * W + fb) + dx * dy * feat.getData(ix1 + iy1 * W + fb);
+            Y.setData(idx, v);
+        }
+    }
+}
+
+// ============================================================
+// ROI Align backward
+// Scatter-add grad_out to feat.d() via bilinear weights.
+// grad_feat must be zeroed (or accumulated with keepWeight) before call.
+// ============================================================
+void MatrixEx::roiAlignBackward(const Matrix& feat, const Matrix& boxes, Matrix& Y,
+    int roi_size, float spatial_scale)
 {}
 
 // ============================================================
@@ -3000,7 +3182,42 @@ void MatrixEx::embedForward(const Matrix& ids, const Matrix& W, Matrix& Y)
     int B = ids.getNumber();
     if (ids.isCuda())
     {
-        cuda_embed_fwd(W.getDataTypeByInt(), ids.data(), W.data(), Y.data(), D, T, B);
+        // FP8 W + FP8 Y: byte-copy encoded FP8 rows from the weight cache and preserve W's
+        // quantization scale on Y. The first consumer is RMSNorm, which explicitly dequantizes
+        // by Y.quant_scale_ before re-encoding to scale=1.0, so embedding precision is retained.
+        if ((W.getDataType() == DataType::FP8_E4M3 || W.getDataType() == DataType::FP8_E5M2)
+            && (Y.getDataType() == DataType::FP8_E4M3 || Y.getDataType() == DataType::FP8_E5M2))
+        {
+            cuda_embed_fwd_fp8_to_fp8(ids.data(), W.data(), Y.data(), D, T, B, 1.0f);
+            Y.setQuantScale(W.getQuantScale());
+        }
+        // BF16 W + FP8 Y: 专用转换 kernel，避免 BF16(2字节) 写入 FP8(1字节) 缓冲区溢出
+        else if (W.getDataType() == DataType::BFLOAT16
+            && (Y.getDataType() == DataType::FP8_E4M3 || Y.getDataType() == DataType::FP8_E5M2))
+        {
+            if (Y.workspace_.size() < 3
+                || Y.workspace_[0].getDim() != Y.getDim()
+                || Y.workspace_[0].getDataType() != DataType::BFLOAT16)
+            {
+                Y.workspace_.resize(3);
+                Y.workspace_[0] = Matrix(Y.getDim(), DataType::BFLOAT16, Y.getDeviceType());
+                Y.workspace_[1] = Matrix({ 1 }, DataType::FLOAT, Y.getDeviceType());
+                Y.workspace_[2] = Matrix({ 1 }, DataType::FLOAT, Y.getDeviceType());
+            }
+            auto& y_bf16 = Y.workspace_[0];
+            auto& absmax_tmp = Y.workspace_[1];
+            auto& inv_scale_dev = Y.workspace_[2];
+            cuda_embed_fwd(W.getDataTypeByInt(), ids.data(), W.data(), y_bf16.data(), D, T, B, 1.0f);
+            cuda_bf16_to_fp8e4m3_dynamic(y_bf16.data(), Y.data(), (unsigned int)Y.getDataSize(), absmax_tmp.data(), inv_scale_dev.data());
+            float inv_scale = 1.0f;
+            cudaMemcpy(&inv_scale, inv_scale_dev.data(), sizeof(float), cudaMemcpyDeviceToHost);
+            Y.setQuantScale(inv_scale > 0.f ? inv_scale : 1.0f);
+        }
+        else
+        {
+            cuda_embed_fwd(W.getDataTypeByInt(), ids.data(), W.data(), Y.data(), D, T, B,
+                W.getQuantScale());
+        }
     }
     else if (ids.isHip())
     {

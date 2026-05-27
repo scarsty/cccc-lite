@@ -15,7 +15,12 @@
 namespace cccc
 {
 
-thread_local GpuControl* current_gpu_ = nullptr;    //当前使用的cuda设备
+thread_local GpuControl* current_gpu_ = nullptr;
+
+void GpuControl::setActDataType(DataType dt)
+{
+    if (cublas_) cublas_->setActDataType(dt);
+}    //当前使用的cuda设备
 
 //-1表示没有初始化，该值正常的值应为非负
 int GpuControl::device_count_ = -1;

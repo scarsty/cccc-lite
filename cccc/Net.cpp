@@ -217,6 +217,51 @@ void Net::updateWeight()
     }
 }
 
+// Returns the dtype suffix for "weight_<suffix>_<name>" / "weight_<suffix>_bin<N>" file keys.
+// All types including FP8_E4M3 now get an explicit suffix so every saved key carries its dtype.
+static std::string weightTypeSuffix(DataType dt)
+{
+    switch (dt)
+    {
+    case DataType::BFLOAT16: return "bf16";
+    case DataType::FLOAT: return "float";
+    case DataType::HALF: return "half";
+    case DataType::DOUBLE: return "double";
+    case DataType::FP8_E4M3: return "fp8_e4m3";
+    case DataType::FP8_E5M2: return "fp8_e5m2";
+    case DataType::FP4_E2M1: return "fp4_e2m1";
+    default: return "";
+    }
+}
+
+// All typed weight suffixes accepted on load (includes FP8 E4M3 and aliases like "bfloat16"/"bf16", "fp8").
+static const std::pair<std::string, DataType> kTypedWeightSuffixes[] = {
+    { "fp8_e4m3", DataType::FP8_E4M3 },
+    { "fp8e4m3", DataType::FP8_E4M3 },
+    { "fp8", DataType::FP8_E4M3 },
+    { "bf16", DataType::BFLOAT16 },
+    { "bfloat16", DataType::BFLOAT16 },
+    { "float", DataType::FLOAT },
+    { "half", DataType::HALF },
+    { "fp8_e5m2", DataType::FP8_E5M2 },
+    { "fp4_e2m1", DataType::FP4_E2M1 },
+};
+
+// Returns { key, dtype } for the first matching "weight_<dtype>_<name>" key in bin,
+// or { "", DataType::CURRENT } if none found.
+static std::pair<std::string, DataType> findTypedWeightKey(INIReaderBin& bin, const std::string& name)
+{
+    for (auto& [sfx, dt] : kTypedWeightSuffixes)
+    {
+        std::string key = "weight_" + sfx + "_" + name;
+        if (bin.has_value(key))
+        {
+            return { key, dt };
+        }
+    }
+    return { "", DataType::CURRENT };
+}
+
 //保存权重，需配合ini中的网络结构
 //返回值：0正常，其他值不正常
 int Net::saveWeight(const std::string& filename, const std::string& sign, int solver_state)
@@ -231,13 +276,16 @@ int Net::saveWeight(const std::string& filename, const std::string& sign, int so
 
     INIReaderBin file_bin;
     int index = 0;
-    //权重分开保存
+    //权重分开保存，键名携带类型标记："weight_<dtype>_bin<N>"
     for (auto& m : weights_)
     {
         LOG("Saving weight {} size={}\n", index, m->getDataSizeInByte());
         std::string buffer(m->getDataSizeInByte(), '\0');
         m->save(buffer.data(), m->getDataSize());
-        file_bin.set_value("weight_bin" + std::to_string(index++), buffer);
+        std::string suffix = weightTypeSuffix(m->getDataType());
+        std::string wkey = suffix.empty() ? ("weight_bin" + std::to_string(index)) : ("weight_" + suffix + "_bin" + std::to_string(index));
+        file_bin.set_value(wkey, buffer);
+        index++;
     }
     if (!weights_.empty())
     {
@@ -319,11 +367,22 @@ int Net::loadWeight(const std::string& str, int load_mode, int solver_state)
     LOG("Data type of save file is {}\n", option_->getStringFromEnum(data_type));
     LOG("Data type of net is {}\n", option_->getStringFromEnum(weights_[0]->getDataType()));
     if (file_bin.has_value("weight_bin0") || option_->getInt("train", "named_weights", 0) != 0
-        || !file_bin.get_value("named_weights").empty())
+        || !file_bin.get_value("named_weights").empty()
+        || [&]
+        {    // also detect new "weight_<dtype>_bin0" format
+            for (auto& [sfx, dt] : kTypedWeightSuffixes)
+            {
+                if (file_bin.has_value("weight_" + sfx + "_bin0"))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }())
     {
         //分开保存的情况
-        //named_weights=1 时：按权重名称 "weight_<name>" 匹配加载，顺序无关
-        //named_weights=0 或未设置时：按顺序用 weight_bin<index> 加载（默认行为）
+        //named_weights=1 时：按权重名称 "weight_<dtype>_<name>" 或 "weight_<name>" 匹配加载，顺序无关
+        //named_weights=0 或未设置时：按顺序用 weight_<dtype>_bin<N> 或 weight_bin<N> 加载（默认行为）
         bool named_load = option_->getInt("train", "named_weights", 0) != 0;
         //若 ini 未设置，也可由 bin 文件自身声明
         if (!named_load)
@@ -332,33 +391,46 @@ int Net::loadWeight(const std::string& str, int load_mode, int solver_state)
             named_load = !nw.empty() && nw[0] != '0' && nw[0] != '\0';
         }
 
-        auto load_one = [&](Matrix* m, const std::string& key) -> int
+        // load_one: src_dt overrides the file-header data_type when the key itself carries dtype info.
+        auto load_one = [&](Matrix* m, const std::string& key, DataType src_dt = DataType::CURRENT) -> int
         {
             auto weight_str = file_bin.get_value(key);
             if (weight_str.empty()) { return -1; }
-            if (data_type == m->getDataType())
+            DataType effective_dt = (src_dt != DataType::CURRENT) ? src_dt : data_type;
+            if (effective_dt == m->getDataType())
             {
                 m->load((char*)weight_str.data(), weight_str.size());
             }
             else
             {
                 Matrix m1(m->getDim(), m->getDataType(), UnitType::CPU);
-                size_t src_elem_size = MatrixData::getDataTypeSize(data_type);
+                size_t src_elem_size = MatrixData::getDataTypeSize(effective_dt);
                 for (int64_t i = 0; i < m->getDataSize(); i++)
                 {
-                    m1.setData(i, (char*)weight_str.data() + i * src_elem_size, data_type);
+                    m1.setData(i, (char*)weight_str.data() + i * src_elem_size, effective_dt);
                 }
                 Matrix::copyData(m1, *m);
             }
-            if (weight_str.size() / MatrixData::getDataTypeSize(data_type) != (size_t)m->getDataSize())
+            if (weight_str.size() / MatrixData::getDataTypeSize(effective_dt) != (size_t)m->getDataSize())
             {
                 ConsoleControl::setColor(CONSOLE_COLOR_RED);
-                LOG("Warning: weight '{}' needs {} floats, but {} supplied!\n", key, m->getDataSize(), weight_str.size() / MatrixData::getDataTypeSize(data_type));
+                LOG("Warning: weight '{}' needs {} floats, but {} supplied!\n", key, m->getDataSize(), weight_str.size() / MatrixData::getDataTypeSize(effective_dt));
                 ConsoleControl::resetColor();
                 return 1;
             }
             return 0;
         };
+
+        // Build KV cache buffer set: these are runtime buffers (second input to KV_CACHE ops).
+        // checkConnect() marks them as is_weight_=true, but they are NOT stored in the weight file.
+        std::unordered_set<Matrix*> kv_cache_bufs_load;
+        for (auto& op : op_queue_)
+        {
+            if (op.getType() == MatrixOpType::KV_CACHE && op.getMatrixIn().size() >= 2)
+            {
+                kv_cache_bufs_load.insert(op.getMatrixIn()[1].get());
+            }
+        }
 
         int index = 0;
         for (auto& m : weights_)
@@ -368,8 +440,17 @@ int Net::loadWeight(const std::string& str, int load_mode, int solver_state)
                 int r = -1;
                 if (named_load && !m->getWeightName().empty())
                 {
-                    r = load_one(m, "weight_" + m->getWeightName());
+                    // Try new typed key first (e.g., "weight_bf16_<name>"), then old format.
+                    auto [tkey, tdt] = findTypedWeightKey(file_bin, m->getWeightName());
+                    if (!tkey.empty())
+                    {
+                        r = load_one(m, tkey, tdt);
+                    }
                     if (r < 0)
+                    {
+                        r = load_one(m, "weight_" + m->getWeightName());
+                    }
+                    if (r < 0 && !kv_cache_bufs_load.count(m))
                     {
                         ConsoleControl::setColor(CONSOLE_COLOR_RED);
                         LOG("Warning: named weight '{}' not found, falling back to weight_bin{}\n", m->getWeightName(), index);
@@ -378,7 +459,22 @@ int Net::loadWeight(const std::string& str, int load_mode, int solver_state)
                 }
                 if (r < 0)
                 {
-                    r = load_one(m, "weight_bin" + std::to_string(index));
+                    // Try new typed indexed key, then old format.
+                    bool found_typed = false;
+                    for (auto& [sfx, dt] : kTypedWeightSuffixes)
+                    {
+                        std::string tkey = "weight_" + sfx + "_bin" + std::to_string(index);
+                        if (file_bin.has_value(tkey))
+                        {
+                            r = load_one(m, tkey, dt);
+                            found_typed = true;
+                            break;
+                        }
+                    }
+                    if (!found_typed)
+                    {
+                        r = load_one(m, "weight_bin" + std::to_string(index));
+                    }
                 }
                 if (r != 0) { ret = 1; }
             }
@@ -1041,6 +1137,461 @@ void Net::combineWeights(std::vector<Matrix*>& weights, Matrix& result)
             //LOG("combined parameter size = %lld\n", p);
         }
     }
+}
+
+void Net::quantizeWeights(DataType target_dt)
+{
+    // Collect storage keys of KV cache buffers (kvcache op's in_[1]) — these are
+    // runtime state buffers, not model parameters, and must NOT be quantized.
+    std::unordered_set<const void*> kvcache_storage_keys;
+    for (auto& op : op_queue_)
+    {
+        if (op.getType() == MatrixOpType::KV_CACHE && op.getMatrixIn().size() >= 2)
+        {
+            auto& cache_mat = op.getMatrixIn()[1];
+            if (cache_mat)
+            {
+                kvcache_storage_keys.insert(cache_mat->getStorageKey());
+            }
+        }
+    }
+    // Collect storage keys of EMBED weight matrices (in_[1] of EMBED ops) — these are
+    // accessed via integer gather, not GEMM, so FP8 bytes would be misread by the gather kernel.
+    std::unordered_set<const void*> embed_storage_keys;
+    for (auto& op : op_queue_)
+    {
+        if (op.getType() == MatrixOpType::EMBED && op.getMatrixIn().size() >= 2)
+        {
+            auto& embed_w = op.getMatrixIn()[1];
+            if (embed_w)
+            {
+                embed_storage_keys.insert(embed_w->getStorageKey());
+            }
+        }
+    }
+
+    // Group weights by shared storage.  Skip any group where at least one view has
+    // width < 64 or height < 64 (embedding tables, RMS-norm scales, tied lm_head, …),
+    // or where the storage belongs to a KV cache buffer or EMBED weight table.
+    std::unordered_map<const void*, std::vector<Matrix*>> by_storage;
+    for (auto w : weights_)
+    {
+        by_storage[w->getStorageKey()].push_back(w);
+    }
+    for (auto& [key, mats] : by_storage)
+    {
+        if (kvcache_storage_keys.count(key))
+        {
+            continue;    // KV cache buffer — skip quantization
+        }
+        if (embed_storage_keys.count(key))
+        {
+            continue;    // EMBED weight table — gather kernel reads raw dtype, can't be FP8
+        }
+        // Skip groups where ALL matrices are unnamed — these are non-linear-layer tensors
+        // (RoPE cos/sin tables, RMSNorm scales, etc.) used element-wise with BF16 kernels.
+        // Quantizing them to FP8 corrupts the element-wise ops because those kernels
+        // read the data pointer as BF16 regardless of data_type_.
+        bool any_named = std::any_of(mats.begin(), mats.end(), [](Matrix* m)
+            {
+                return !m->getWeightName().empty();
+            });
+        if (!any_named)
+        {
+            continue;    // positional embedding / norm scale — keep BF16
+        }
+        bool all_large = true;
+        for (auto* m : mats)
+        {
+            if (m->getWidth() < 64 || m->getHeight() < 64)
+            {
+                all_large = false;
+                break;
+            }
+        }
+        if (all_large)
+        {
+            if (target_dt == DataType::FP8_E5M2)
+            {
+                mats[0]->toFp8E5m2();
+            }
+            else if (target_dt == DataType::FP4_E2M1)
+            {
+                mats[0]->toFp4();
+            }
+            else
+            {
+                mats[0]->toFp8E4m3();    // default: FP8 E4M3
+            }
+            // Propagate the per-tensor scale to all Matrix views sharing the same storage.
+            for (size_t i = 1; i < mats.size(); i++)
+            {
+                mats[i]->setQuantScale(mats[0]->getQuantScale());
+            }
+        }
+    }
+}
+
+int Net::saveNamedWeights(const std::string& filename)
+{
+    setDeviceSelf();
+    if (filename.empty()) { return -1; }
+    filefunc::makePath(filefunc::getParentPath(filename));
+    LOG("Saving named weights to {}... ", filename);
+
+    INIReaderBin file_bin;
+    // 从权重列表确定主 data_type（供 MainProcess 路由决策）
+    // 优先取量化类型（FP8/FP4），确保有量化权重时文件头反映实际量化状态；
+    // 若无量化权重，回退到第一个命名权重的类型
+    {
+        DataType pdt = DataType::BFLOAT16;
+        bool found_quant = false;
+        for (auto& m : weights_)
+        {
+            if (m->getWeightName().empty()) { continue; }
+            auto dt = m->getDataType();
+            if (dt == DataType::FP8_E4M3 || dt == DataType::FP8_E5M2 || dt == DataType::FP4_E2M1)
+            {
+                pdt = dt;
+                found_quant = true;
+                break;
+            }
+        }
+        if (!found_quant)
+        {
+            for (auto& m : weights_)
+            {
+                if (!m->getWeightName().empty())
+                {
+                    pdt = m->getDataType();
+                    break;
+                }
+            }
+        }
+        file_bin.set_value("data_type", option_->getStringFromEnum(pdt));
+    }
+
+    // 保存所有命名权重，key 格式：weight_<dtype>_<name>
+    // 量化类型（FP8/FP4）同时保存逐张量反量化 scale（scale_<name>）
+    std::unordered_set<const void*> saved_keys;
+    for (auto& m : weights_)
+    {
+        if (m->getWeightName().empty()) { continue; }
+        const void* skey = m->getStorageKey();
+        if (!saved_keys.insert(skey).second) { continue; }    // 跳过共享存储的别名视图
+
+        // 保存原始字节，key 带 dtype 前缀（weight_<dtype>_<name>）
+        int64_t n_bytes = m->getDataSize() * (int64_t)(m->getDataTypeSize());
+        std::string raw_bytes(n_bytes, '\0');
+        MatrixData::copyByByte(m->getApiType(), m->getDataPtr(), API_UNKNOWN, raw_bytes.data(), (size_t)n_bytes);
+        std::string suffix = weightTypeSuffix(m->getDataType());
+        std::string key = suffix.empty() ? ("weight_" + m->getWeightName()) : ("weight_" + suffix + "_" + m->getWeightName());
+        file_bin.set_value(key, raw_bytes);
+        // 量化类型保存逐张量反量化 scale
+        float scale = m->getQuantScale();
+        if (scale != 1.0f)
+        {
+            file_bin.set_value("scale_" + m->getWeightName(),
+                std::string((const char*)(&scale), sizeof(float)));
+        }
+        // FP4 block-scale 数组（FP8 E4M3 编码，1字节/scale）
+        if (m->getBlockScaleData() && m->getBlockScaleCount() > 0)
+        {
+            std::string bs_raw((size_t)m->getBlockScaleCount(), '\0');
+            m->getBlockScaleToHost(bs_raw.data());
+            file_bin.set_value("blockscale_" + m->getWeightName(), bs_raw);
+        }
+    }
+
+    int written = file_bin.save(filename);
+    if (written > 0)
+    {
+        LOG("done ({} weights, {} MB)\n", (int)saved_keys.size(), written / (1024 * 1024));
+        return 0;
+    }
+    LOG("failed!\n");
+    return -1;
+}
+
+void Net::setActDataType(DataType dt)
+{
+    if (gpu_)
+    {
+        gpu_->setActDataType(dt);
+    }
+}
+
+int Net::loadNamedWeights(const std::string& filename)
+{
+    setDeviceSelf();
+    if (filename.empty()) { return -1; }
+    LOG("Loading weight cache from {}... ", filename);
+
+    INIReaderBin file_bin;
+    if (file_bin.parseFile(filename) != 0)
+    {
+        LOG("failed to open file!\n");
+        return -2;
+    }
+
+    // storage key → weight 列表，用于 tied weight（如 lm_head=embedding）的 alias 查找
+    std::unordered_map<const void*, std::vector<Matrix*>> storage_groups;
+    for (auto& w : weights_)
+    {
+        storage_groups[w->getStorageKey()].push_back(w);
+    }
+
+    // KV 运行时缓冲区不从文件加载：加载会替换 shared_data_，使 K/V_cached 指针失效
+    std::unordered_set<Matrix*> kv_bufs;
+    for (auto& op : op_queue_)
+    {
+        if (op.getType() == MatrixOpType::KV_CACHE && op.getMatrixIn().size() >= 2)
+        {
+            kv_bufs.insert(op.getMatrixIn()[1].get());
+        }
+    }
+
+    // 从 bin 读取 float 辅助，键不存在时返回 default_val
+    auto loadFloat = [&](const std::string& key, float default_val = 0.0f) -> float
+    {
+        auto b = file_bin.get_value(key);
+        float v = default_val;
+        if (b.size() >= sizeof(float))
+        {
+            std::memcpy(&v, b.data(), sizeof(float));
+        }
+        return v;
+    };
+
+    // 权重来源解析结果
+    struct WeightKey
+    {
+        std::string source;    // bin 文件中的权重名
+        std::string key;       // bin 中的实际 key（量化路径用 fp8/fp4 key；非量化用 typed key）
+        DataType dt = DataType::CURRENT;
+        bool is_quant = false;
+        bool valid() const { return !source.empty(); }
+    };
+
+    // 对给定名字解析 bin 中的存储键：
+    //   优先新格式带 dtype 前缀的量化 key（weight_fp8_e4m3_xxx / weight_fp4_e2m1_xxx）
+    //   次之旧格式 weight_<name>（向后兼容，默认 E4M3）
+    //   最后非量化 typed key
+    auto resolveOne = [&](const std::string& name) -> WeightKey
+    {
+        auto [tk, tdt] = findTypedWeightKey(file_bin, name);
+        bool is_q = (tdt == DataType::FP8_E4M3 || tdt == DataType::FP8_E5M2 || tdt == DataType::FP4_E2M1);
+        if (!tk.empty() && is_q)
+        {
+            return { name, tk, tdt, true };
+        }
+        std::string old_key = "weight_" + name;
+        if (file_bin.has_value(old_key))
+        {
+            return { name, old_key, DataType::FP8_E4M3, true };    // 旧格式默认 E4M3
+        }
+        if (!tk.empty())
+        {
+            return { name, tk, tdt, false };
+        }
+        return {};
+    };
+
+    // 解析权重键；找不到时遍历同一 storage 的 alias 列表（tied weight 回退）
+    auto resolveKey = [&](Matrix* m) -> WeightKey
+    {
+        auto wk = resolveOne(m->getWeightName());
+        if (wk.valid())
+        {
+            return wk;
+        }
+        for (auto* peer : storage_groups[m->getStorageKey()])
+        {
+            if (peer == m || peer->getWeightName().empty())
+            {
+                continue;
+            }
+            wk = resolveOne(peer->getWeightName());
+            if (wk.valid())
+            {
+                return wk;
+            }
+        }
+        return {};
+    };
+
+    int loaded = 0;
+    std::set<const void*> loaded_storage;
+    for (auto& m : weights_)
+    {
+        if (m->getWeightName().empty() || kv_bufs.count(m))
+        {
+            continue;
+        }
+        // FP8/FP4 共享存储块：同一 storage 已加载则跳过（syncReshapeViews 最后修正 data_ 指针）
+        if ((m->getDataType() == DataType::FP8_E4M3 || m->getDataType() == DataType::FP4_E2M1)
+            && loaded_storage.count(m->getStorageKey()))
+        {
+            continue;
+        }
+
+        auto wk = resolveKey(m);
+        if (!wk.valid())
+        {
+            continue;
+        }
+
+        if (wk.is_quant)
+        {
+            auto fp8_bytes = file_bin.get_value(wk.key);
+            if (fp8_bytes.empty())
+            {
+                continue;
+            }
+            float scale = loadFloat("scale_" + wk.source, 1.0f);
+            float input_scale = loadFloat("input_scale_" + wk.source);
+            m->loadQuantizedDirect((const uint8_t*)fp8_bytes.data(), (int64_t)fp8_bytes.size(), scale, wk.dt);
+            if (input_scale > 0.0f)
+            {
+                m->setInputScale(input_scale);
+            }
+            // FP4 block-scale：自动识别 FP8 E4M3（1字节/scale）或旧版 float32（4字节/scale）
+            if (wk.dt == DataType::FP4_E2M1)
+            {
+                auto bs = file_bin.get_value("blockscale_" + wk.source);
+                if (!bs.empty())
+                {
+                    int64_t n_blocks = ((int64_t)m->getDataSize() * 2 + 15) / 16;
+                    std::vector<uint8_t> fp8_buf((size_t)n_blocks);
+                    if (n_blocks > 0 && bs.size() / (size_t)n_blocks >= 4)
+                    {
+                        const float* f32 = (const float*)bs.data();
+                        for (int64_t i = 0; i < n_blocks; i++)
+                        {
+                            fp8_buf[i] = fp8_e4m3(f32[i]).bits;
+                        }
+                    }
+                    else
+                    {
+                        fp8_buf.assign(bs.begin(), bs.end());
+                    }
+                    m->setBlockScaleFromHost(fp8_buf.data(), n_blocks);
+                }
+            }
+        }
+        else
+        {
+            // 非量化权重：原样拷贝到 GPU；dtype 不一致时重新分配
+            auto raw = file_bin.get_value(wk.key);
+            if (raw.empty())
+            {
+                continue;
+            }
+            // HALF→BF16：bin以HALF格式存储但网络目标为BF16时，逐元素转换，保持矩阵类型不变
+            if (wk.dt == DataType::HALF && m->getDataType() == DataType::BFLOAT16
+                && raw.size() / (size_t)m->getDataSize() == sizeof(uint16_t))
+            {
+                size_t n = (size_t)m->getDataSize();
+                std::vector<bfloat16> bf16_buf(n);
+                const half* src = reinterpret_cast<const half*>(raw.data());
+                for (size_t i = 0; i < n; i++)
+                {
+                    bf16_buf[i] = bfloat16(float(src[i]));
+                }
+                MatrixData::copyByByte(API_UNKNOWN, bf16_buf.data(), m->getApiType(), m->getDataPtr(),
+                    (int64_t)(n * sizeof(bfloat16)));
+            }
+            else
+            {
+                if (m->getDataType() != wk.dt
+                    && raw.size() / (size_t)m->getDataSize() == MatrixData::getDataTypeSize(wk.dt))
+                {
+                    *m = Matrix(m->getDim(), wk.dt, m->getDeviceType());
+                }
+                // 旧版兼容：FP8 矩阵存的是 BF16 字节（2字节/元素）
+                if ((m->getDataType() == DataType::FP8_E4M3 || m->getDataType() == DataType::FP8_E5M2)
+                    && raw.size() == (size_t)m->getDataSize() * 2)
+                {
+                    *m = Matrix(m->getDim(), DataType::BFLOAT16, m->getDeviceType());
+                }
+                MatrixData::copyByByte(API_UNKNOWN, raw.data(), m->getApiType(), m->getDataPtr(), (int64_t)raw.size());
+            }
+        }
+        loaded_storage.insert(m->getStorageKey());
+        loaded++;
+    }
+
+    syncReshapeViews();
+    LOG("done ({} weights loaded)\n", loaded);
+    return 0;
+}
+
+void Net::syncReshapeViews()
+{
+    // reshape 视图（如 tied lm_head = reshapeBatch(W_emb, ...)）在权重重载/重分配后
+    // 可能持有过期的 data_ 指针，需重新绑定到源张量的当前 storage 和 quant scale
+    for (auto& op : op_queue_)
+    {
+        if (op.getType() != MatrixOpType::RESHAPE) { continue; }
+        auto& in = op.getMatrixIn();
+        auto& out = op.getMatrixOut();
+        if (in.empty() || out.empty() || !in[0] || !out[0]) { continue; }
+        out[0]->shareData(*in[0]);
+        out[0]->setQuantScale(in[0]->getQuantScale());
+        // 传播 W8A8 静态激活量化 scale
+        if (in[0]->getInputScale() > 0.0f)
+        {
+            out[0]->setInputScale(in[0]->getInputScale());
+        }
+    }
+}
+
+// 从附属 bin 文件加载激活 input_scale（W8A8 可选）
+// 格式：同 INIReaderBin，key 为 "input_scale_<cccc_name>"，值为 4 字节 float32
+// 返回已加载的 scale 数量；文件不存在或为空时返回 0（非错误）
+int Net::loadInputScales(const std::string& filename)
+{
+    if (filename.empty())
+    {
+        return 0;
+    }
+    INIReaderBin file_bin;
+    if (file_bin.parseFile(filename) != 0)
+    {
+        return 0;    // optional file, silently skip
+    }
+
+    int count = 0;
+    for (auto& m : weights_)
+    {
+        const std::string& wname = m->getWeightName();
+        if (wname.empty())
+        {
+            continue;
+        }
+        std::string key = "input_scale_" + wname;
+        if (!file_bin.has_value(key))
+        {
+            continue;
+        }
+        auto sv = file_bin.get_value(key);
+        if (sv.size() < sizeof(float))
+        {
+            continue;
+        }
+        float iscale = 0.0f;
+        std::memcpy(&iscale, sv.data(), sizeof(float));
+        if (iscale > 0.0f)
+        {
+            m->setInputScale(iscale);
+            count++;
+        }
+    }
+    if (count > 0)
+    {
+        LOG("Loaded {} activation input_scales from {}\n", count, filename);
+    }
+    return count;
 }
 
 void Net::initWeights()

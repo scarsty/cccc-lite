@@ -473,6 +473,92 @@ int NetCifa::registerFunctions()
             MatrixData::setLazyMode(old_lazy_mode);
             return cifa::Object(MatrixSP(m));
         });
+    //ropeCosTblYaRN(T, d_head, base, scale, original_max_len [, beta_fast=32, beta_slow=1]):
+    //  生成 YaRN（NTK-by-parts）RoPE cos 表，输出形状 (d_head/2, T, 1, 1)
+    //  scale = new_max_len / original_max_len; 对各维度按波长分三段缩放:
+    //    wavelen > original_max/beta_slow → 低频，线性插值 inv_freq /= scale
+    //    wavelen < original_max/beta_fast → 高频，不缩放
+    //    中频 → 平滑混合
+    registerFunction("ropeCosTblYaRN", [this](cifa::ObjectVector& v)
+        {
+            const bool old_lazy_mode = MatrixData::isLazyMode();
+            MatrixData::setLazyMode(false);
+            int T = v[0].toInt();
+            int d_head = v[1].toInt();
+            float base = (float)v[2].toDouble();
+            float scale = (float)v[3].toDouble();
+            float orig_max = (float)v[4].toDouble();
+            float beta_fast = (v.size() >= 6) ? (float)v[5].toDouble() : 32.0f;
+            float beta_slow = (v.size() >= 7) ? (float)v[6].toDouble() : 1.0f;
+            int half_D = d_head / 2;
+            auto m = std::make_shared<Matrix>(std::vector<int>{ half_D, T, 1, 1 }, DataType::CURRENT, UnitType::CPU, false);
+            const float pi2 = 2.0f * 3.14159265358979323846f;
+            for (int d = 0; d < half_D; d++)
+            {
+                float inv_freq = std::pow(base, -2.0f * d / d_head);
+                float wavelen = pi2 / inv_freq;
+                float low_wavelen = orig_max / beta_slow;
+                float high_wavelen = orig_max / beta_fast;
+                float eff_freq;
+                if (wavelen > low_wavelen)
+                    eff_freq = inv_freq / scale;
+                else if (wavelen < high_wavelen)
+                    eff_freq = inv_freq;
+                else
+                {
+                    float smooth = (orig_max / wavelen - beta_slow) / (beta_fast - beta_slow);
+                    eff_freq = (1.0f - smooth) * (inv_freq / scale) + smooth * inv_freq;
+                }
+                for (int t = 0; t < T; t++)
+                    m->setData(d, t, 0, 0, std::cos((float)t * eff_freq));
+            }
+            m->setNeedBack(false);
+            m->setNeedLoad(false);
+            m->toGPU();
+            MatrixData::setLazyMode(old_lazy_mode);
+            return cifa::Object(MatrixSP(m));
+        });
+    //ropeSinTblYaRN(T, d_head, base, scale, original_max_len [, beta_fast=32, beta_slow=1]):
+    //  同 ropeCosTblYaRN，输出 sin 表
+    registerFunction("ropeSinTblYaRN", [this](cifa::ObjectVector& v)
+        {
+            const bool old_lazy_mode = MatrixData::isLazyMode();
+            MatrixData::setLazyMode(false);
+            int T = v[0].toInt();
+            int d_head = v[1].toInt();
+            float base = (float)v[2].toDouble();
+            float scale = (float)v[3].toDouble();
+            float orig_max = (float)v[4].toDouble();
+            float beta_fast = (v.size() >= 6) ? (float)v[5].toDouble() : 32.0f;
+            float beta_slow = (v.size() >= 7) ? (float)v[6].toDouble() : 1.0f;
+            int half_D = d_head / 2;
+            auto m = std::make_shared<Matrix>(std::vector<int>{ half_D, T, 1, 1 }, DataType::CURRENT, UnitType::CPU, false);
+            const float pi2 = 2.0f * 3.14159265358979323846f;
+            for (int d = 0; d < half_D; d++)
+            {
+                float inv_freq = std::pow(base, -2.0f * d / d_head);
+                float wavelen = pi2 / inv_freq;
+                float low_wavelen = orig_max / beta_slow;
+                float high_wavelen = orig_max / beta_fast;
+                float eff_freq;
+                if (wavelen > low_wavelen)
+                    eff_freq = inv_freq / scale;
+                else if (wavelen < high_wavelen)
+                    eff_freq = inv_freq;
+                else
+                {
+                    float smooth = (orig_max / wavelen - beta_slow) / (beta_fast - beta_slow);
+                    eff_freq = (1.0f - smooth) * (inv_freq / scale) + smooth * inv_freq;
+                }
+                for (int t = 0; t < T; t++)
+                    m->setData(d, t, 0, 0, std::sin((float)t * eff_freq));
+            }
+            m->setNeedBack(false);
+            m->setNeedLoad(false);
+            m->toGPU();
+            MatrixData::setLazyMode(old_lazy_mode);
+            return cifa::Object(MatrixSP(m));
+        });
     //rope2dCosTbl(W, H, d_head [, base=10000]): 生成 2D RoPE cos 位置编码表（图像专用）
     //将 T=W*H 个空间位置的二维坐标 (x=t%W, y=t/W) 分别编码到通道的两半：
     //  d ∈ [0, d_head/4)        → cos(x * base^(-2d / (d_head/2)))   列方向
@@ -681,10 +767,33 @@ int NetCifa::registerFunctions()
             }
             int causal = 0;
             if (v.size() >= 5) { causal = int(v[4].toDouble()); }
+            MatrixSP bias_ptr = nullptr;
+            if (v.size() >= 6 && v[5].isType<MatrixSP>())
+            {
+                bias_ptr = v[5].to<MatrixSP>();
+            }
             MatrixOp op;
             op.solver_type_ = current_solver_type_;
             auto out = cifa::Object(makeMatrixSPWithState());
-            op.as_attention(Q, K, V, out.to<MatrixSP>(), dk, causal);
+            op.as_attention(Q, K, V, out.to<MatrixSP>(), dk, causal, bias_ptr);
+            op_queue_.push_back(op);
+            return out;
+        });
+    // roiAlign(feat, boxes, roi_size [, spatial_scale]):
+    // feat: (W,H,C,B), boxes: (4,N,1,B) in pixel-space coords,
+    // roi_size: integer K, spatial_scale: default 1.0
+    // output: (K, K, C, N*B)
+    registerFunction("roiAlign", [this](cifa::ObjectVector& v)
+        {
+            auto feat  = v[0].to<MatrixSP>();
+            auto boxes = v[1].to<MatrixSP>();
+            int roi_size = int(v[2].toDouble());
+            float spatial_scale = 1.0f;
+            if (v.size() >= 4) { spatial_scale = float(v[3].toDouble()); }
+            MatrixOp op;
+            op.solver_type_ = current_solver_type_;
+            auto out = cifa::Object(makeMatrixSPWithState());
+            op.as_roi_align(feat, boxes, out.to<MatrixSP>(), roi_size, spatial_scale);
             op_queue_.push_back(op);
             return out;
         });
@@ -981,10 +1090,12 @@ int NetCifa::registerFunctions()
         });
     registerFunction("mul", [this](cifa::ObjectVector& v)
         {
-            auto dim = getIntVector(v, 2);
+            MatrixTransType ta = MATRIX_NO_TRANS, tb = MATRIX_NO_TRANS;
+            if (v.size() >= 3 && int(v[2].toDouble()) != 0) { ta = MATRIX_TRANS; }
+            if (v.size() >= 4 && int(v[3].toDouble()) != 0) { tb = MATRIX_TRANS; }
             MatrixOp op;
             auto o = cifa::Object(makeMatrixSPWithState());
-            op.as_mul(v[0].to<MatrixSP>(), v[1].to<MatrixSP>(), o.to<MatrixSP>(), 1, dim);
+            op.as_mul(v[0].to<MatrixSP>(), v[1].to<MatrixSP>(), o.to<MatrixSP>(), 1, {}, ta, tb);
             op_queue_.push_back(op);
             return o;
         });

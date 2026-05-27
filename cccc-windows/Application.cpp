@@ -1,10 +1,10 @@
-﻿#include "Application.h"
+#include "Application.h"
 #include "Log.h"
 #include "MainProcess.h"
 #include "cccc-llm.h"
-#include "cccc-sd.h"
 #include "filefunc.h"
 #include "strfunc.h"
+#include <filesystem>
 #include <random>
 #include <string>
 
@@ -28,6 +28,7 @@ void Application::run()
     }
 
     auto filenames = strfunc::splitString(ini_file_);
+    bool ini_dir_set = false;
     for (auto filename : filenames)
     {
         if (!filefunc::fileExist(filename))
@@ -41,6 +42,11 @@ void Application::run()
             strfunc::replaceAllSubStringRef(ini_str, str0, str1);
         }
         mp.getOption()->loadString(ini_str);
+        if (!ini_dir_set && filefunc::fileExist(filename))
+        {
+            mp.setIniDir(std::filesystem::path(filename).parent_path().string());
+            ini_dir_set = true;
+        }
     }
     auto load_filenames = strfunc::splitString(mp.getOption()->getString("train", "load_ini"), ",");
     for (auto filename : load_filenames)
@@ -162,7 +168,7 @@ void Application::run_sd()
 
     auto generate_once = [&](const std::string& prompt, const std::string& out_path)
     {
-        int seed = (sd_seed_ < 0) ? static_cast<int>(std::random_device{}()) : sd_seed_;
+        int seed = (sd_seed_ < 0) ? (int)(std::random_device{}()) : sd_seed_;
         LOG("Using seed: {}\n", seed);
         int ret = sd_generate(h, prompt, out_path,
             /*steps=*/sd_steps_, /*cfg=*/sd_cfg_,
@@ -208,6 +214,38 @@ void Application::run_sd()
 
     sd_destroy(h);
     LOG("\nBye!\n");
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Agent
+// ─────────────────────────────────────────────────────────────────────────────
+void Application::run_agent()
+{
+    SetConsoleOutputCP(CP_UTF8);
+    SetConsoleCP(CP_UTF8);
+
+    LlmHandle h = llm_init(ini_file_, agent_system_prompt());
+    if (!h)
+    {
+        LOG_ERR("Failed to initialize LLM from {}\n", ini_file_.c_str());
+        return;
+    }
+
+    AgentHandle ag = agent_create(h);
+    LOG("=== cccc-agent ===\nTask: {}\n\n", agent_task_);
+
+    agent_set_stream_callback(ag,
+        [](const std::string& tok, void*) { LOG("{}", tok); },
+        nullptr);
+
+    const std::string& task = agent_task_.empty()
+        ? std::string("What would you like me to do?")
+        : agent_task_;
+    agent_run(ag, task, 0, 0);
+
+    agent_destroy(ag);
+    llm_destroy(h);
+    LOG("\nDone.\n");
 }
 
 }    // namespace cccc
